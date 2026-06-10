@@ -1,0 +1,258 @@
+"use client";
+
+import { useRouter } from "next/navigation";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { StageContainer } from "@/components/layout/StageContainer";
+import { WorkspaceBackButton } from "@/components/navigation/WorkspaceBackButton";
+import { WorkspaceForwardButton } from "@/components/navigation/WorkspaceForwardButton";
+import { LatentNeedsCoachPanel } from "@/components/stage/stage5/LatentNeedsCoachPanel";
+import { LatentNeedsWorkPanel } from "@/components/stage/stage5/LatentNeedsWorkPanel";
+import { fetchStage4Discoveries } from "@/lib/artifacts/stage4Discoveries";
+import {
+  fetchStage5LatentNeeds,
+  saveStage5LatentNeeds,
+} from "@/lib/artifacts/stage5LatentNeeds";
+import { touchProjectPhase } from "@/lib/artifacts/stage5Iceberg";
+import { STAGE4_DATA_SYNTHESIS_PAGE } from "@/lib/navigation/stageNavLabels";
+import {
+  isStage5SourcePostitKind,
+  mergeStage4DiscoveriesIntoLatentNeeds,
+  stage4HasResearchContent,
+} from "@/lib/stages/stage5/bootstrapLatentNeedsFromStage4";
+import {
+  applyGeneratedLatentNeeds,
+  buildSubjectInputsFromBoard,
+  requestLatentNeedsGeneration,
+} from "@/lib/stages/stage5/generateLatentNeedsClient";
+import {
+  defaultStage5LatentNeeds,
+  type Stage5LatentNeedsData,
+} from "@/lib/stages/stage5/latentNeedsTypes";
+import type { ArtifactSlots } from "@/types/database";
+import { stageCaption, stagePanel } from "@/lib/stages/ui";
+import { useDebouncedPersist } from "@/hooks/useDebouncedPersist";
+
+interface Stage5IcebergProps {
+  projectId: string;
+}
+
+function formatSavedTime(iso: string) {
+  try {
+    return new Intl.DateTimeFormat("ko-KR", {
+      hour: "2-digit",
+      minute: "2-digit",
+    }).format(new Date(iso));
+  } catch {
+    return "";
+  }
+}
+
+function hasSourceNotes(data: Stage5LatentNeedsData): boolean {
+  return data.postits.some(
+    (p) => isStage5SourcePostitKind(p.kind) && p.text.trim(),
+  );
+}
+
+export function Stage5Iceberg({ projectId }: Stage5IcebergProps) {
+  const router = useRouter();
+  const [data, setData] = useState<Stage5LatentNeedsData>(
+    defaultStage5LatentNeeds(),
+  );
+  const [artifactId, setArtifactId] = useState<string | null>(null);
+  const [allSlots, setAllSlots] = useState<ArtifactSlots>({});
+  const [loading, setLoading] = useState(true);
+  const [generating, setGenerating] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
+  const bootstrapRef = useRef(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    bootstrapRef.current = false;
+    (async () => {
+      try {
+        const [needsResult, stage4] = await Promise.all([
+          fetchStage5LatentNeeds(projectId),
+          fetchStage4Discoveries(projectId),
+        ]);
+        if (cancelled) return;
+
+        let next = needsResult.data;
+        const stage4Data = stage4.data;
+        const shouldSyncStage4 = stage4HasResearchContent(stage4Data);
+
+        if (shouldSyncStage4) {
+          next = mergeStage4DiscoveriesIntoLatentNeeds(next, stage4Data);
+        }
+
+        setData(next);
+        setArtifactId(needsResult.artifactId);
+        setAllSlots(needsResult.allSlots);
+
+        const needsKevin =
+          !next.kevinGeneratedAt &&
+          hasSourceNotes(next) &&
+          !next.postits.some((p) => p.kind === "latent_need");
+
+        if (shouldSyncStage4 && !needsKevin) {
+          const { artifactId: syncedId } = await saveStage5LatentNeeds({
+            projectId,
+            artifactId: needsResult.artifactId,
+            data: next,
+            existingSlots: needsResult.allSlots,
+          });
+          if (!cancelled) {
+            setArtifactId(syncedId);
+            setLastSavedAt(formatSavedTime(new Date().toISOString()));
+          }
+        }
+
+        if (needsKevin && !bootstrapRef.current) {
+          bootstrapRef.current = true;
+          setGenerating(true);
+          try {
+            const inputs = buildSubjectInputsFromBoard(next);
+            const result = await requestLatentNeedsGeneration(
+              projectId,
+              inputs,
+            );
+            if (!cancelled) {
+              const withNeeds = applyGeneratedLatentNeeds(next, result);
+              setData(withNeeds);
+              const { artifactId: id } = await saveStage5LatentNeeds({
+                projectId,
+                artifactId: needsResult.artifactId,
+                data: withNeeds,
+                existingSlots: needsResult.allSlots,
+              });
+              if (!cancelled) {
+                setArtifactId(id);
+                setLastSavedAt(formatSavedTime(new Date().toISOString()));
+              }
+            }
+          } catch (e) {
+            if (!cancelled) {
+              setSaveError(
+                e instanceof Error
+                  ? e.message
+                  : "잠재 니즈 생성에 실패했습니다.",
+              );
+            }
+          } finally {
+            if (!cancelled) setGenerating(false);
+          }
+        }
+      } catch (e) {
+        if (!cancelled) {
+          setSaveError(
+            e instanceof Error ? e.message : "자료를 불러오지 못했습니다.",
+          );
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId]);
+
+  const saveArtifact = useCallback(
+    async (next: Stage5LatentNeedsData) => {
+      setSaving(true);
+      setSaveError(null);
+      try {
+        const { artifactId: id } = await saveStage5LatentNeeds({
+          projectId,
+          artifactId,
+          data: next,
+          existingSlots: allSlots,
+        });
+        setArtifactId(id);
+        setLastSavedAt(formatSavedTime(new Date().toISOString()));
+        await touchProjectPhase(projectId);
+      } catch (e) {
+        setSaveError(e instanceof Error ? e.message : "저장에 실패했습니다.");
+        throw e;
+      } finally {
+        setSaving(false);
+      }
+    },
+    [allSlots, artifactId, projectId],
+  );
+
+  useDebouncedPersist({
+    data,
+    enabled: !loading && !generating,
+    save: saveArtifact,
+  });
+
+  const handleDataChange = useCallback((next: Stage5LatentNeedsData) => {
+    setData(next);
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="rounded-2xl border border-border-warm bg-white px-6 py-12 text-center text-[16px] text-muted">
+        자료를 불러오는 중…
+      </div>
+    );
+  }
+
+  const sceneKey = `stage-5-needs-${projectId}`;
+
+  return (
+    <StageContainer
+      stageNumber={5}
+      sceneKey={sceneKey}
+      introCoach={
+        <LatentNeedsCoachPanel
+          projectId={projectId}
+          data={data}
+          variant="intro"
+        />
+      }
+      coach={
+        <LatentNeedsCoachPanel
+          projectId={projectId}
+          data={data}
+          variant="work"
+        />
+      }
+      work={
+        <>
+          <LatentNeedsWorkPanel
+            data={data}
+            onChange={handleDataChange}
+            generating={generating}
+            saving={saving}
+            saveError={saveError}
+            lastSavedAt={lastSavedAt}
+          />
+          <div
+            className={`${stagePanel} mt-4 flex flex-wrap items-center justify-between gap-3`}
+          >
+            <p className={stageCaption}>
+              언급·관찰을 바탕으로 잠재 니즈를 다듬은 뒤, 사용자 여정 지도
+              그리기로 넘어가 보세요.
+            </p>
+            <div className="flex flex-wrap gap-2.5">
+              <WorkspaceBackButton
+                projectId={projectId}
+                fallbackStageId={4}
+                backPageName={STAGE4_DATA_SYNTHESIS_PAGE}
+              />
+              <WorkspaceForwardButton
+                stageId={6}
+                onClick={() =>
+                  router.push(`/project/${projectId}/stage/6`)
+                }
+              />
+            </div>
+          </div>
+        </>
+      }
+    />
+  );
+}

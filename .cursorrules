@@ -1,0 +1,116 @@
+# Spotlight (DT Coach) — Cursor 영구 규칙
+# 권위 문서: `_reference_md/` 내 마스터 스펙 v4.1 · 무드 가이드 v3.1 · UX 카탈로그/플로우
+
+## 프로젝트 정체성
+- **서비스명**: DT Coach (프로젝트 폴더명 Spotlight)
+- **미션**: 예비 창업자가 *아이디어 → 사업화 → 투자 연결*까지 — 워크북 14단계 후 피치 덱·투자자 만남 도달
+- **정체**: 디자인씽킹 *교육 도구*가 아니라 *외부 세계와 만나게 하는 동행 코치*
+- **스택**: Next.js App Router · Tailwind CSS v4 · Supabase · Pretendard 단일 폰트
+
+## 참조 문서 (`_reference_md/`) — 작업 전 확인
+| 문서 | 용도 |
+|------|------|
+| `마스터_스펙_v4.md` | 헌법·페이지 구조·데이터·이벤트·14단계·MVP 우선순위 |
+| `디자인_무드_가이드_v3.md` | 마케팅/작업 무드·컬러·타이포 토큰 |
+| `UX_플로우_지도_v1.md` | 6 플로우 사용자 여정 |
+| `카탈로그_종합_인덱스_v1.1.md` | 컷 34+ 검색(번호·단계·매크로·MVP) |
+| `카탈로그_마이그레이션_노트_v1.1.md` | v3→v4.1 라벨·14점 인디케이터·한국어 일상어 |
+| `UX_컷_갤러리_v1.md` | 컷별 시각 핵심 한눈 요약 |
+| `UX_카탈로그_v1_1·2·3부.md` | 컷별 상세 권위 사양 |
+| `단계_플러그인_마스터_스펙_v2.md` | 단계 1-8 플러그인(슬롯·분기·게이트) |
+| `단계_플러그인_마스터_스펙.md` | v1 플러그인 (v2 우선) |
+
+HTML 시안: `_reference_html/` (예: `cut_34_v2_marketing_landing.html` = 컷 34 v2)
+
+## 헌법 6원칙 (마스터 스펙 §1.2)
+1. 워크북 정본(HiDD·HCI) — 외부 자료가 정본을 대체하지 않음
+2. 사용자 발화·행동 = 자료 출처 / AI 추측 = 가설·검증 필요
+3. 검증 전엔 결론 아님 (가설 상태 유지)
+4. 자료실에 버전·source_refs 영구 누적
+5. 회귀 = 자연스러운 나선 (패배 아님)
+6. 수준 적응 — 초보(손잡기) vs 숙련(점검), 결과물 질은 동일
+
+## 워크북 정신 7가지 (§1.3)
+How보다 Why · 결론이 아니라 가설 · 시각화 외부화 · 극단에서 보편 · 나선 회귀 · 입장 정리 · 외부 언어 변환
+
+## 페이지 구조 (구현 시 필수 구분)
+
+### 마케팅 랜딩 §1.4 (로그인 전 · 컷 34 v2) — 마케팅 무드
+1. **차콜 GNB**: 로고(노랑 사각) · 소개/우리가 하는 일/사례/요금/문의 · 로그인 + 시작하기(노랑)
+2. **히어로 2열**: 워크북 라벨 · 44px 헤드라인(마지막 줄 `#8B6914`) · CTA 2 · 소셜 증명 · 우측 코칭 미리보기 + 회전 노랑 마감 카드
+3. **세 가치 카드**: 중앙 카드만 노랑 강조 + 「우리 차별」
+4. **최종 CTA**: 회백 배경 · 가운데 정렬 · 3질문 진단 카피
+**금지**: 상단 차콜 마감 띠 · 본문 마감 임박 그리드(지원사업 검색형 UI)
+
+### 로그인 후 홈 §1.5 (컷 33) — 작업 무드
+- **흰 GNB**(마케팅과 정반대): 홈·프로젝트·자료실·투자·지원 · ⌘K 검색 · 알림 종(5결) · 사용자 썸네일
+- 5영역: 인사 · 프로젝트 계속 · 진입점 A/B/C · 마감 임박 프로그램(옅은 노랑 `#FFFDF4`)
+**금지**: GNB 위 차콜 마감 띠
+
+## 디자인 시스템 (무드 가이드 v3.1)
+
+### 타이포·한국어
+- **Pretendard Variable** 단일 (400/500/600/700). 세리프·Geist 금지
+- 전역: `word-break: keep-all; overflow-wrap: break-word` (`break-keep`)
+- 마케팅: Bold 헤드라인·타이트 letter-spacing / 작업: Bold 금지, SemiBold 22px 최대
+
+### 컬러 토큰 (Tailwind `@theme`·`globals.css` — Light / white theme)
+- `--background` · `--foreground` · `--panel`(카드) · `--surface`(코치 열) · `--cream`(입력/칩 배경)
+- `--charcoal` GNB/솔리드 · `--spotlight` · `--on-spotlight` · `--gold` 강조
+- `@layer base`: `bg-white`→panel, `text-charcoal`→foreground (노랑 위는 `text-on-spotlight`)
+- 순검정 `#0A0A0A` 사용 금지
+
+### 무드 비율
+- **마케팅**: 차콜 GNB + 오프화이트·흰 본문 + 노랑 CTA · border-radius 0-4px
+- **작업**: 오프화이트 캔버스 + panel(흰) 카드 · 노랑 5% · border-radius 6-16px
+
+## 런타임 (§2)
+- **슬롯 상태**: `empty` | `in_progress` | `complete` | `revisit` | `frozen`
+- **코치 모드 6종**: 환영 · 듣는중 · 짚어주는중 · 제안중 · 분기발동 · 학습회고
+- **막힘 감지**: 5분 진전 없음 · 명시적 도움 요청 · 30분 비활동 → 해당 단계만 임시 초보 모드
+
+## 데이터 모델 (DB·`types/database.ts` · `supabase/schema.sql`)
+- **Artifact (프로젝트 DB)**: `artifact_type` · `stage_id` 1-14 · `slots` JSONB · `hypothesis_board` boolean(리서치 누락 시 true) · `image_attachments`
+- **슬롯 `confidence`**: `discovery`(오프라인 리서치) | `hypothesis`(AI 백필·가설) — UI 필수 구분
+- **마스터 스펙 §3 Item**: `confirmed` | `hypothesis` | `rejected` — 항목 단위(슬롯 confidence와 계층 다름)
+- **source_refs**: 역·정방향 추적 필수
+- **이벤트** (`src/types/events.ts`): `mobile.audio_record.completed` · `stuck.detected`
+
+## 14단계 · 5 매크로 (§6.0)
+| 매크로 | 단계 |
+|--------|------|
+| 공감하기 | 1-3 |
+| 발견 정리하기 | 4-5 |
+| 아이디어 만들기 | 6-8 |
+| 시제품 만들기 | 9 (단독) |
+| 사업화 검토 | 10-14 |
+
+진행 인디케이터: 1-8 워크북 점 / 9-14 노랑 점선 외곽 (마이그레이션 노트 §차원3)
+
+## 진입점 (§4)
+- **A** 처음부터(1→14, 노랑 강조) · **B** 아이디어 있음(2~) · **C** 프로토타입 빨리(8~)
+- 진입 후 **3질문 진단** → 초보/숙련 (건너뛰기 시 초보 기본)
+
+## MVP 구현 범위 (§11.1 — 우선)
+단계 1-8 · 1:1 · 진입점 3 · 수준 적응(진단) · 자료실 보기 · 분기 카탈로그 · 한국어 일상어+용어칩 · 외부데이터(랜딩 히어로 카드+홈 영역5)
+**v2 이후**: 단계 9-12 · 팀 · 막힘 자동 · **v3**: 13-14 피치·투자·발표모드
+
+## 단계 화면 (컷 2+)
+- 레이아웃·타이포: `src/lib/stages/ui.ts` + `StageTwoColumnLayout`(작업 좌 index 0 먼저 등장 → 코치 우 index 1, 구분선·`bg-surface`) · `MOTION` 타이밍 · 신규 단계는 `StageTwoColumnLayout`으로 work/coach 슬롯 구성 (작업을 `coachReady`로 숨기지 않음)
+
+## 기술 규칙
+- App Router only (`src/app/`)
+- 컴포넌트: `src/components/` (랜딩 `landing/`)
+- Supabase `@supabase/ssr` · env `.env.local` · RLS 필수
+- Next.js 16: `node_modules/next/dist/docs/` 참고 (AGENTS.md)
+- 스키마/타입 변경 시 SQL + `types/database.ts` + UI 동시 수정
+
+## 코드 스타일
+- 기존 패턴·토큰 재사용 · 최소 diff · 비자명 로직만 주석
+- UI 카피는 한국어 일상어 기본 (영어는 용어 칩으로)
+
+## 금지
+- 마케팅 랜딩에 마감 임박 그리드/상단 띠
+- 로그인 후 홈에 차콜 마케팅 GNB
+- 채팅만 쌓고 Artifact 없는 설계
+- `break-all` 기본 · 순검정 · 다중 sans 혼용

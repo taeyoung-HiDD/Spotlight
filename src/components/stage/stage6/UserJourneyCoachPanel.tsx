@@ -1,0 +1,94 @@
+"use client";
+
+import { useMemo } from "react";
+import { AnimatedCoachPanel } from "@/components/stage/motion/AnimatedCoachPanel";
+import type { CoachDialogItem } from "@/components/stage/motion/CoachSequentialDialog";
+import { getStageConfig } from "@/config/stageConfig";
+import { getStagePurposeCopy } from "@/lib/stages/discovery/stagePurposeCopy";
+import { formatCoachDialogBreaks } from "@/lib/coach/formatCoachDialog";
+import { getStageWorkInputGuide } from "@/lib/coach/inputGuidance";
+import type { UserJourneyMapData } from "@/lib/stages/stage6/userJourneyTypes";
+
+function summarizeJourney(data: UserJourneyMapData): string {
+  return data.subjects
+    .map((subject, idx) => {
+      const persona = data.personas[subject.id];
+      if (!persona) return "";
+      const assigned = persona.steps.reduce(
+        (sum, step) => sum + step.itemIds.length,
+        0,
+      );
+      const pool = persona.poolItemIds.length;
+      const label = subject.name.trim() || `페르소나 ${idx + 1}`;
+      return `${label}: 배치 ${assigned}개 · 풀 ${pool}개`;
+    })
+    .filter(Boolean)
+    .join("\n");
+}
+
+interface UserJourneyCoachPanelProps {
+  projectId: string;
+  data: UserJourneyMapData;
+  variant: "intro" | "work";
+}
+
+export function UserJourneyCoachPanel({
+  projectId,
+  data,
+  variant,
+}: UserJourneyCoachPanelProps) {
+  const stageConfig = getStageConfig(6);
+  const purpose = getStagePurposeCopy(6);
+
+  const introMessages = useMemo((): CoachDialogItem[] => {
+    return [
+      {
+        type: "highlight",
+        label: purpose.label,
+        content: formatCoachDialogBreaks(purpose.purpose),
+      },
+      {
+        type: "bubble",
+        content: formatCoachDialogBreaks(
+          "페르소나 탭을 바꿔 가며 각 조사 대상의 여정을 그려 보세요. 4·5단계 자료를 단계마다 배치하면, 어느 구간에 니즈가 몰려 있는지 보입니다.",
+        ),
+      },
+    ];
+  }, [purpose]);
+
+  const chatContext = useMemo(
+    () => ({
+      projectId,
+      stageId: 6,
+      stageTitle: "사용자 여정 지도 그리기",
+      artifactSummary: summarizeJourney(data),
+      stageBehaviorNote:
+        "6단계 User Journey Map: 페르소나별로 조사·니즈를 행동 단계에 배치해 니즈가 몰린 구간을 확인합니다.",
+    }),
+    [projectId, data],
+  );
+
+  if (variant === "intro") {
+    return (
+      <AnimatedCoachPanel
+        sceneKey={`stage-6-journey-${projectId}-intro`}
+        statusLabel={stageConfig.introStatusLabel ?? "짚어주는 중"}
+        statusSub="사용자 여정 지도 그리기"
+        messages={introMessages}
+        showComposer={false}
+      />
+    );
+  }
+
+  return (
+    <AnimatedCoachPanel
+      sceneKey={`stage-6-journey-work-${projectId}`}
+      statusLabel="짚어주는 중"
+      statusSub="사용자 여정 지도 그리기"
+      messages={introMessages}
+      chatContext={chatContext}
+      inputGuide={getStageWorkInputGuide(6)}
+      showComposer
+    />
+  );
+}
