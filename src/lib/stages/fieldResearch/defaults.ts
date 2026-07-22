@@ -4,6 +4,7 @@ import type {
   SessionLogEntry,
   ToKnowPrepState,
 } from "@/lib/stages/fieldResearch/types";
+import { emptyStage3ResearchPrep } from "@/lib/stages/fieldResearch/stage3ResearchPrep";
 
 export const DEFAULT_TO_KNOW_PREP: ToKnowPrepState = {
   phase: "discovery",
@@ -78,7 +79,11 @@ function emptySession(): RespondentSession {
 }
 
 export const DEFAULT_FIELD_RESEARCH: FieldResearchData = {
+  prepWorkflowPhase: "research_prep",
+  researchPrep: emptyStage3ResearchPrep(),
+  empathyMaps: [],
   toKnowPrep: { ...DEFAULT_TO_KNOW_PREP },
+  toKnowCoreQuestion: "",
   toKnowTable: [],
   researchMethods: [],
   researchProtocol: "",

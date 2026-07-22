@@ -25,6 +25,14 @@ export function formatAuthError(message: string, mode: "signin" | "signup"): str
     return "요청이 너무 많아요. 잠시 후 다시 시도해 주세요.";
   }
 
+  if (
+    lower.includes("pkce") ||
+    lower.includes("code verifier") ||
+    lower.includes("code_verifier")
+  ) {
+    return "소셜 로그인 연결이 끊겼어요. 같은 주소(localhost 또는 127.0.0.1)로 다시 시도해 주세요.";
+  }
+
   if (mode === "signup" && lower.includes("email")) {
     return "이메일 주소를 확인해 주세요.";
   }

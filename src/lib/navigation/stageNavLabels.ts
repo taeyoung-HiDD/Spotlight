@@ -1,12 +1,15 @@
 import { getSidebarStage } from "@/lib/stages/sidebarNav";
 import { STAGE_META } from "@/lib/stages/constants";
 
-/** GNB 홈(컷 21 프로젝트 허브) */
-export const WORKSPACE_HOME_PAGE_NAME = "프로젝트 허브";
+/** GNB 홈(컷 21 · 내 프로젝트) */
+export const WORKSPACE_HOME_PAGE_NAME = "내 프로젝트";
+export const WORKSPACE_HOME_PAGE_NAME_EN = "My Project";
 
 /** 단계 4 · 하위 화면 (동일 URL 내 phase) */
-export const STAGE4_EMPATHY_MAP_PAGE = "공감맵 그리기";
-export const STAGE4_DATA_SYNTHESIS_PAGE = "데이터 정리";
+export const STAGE3_RESEARCH_PREP_PAGE = "조사 계획 세우기";
+export const STAGE3_TO_KNOW_PAGE = "To-know list";
+export const STAGE4_EMPATHY_MAP_PAGE = "발견 정리하기";
+export const STAGE4_DATA_SYNTHESIS_PAGE = "발견 정리하기";
 
 /** 단계 내 하위 화면 — 사이드바와 동일한 활동명 우선 */
 export function getStagePageName(stageId: number): string {
@@ -26,7 +29,7 @@ export function parseStageIdFromPath(path: string): number | null {
   const m = path.match(/\/stage\/(\d{1,2})(?:[/?#]|$)/);
   if (!m) return null;
   const n = Number.parseInt(m[1], 10);
-  return Number.isFinite(n) && n >= 1 && n <= 14 ? n : null;
+  return Number.isFinite(n) && n >= 1 && n <= 16 ? n : null;
 }
 
 export function backNavLabel(pageName: string): string {

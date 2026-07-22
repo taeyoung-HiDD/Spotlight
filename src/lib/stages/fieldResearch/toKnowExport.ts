@@ -1,17 +1,22 @@
 import { getResearchMethodEntry } from "@/lib/stages/fieldResearch/researchMethodCatalog";
 import {
+  getCategoryInfoRows,
   guideCategoryLabel,
-  sortRowsByGuideCategory,
+  TO_KNOW_GUIDE_CATEGORY_ORDER,
+  type ToKnowGuideCategory,
 } from "@/lib/stages/fieldResearch/toKnowGuideCategories";
 import type { ToKnowRow } from "@/lib/stages/fieldResearch/types";
 
 export type ToKnowExportMeta = {
   projectTitle?: string;
   problem?: string;
+  /** To-know 최상위 — 풀고자 하는 사용자 문제 */
+  coreQuestion?: string;
 };
 
 export type ToKnowExportRow = {
   category: string;
+  infoCategory: string;
   question: string;
   infoToIdentify: string;
   methodLabel: string;
@@ -30,15 +35,39 @@ function methodLabel(method: ToKnowRow["method"]): string {
   return getResearchMethodEntry(method)?.label ?? method;
 }
 
-export function buildToKnowExportRows(table: ToKnowRow[]): ToKnowExportRow[] {
-  return sortRowsByGuideCategory(table)
-    .filter((r) => r.small.trim())
-    .map((row) => ({
-      category: guideCategoryLabel(row.mid),
-      question: row.small.trim(),
-      infoToIdentify: (row.note ?? "").trim(),
-      methodLabel: methodLabel(row.method),
-    }));
+function resolveExportCoreQuestion(meta: ToKnowExportMeta): string {
+  return meta.coreQuestion?.trim() || meta.problem?.trim() || "";
+}
+
+function orderedCategories(table: ToKnowRow[]): string[] {
+  const present = new Set(table.map((r) => r.mid.trim()).filter(Boolean));
+  const ordered = TO_KNOW_GUIDE_CATEGORY_ORDER.filter((c) => present.has(c));
+  const extra = [...present].filter(
+    (c) => !TO_KNOW_GUIDE_CATEGORY_ORDER.includes(c as ToKnowGuideCategory),
+  );
+  return [...ordered, ...extra.sort((a, b) => a.localeCompare(b, "ko"))];
+}
+
+export function buildToKnowExportRows(
+  table: ToKnowRow[],
+  coreQuestion = "",
+): ToKnowExportRow[] {
+  const question = coreQuestion.trim();
+  const rows: ToKnowExportRow[] = [];
+  for (const category of orderedCategories(table)) {
+    const infoRows = getCategoryInfoRows(table, category);
+    for (const info of infoRows) {
+      if (!info.small.trim()) continue;
+      rows.push({
+        category: guideCategoryLabel(category),
+        infoCategory: info.infoCategory?.trim() ?? "",
+        question,
+        infoToIdentify: info.small.trim(),
+        methodLabel: methodLabel(info.method),
+      });
+    }
+  }
+  return rows;
 }
 
 function exportFilename(ext: string): string {
@@ -66,6 +95,7 @@ function triggerDownload(blob: Blob, filename: string) {
 function buildDocHtml(rows: ToKnowExportRow[], meta: ToKnowExportMeta): string {
   const title = meta.projectTitle?.trim() || "To-know list";
   const problem = meta.problem?.trim();
+  const coreQuestion = resolveExportCoreQuestion(meta);
   const exportedAt = new Intl.DateTimeFormat("ko-KR", {
     dateStyle: "medium",
     timeStyle: "short",
@@ -76,7 +106,8 @@ function buildDocHtml(rows: ToKnowExportRow[], meta: ToKnowExportMeta): string {
       const bg = index % 2 === 0 ? "#ffffff" : "#faf9f6";
       return `<tr style="background:${bg};">
 <td style="border:1px solid #d4d0c8;padding:8px 10px;vertical-align:top;width:5%;">${index + 1}</td>
-<td style="border:1px solid #d4d0c8;padding:8px 10px;vertical-align:top;width:14%;">${escapeHtml(row.category)}</td>
+<td style="border:1px solid #d4d0c8;padding:8px 10px;vertical-align:top;width:12%;">${escapeHtml(row.category)}</td>
+<td style="border:1px solid #d4d0c8;padding:8px 10px;vertical-align:top;width:12%;">${escapeHtml(row.infoCategory || "—")}</td>
 <td style="border:1px solid #d4d0c8;padding:8px 10px;vertical-align:top;">${escapeHtml(row.question)}</td>
 <td style="border:1px solid #d4d0c8;padding:8px 10px;vertical-align:top;">${escapeHtml(row.infoToIdentify || "—")}</td>
 <td style="border:1px solid #d4d0c8;padding:8px 10px;vertical-align:top;width:14%;">${escapeHtml(row.methodLabel || "—")}</td>
@@ -101,7 +132,7 @@ function buildDocHtml(rows: ToKnowExportRow[], meta: ToKnowExportMeta): string {
   <h1>To-know list</h1>
   <p class="meta">
     ${escapeHtml(title)}<br />
-    ${problem ? `문제점: ${escapeHtml(problem)}<br />` : ""}
+    ${coreQuestion ? `풀고자 하는 사용자 문제: ${escapeHtml(coreQuestion)}<br />` : problem ? `문제점: ${escapeHtml(problem)}<br />` : ""}
   보낸 시각: ${escapeHtml(exportedAt)} · 항목 ${rows.length}개
   </p>
   <table>
@@ -109,6 +140,7 @@ function buildDocHtml(rows: ToKnowExportRow[], meta: ToKnowExportMeta): string {
       <tr>
         <th>No.</th>
         <th>주제</th>
+        <th>카테고리</th>
         <th>핵심 질문</th>
         <th>파악하고자 하는 정보</th>
         <th>리서치 방법</th>
@@ -145,7 +177,8 @@ function buildPdfHtmlElement(
       <thead>
         <tr>
           <th style="border:1px solid #d4d0c8;background:#f4f0e8;padding:8px;text-align:left;width:5%;">No.</th>
-          <th style="border:1px solid #d4d0c8;background:#f4f0e8;padding:8px;text-align:left;width:14%;">주제</th>
+          <th style="border:1px solid #d4d0c8;background:#f4f0e8;padding:8px;text-align:left;width:12%;">주제</th>
+          <th style="border:1px solid #d4d0c8;background:#f4f0e8;padding:8px;text-align:left;width:12%;">카테고리</th>
           <th style="border:1px solid #d4d0c8;background:#f4f0e8;padding:8px;text-align:left;">핵심 질문</th>
           <th style="border:1px solid #d4d0c8;background:#f4f0e8;padding:8px;text-align:left;width:28%;">파악하고자 하는 정보</th>
           <th style="border:1px solid #d4d0c8;background:#f4f0e8;padding:8px;text-align:left;width:14%;">리서치 방법</th>
@@ -157,6 +190,7 @@ function buildPdfHtmlElement(
             (row, i) => `<tr style="background:${i % 2 === 0 ? "#fff" : "#faf9f6"};">
               <td style="border:1px solid #d4d0c8;padding:8px;vertical-align:top;">${i + 1}</td>
               <td style="border:1px solid #d4d0c8;padding:8px;vertical-align:top;">${escapeHtml(row.category)}</td>
+              <td style="border:1px solid #d4d0c8;padding:8px;vertical-align:top;">${escapeHtml(row.infoCategory || "—")}</td>
               <td style="border:1px solid #d4d0c8;padding:8px;vertical-align:top;">${escapeHtml(row.question)}</td>
               <td style="border:1px solid #d4d0c8;padding:8px;vertical-align:top;">${escapeHtml(row.infoToIdentify || "—")}</td>
               <td style="border:1px solid #d4d0c8;padding:8px;vertical-align:top;">${escapeHtml(row.methodLabel || "—")}</td>
@@ -173,7 +207,7 @@ export async function exportToKnowAsPdf(
   table: ToKnowRow[],
   meta: ToKnowExportMeta,
 ): Promise<void> {
-  const rows = buildToKnowExportRows(table);
+  const rows = buildToKnowExportRows(table, resolveExportCoreQuestion(meta));
   if (!rows.length) return;
 
   const [{ default: html2canvas }, { jsPDF }] = await Promise.all([
@@ -219,7 +253,7 @@ export function exportToKnowAsDoc(
   table: ToKnowRow[],
   meta: ToKnowExportMeta,
 ): void {
-  const rows = buildToKnowExportRows(table);
+  const rows = buildToKnowExportRows(table, resolveExportCoreQuestion(meta));
   if (!rows.length) return;
   const html = buildDocHtml(rows, meta);
   const blob = new Blob([`\ufeff${html}`], {
@@ -232,7 +266,8 @@ export async function exportToKnowAsXlsx(
   table: ToKnowRow[],
   meta: ToKnowExportMeta,
 ): Promise<void> {
-  const rows = buildToKnowExportRows(table);
+  const coreQuestion = resolveExportCoreQuestion(meta);
+  const rows = buildToKnowExportRows(table, coreQuestion);
   if (!rows.length) return;
 
   const XLSX = await import("xlsx");
@@ -246,13 +281,18 @@ export async function exportToKnowAsXlsx(
   const sheetRows: (string | number)[][] = [
     ["To-know list"],
     [title],
-    ...(problem ? [[`문제점: ${problem}`]] : []),
+    ...(coreQuestion
+      ? [[`풀고자 하는 사용자 문제: ${coreQuestion}`]]
+      : problem
+        ? [[`문제점: ${problem}`]]
+        : []),
     [`보낸 시각: ${exportedAt}`],
     [],
-    ["No.", "주제", "핵심 질문", "파악하고자 하는 정보", "리서치 방법"],
+    ["No.", "주제", "카테고리", "핵심 질문", "파악하고자 하는 정보", "리서치 방법"],
     ...rows.map((row, i) => [
       i + 1,
       row.category,
+      row.infoCategory,
       row.question,
       row.infoToIdentify,
       row.methodLabel,
@@ -275,7 +315,7 @@ export function downloadToKnowDoc(
   table: ToKnowRow[],
   meta: ToKnowExportMeta,
 ): boolean {
-  const rows = buildToKnowExportRows(table);
+  const rows = buildToKnowExportRows(table, resolveExportCoreQuestion(meta));
   if (!rows.length) return false;
   exportToKnowAsDoc(table, meta);
   return true;
@@ -285,7 +325,7 @@ export async function downloadToKnowPdf(
   table: ToKnowRow[],
   meta: ToKnowExportMeta,
 ): Promise<boolean> {
-  const rows = buildToKnowExportRows(table);
+  const rows = buildToKnowExportRows(table, resolveExportCoreQuestion(meta));
   if (!rows.length) return false;
   await exportToKnowAsPdf(table, meta);
   return true;
@@ -295,7 +335,7 @@ export async function downloadToKnowExcel(
   table: ToKnowRow[],
   meta: ToKnowExportMeta,
 ): Promise<boolean> {
-  const rows = buildToKnowExportRows(table);
+  const rows = buildToKnowExportRows(table, resolveExportCoreQuestion(meta));
   if (!rows.length) return false;
   await exportToKnowAsXlsx(table, meta);
   return true;

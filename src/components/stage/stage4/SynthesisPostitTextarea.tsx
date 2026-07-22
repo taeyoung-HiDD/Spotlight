@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useLayoutEffect, useRef } from "react";
+import { useLocalizedContent } from "@/hooks/useLocalizedContent";
+import { useLocalizedEditable } from "@/hooks/useLocalizedEditable";
 import { fitSynthesisPostitTextarea } from "@/lib/stages/stage4/empathyPostitFitText";
 
 interface SynthesisPostitTextareaProps {
@@ -20,6 +22,8 @@ export function SynthesisPostitTextarea({
   className = "",
 }: SynthesisPostitTextareaProps) {
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const editable = useLocalizedEditable(value, onChange);
+  const { text: localizedPlaceholder } = useLocalizedContent(placeholder);
 
   const refit = useCallback(() => {
     const el = textareaRef.current;
@@ -35,7 +39,7 @@ export function SynthesisPostitTextarea({
 
   useLayoutEffect(() => {
     refit();
-  }, [value, refit]);
+  }, [editable.value, refit]);
 
   useLayoutEffect(() => {
     const el = textareaRef.current;
@@ -55,9 +59,12 @@ export function SynthesisPostitTextarea({
         textareaRef.current = el;
         if (el) refit();
       }}
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      placeholder={placeholder}
+      value={editable.value}
+      onChange={(e) => editable.onChange(e.target.value)}
+      onFocus={editable.onFocus}
+      onBlur={editable.onBlur}
+      placeholder={localizedPlaceholder}
+      data-translating={editable.translating ? "true" : undefined}
       className={["synthesis-postit-text break-keep", className]
         .filter(Boolean)
         .join(" ")}

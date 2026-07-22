@@ -1,3 +1,5 @@
+import { STAGE2_EMPATHY_MAP_DEFLECT_HINT } from "@/lib/coach/empathyMapCoachRules";
+import { COACH_EMPATHY_MAP_PROMPT_RULE } from "@/lib/coach/sanitizeCoachKorean";
 import {
   mergeAnswerItems,
   parseAnswerTokens,
@@ -145,11 +147,13 @@ export const STAGE2_RESEARCH_CHAT_HINT = `
 - 왼쪽 캔버스는 문제점에 맞게 자동 선정된 영역의 사전 조사(가설) 결과입니다. 사용자가 직접 칸을 채우지 않았습니다.
 - 주 사용자: **누구인지(세그먼트·역할)** 와 **특성·행태**를 보완하세요. 불편·니즈만 나열하지 마세요.
 - 이해 관계자: **운영·공급·중개·규제** 주체만 보완하세요. 손님·이용자·소비자(주 사용자)는 stakeholders에 넣지 마세요.
-- 빠진 관점 보완에 답하세요. 평서문 가설·관찰만 제안하고, 질문형·의문형 문장은 쓰지 마세요.
+- 빠진 관점 보완에 답하세요. 존댓말(~습니다/~입니다) 가설·관찰만 제안하고, 질문형·의문형·평서체(~이다/~다)는 쓰지 마세요.
 - 사용자가 특정 영역 내용을 추가·수정하라고 하면, 확인 후 응답 맨 마지막 줄에 정확히 한 줄만 추가:
   EDIT:primary_users|학생(대학생, 고등학생), 직장인, 주부
   (항목 id: primary_users, stakeholders, situation, environment, competitors, products_services, policy, infrastructure)
 - 수정·추가가 없으면 EDIT 줄을 넣지 마세요.
+- ${COACH_EMPATHY_MAP_PROMPT_RULE}
+${STAGE2_EMPATHY_MAP_DEFLECT_HINT}
 `.trim();
 
 export function contextualEditModeFromUser(message: string): "merge" | "replace" {

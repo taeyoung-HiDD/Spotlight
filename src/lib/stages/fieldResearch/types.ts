@@ -1,3 +1,6 @@
+import type { Stage4PersonaEmpathyMap } from "@/lib/stages/stage4/types";
+import type { Stage3ResearchPrep } from "@/lib/stages/fieldResearch/stage3ResearchPrep";
+
 export type RespondentRole = "heavy" | "light" | "control";
 export type RespondentRecruitStatus = "recruited" | "pending" | "open";
 
@@ -54,12 +57,12 @@ export interface ResearchMethodPlan {
 }
 
 export type ToKnowBigCategoryId =
-  /** CREMA v5 대분류 (crema_to_know_list_v5.xlsx) */
-  | "crema_target"
-  | "crema_company"
-  | "crema_region"
-  | "crema_policy_infra"
-  | "crema_competitor"
+  /** To-know v5 대분류 */
+  | "tk_target"
+  | "tk_company"
+  | "tk_region"
+  | "tk_policy_infra"
+  | "tk_competitor"
   /** Porter 5 driving forces — 레거시 */
   | "company"
   | "customer"
@@ -90,19 +93,27 @@ export type ToKnowBigCategoryId =
   | "decision"
   | "alternatives";
 
+export type ToKnowRowKind = "core" | "info";
+
 export interface ToKnowRow {
   id: string;
-  /** 대분류 (CREMA v5 · Porter 레거시) */
+  /** 대분류 (To-know v5 · Porter 레거시) */
   big: ToKnowBigCategoryId;
-  /** (레거시) 중분류 — 로드 시 질문(small)으로 합쳐지고 비움 */
+  /** 가이드 주제(사용자·현재 문제 등) 또는 사용자 지정 주제 */
   mid: string;
-  /** To-know 질문 */
+  /** core: 핵심 질문 · info: 파악하고자 하는 정보(하위 카테고리) */
+  rowKind?: ToKnowRowKind;
+  /** 대상·역할 구분 (예: 예비 창업자, 스타트업 팀원, 창업 멘토) */
+  infoCategory?: string;
+  /** core → 핵심 질문 · info → 파악하고자 하는 정보(질문) */
   small: string;
   /** 이 항목을 확인할 리서치 방법 */
   method: ResearchMethodId | "";
-  /** 자유 메모 (선택) */
+  /** info 행의 보조 메모(선택) */
   note?: string;
 }
+
+export type Stage3PrepWorkflowPhase = "research_prep" | "to_know";
 
 export type ToKnowPrepPhase = "discovery" | "draft_shown" | "refining";
 
@@ -125,9 +136,20 @@ export interface ToKnowPrepState {
 }
 
 export interface FieldResearchData {
+  /** 사용자 조사 준비 — 조사 계획 → To-know 순서 */
+  prepWorkflowPhase: Stage3PrepWorkflowPhase;
+  /** 조사 대상·인원·경로·가이드 */
+  researchPrep: Stage3ResearchPrep;
+  /** (레거시) 사전 조사 타겟 유저별 공감맵 — 4단계에서 사용 */
+  empathyMaps: Stage4PersonaEmpathyMap[];
   /** To-know 맥락 수집·초안 단계 */
   toKnowPrep: ToKnowPrepState;
-  /** 사용자 조사 준비하기 — To-know Table (대/중/소 + 방법) */
+  /**
+   * To-know 최상위 — 최종적으로 풀고자 하는 사용자 문제(1단계 문제점 기반).
+   * 주제(사용자·현재 문제 등) 하위가 아닌 페이지 전체 기준점.
+   */
+  toKnowCoreQuestion: string;
+  /** 사용자 조사 준비하기 — To-know Table (주제별 파악 정보 + 방법) */
   toKnowTable: ToKnowRow[];
   /** 사용자 조사 준비하기 — 조사 계획(방법 + 간단 이유) */
   researchMethods: ResearchMethodPlan[];

@@ -15,7 +15,7 @@ import type {
   SlotState,
 } from "@/types/database";
 
-const STAGE_ID = 5;
+const STAGE_ID = 6;
 
 function nowIso() {
   return new Date().toISOString();
@@ -73,20 +73,32 @@ export async function fetchStage5LatentNeeds(projectId: string): Promise<{
 }> {
   const supabase = createClient();
   await ensureAuthSession(supabase);
-  const { data, error } = await supabase
-    .from("artifacts")
-    .select("*")
-    .eq("project_id", projectId)
-    .eq("stage_id", STAGE_ID)
-    .order("updated_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
 
-  if (error) {
-    throw new Error(`단계 5 자료를 불러오지 못했습니다: ${error.message}`);
+  const loadByStage = async (stageId: number) => {
+    const { data, error } = await supabase
+      .from("artifacts")
+      .select("*")
+      .eq("project_id", projectId)
+      .eq("stage_id", stageId)
+      .order("updated_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (error) {
+      throw new Error(
+        `니즈 분석 자료를 불러오지 못했습니다: ${error.message}`,
+      );
+    }
+    return data as ArtifactRow | null;
+  };
+
+  let row = await loadByStage(STAGE_ID);
+  // 마이그레이션 전 레거시(stage_id=5 + needs_board) 폴백
+  if (!row?.slots?.needs_board) {
+    const legacy = await loadByStage(5);
+    if (legacy?.slots?.needs_board) row = legacy;
   }
 
-  if (!data) {
+  if (!row) {
     return {
       data: defaultStage5LatentNeeds(),
       artifactId: null,
@@ -94,7 +106,6 @@ export async function fetchStage5LatentNeeds(projectId: string): Promise<{
     };
   }
 
-  const row = data as ArtifactRow;
   const slots = row.slots ?? {};
   return {
     data: slotToLatentNeeds(slots),
@@ -125,6 +136,7 @@ export async function saveStage5LatentNeeds({
     const update: ArtifactUpdate = {
       slots,
       hypothesis_board: true,
+      stage_id: STAGE_ID,
     };
     const { data: updated, error } = await supabase
       .from("artifacts")
@@ -134,7 +146,7 @@ export async function saveStage5LatentNeeds({
       .single();
 
     if (error) {
-      throw new Error(`단계 5 자료 저장에 실패했습니다: ${error.message}`);
+      throw new Error(`니즈 분석 저장에 실패했습니다: ${error.message}`);
     }
     if (!updated?.id) {
       throw new Error("저장 후 artifact ID를 받지 못했습니다.");

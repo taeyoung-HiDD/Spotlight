@@ -5,6 +5,7 @@ import {
   IconMicrophone,
   IconPhoto,
   IconPlayerPlay,
+  IconSparkles,
   IconTrash,
   IconVideo,
   IconX,
@@ -26,6 +27,12 @@ interface ResearchSubjectMediaPanelProps {
   subjectId: string;
   mediaFiles: ResearchMediaFile[];
   onChange: (files: ResearchMediaFile[]) => void;
+  /** 방금 업로드된 자료 (영상 자동 분석 등) */
+  onUploaded?: (added: ResearchMediaFile[]) => void;
+  /** 영상·음성 자료를 AI로 분석해 포스트잇 생성 */
+  onAnalyze?: () => void;
+  analyzing?: boolean;
+  analyzeError?: string | null;
 }
 
 function formatFileSize(bytes: number): string {
@@ -190,6 +197,10 @@ export function ResearchSubjectMediaPanel({
   subjectId,
   mediaFiles,
   onChange,
+  onUploaded,
+  onAnalyze,
+  analyzing = false,
+  analyzeError = null,
 }: ResearchSubjectMediaPanelProps) {
   const photoInputId = useId();
   const videoInputId = useId();
@@ -212,6 +223,9 @@ export function ResearchSubjectMediaPanel({
     ? mediaFiles.find((m) => m.id === previewMediaId) ?? null
     : null;
   const previewUrl = previewMedia ? (urls[previewMedia.id] ?? "") : "";
+  const hasAnalyzableMedia = mediaFiles.some(
+    (m) => m.kind === "video" || m.kind === "audio",
+  );
 
   const closePreview = useCallback(() => {
     setPreviewMediaId(null);
@@ -241,6 +255,7 @@ export function ResearchSubjectMediaPanel({
       setUploading(true);
       setError(null);
       const next = [...mediaFiles];
+      const added: ResearchMediaFile[] = [];
       try {
         for (const file of Array.from(files)) {
           const media = await uploadResearchMediaFile({
@@ -249,16 +264,20 @@ export function ResearchSubjectMediaPanel({
             file,
           });
           next.push(media);
+          added.push(media);
         }
         onChange(next);
-        if (next.length > mediaFiles.length) setExpanded(true);
+        if (added.length > 0) {
+          setExpanded(true);
+          onUploaded?.(added);
+        }
       } catch (e) {
         setError(e instanceof Error ? e.message : "업로드에 실패했습니다.");
       } finally {
         setUploading(false);
       }
     },
-    [mediaFiles, onChange, projectId, subjectId],
+    [mediaFiles, onChange, onUploaded, projectId, subjectId],
   );
 
   const removeMedia = useCallback(
@@ -374,6 +393,38 @@ export function ResearchSubjectMediaPanel({
           음성
         </button>
       </div>
+
+      {onAnalyze ? (
+        <div className="mt-3 rounded-lg border border-spotlight/40 bg-highlight/40 px-3 py-2.5">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className={`${stageCaption} min-w-0`}>
+              영상을 올리면 대상자의{" "}
+              <b className="font-semibold text-foreground">행동</b>을 읽어{" "}
+              <b className="font-semibold text-foreground">행동함</b> 포스트잇으로 붙여요.
+              음성은 말함·생각함·느낌도 함께 정리해요.
+            </p>
+            <button
+              type="button"
+              disabled={analyzing || uploading || !hasAnalyzableMedia}
+              onClick={onAnalyze}
+              className="inline-flex shrink-0 items-center gap-1.5 rounded-md bg-spotlight px-3 py-2 text-[14px] font-semibold text-on-spotlight transition-opacity hover:opacity-90 disabled:opacity-50"
+            >
+              <IconSparkles className="size-4" stroke={2} aria-hidden />
+              {analyzing ? "분석 중…" : "AI로 자료 분석하기"}
+            </button>
+          </div>
+          {!hasAnalyzableMedia ? (
+            <p className={`mt-1.5 ${stageCaption}`}>
+              분석하려면 영상 또는 음성 자료를 먼저 올려 주세요.
+            </p>
+          ) : null}
+          {analyzeError ? (
+            <p className="mt-1.5 text-[13px] text-red-700" role="alert">
+              {analyzeError}
+            </p>
+          ) : null}
+        </div>
+      ) : null}
 
       {uploading ? (
         <p className={`mt-2 ${stageCaption}`}>올리는 중…</p>

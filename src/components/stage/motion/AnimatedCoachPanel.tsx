@@ -1,7 +1,7 @@
 "use client";
 
 import { IconBulb } from "@tabler/icons-react";
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { CoachBubble } from "@/components/stage/CoachPanel";
 import { CoachDialogMessage } from "@/components/stage/motion/CoachDialogMessage";
 import {
@@ -25,15 +25,38 @@ import {
   getStageWorkInputGuide,
   type CoachInputGuide,
 } from "@/lib/coach/inputGuidance";
+import { useOptionalProjectWorkspace } from "@/components/project/ProjectWorkspaceContext";
 import { useStageIntroGate } from "@/components/layout/StageIntroGate";
+import { useLocalizedContent } from "@/hooks/useLocalizedContent";
+import { useT } from "@/hooks/useT";
+import { useUiLocale } from "@/hooks/useUiLocale";
+import { briefCoachIntroForTaskFocus } from "@/lib/coach/coachIntroBrief";
+import { withCoachingLevelHint } from "@/lib/coach/coachingLevelContext";
+import { localizeCoachStatus } from "@/lib/i18n/localizeCoachStatus";
+import { isTaskFocusedProjectState } from "@/lib/stages/stage1/guidanceStyle";
 import { useReducedMotion } from "@/hooks/useReducedMotion";
 import { followCoachConversationScroll } from "@/lib/motion/coachScrollFollow";
 import { MOTION, sleep } from "@/lib/motion/timings";
+import {
+  normalizeCoachMessageResult,
+  type CoachMessageHandlerResult,
+  type CoachSpeakerTurnPayload,
+} from "@/lib/stages/stage4/multidisciplinaryCoach";
 import { stageCoachAside, stageCoachName, stageCoachStatus } from "@/lib/stages/ui";
 
 type LiveTurn =
   | { id: string; role: "user"; text: string }
-  | { id: string; role: "coach"; text: string; replyRaw: string }
+  | {
+      id: string;
+      role: "coach";
+      text: string;
+      replyRaw: string;
+      speaker?: "kevin" | "expert";
+      expertId?: string;
+      expertLabelKo?: string;
+      expertLabelEn?: string;
+      lens?: string;
+    }
   | { id: string; role: "error"; text: string };
 
 interface AnimatedCoachPanelProps {
@@ -47,11 +70,11 @@ interface AnimatedCoachPanelProps {
   showComposer?: boolean;
   /** 설정 시 Gemini `/api/chat` 연동 */
   chatContext?: CoachChatContext;
-  /** API 대신 로컬·커스텀 코치 응답 (대화 수집 단계 등) */
+  /** API 대신 로컬·커스텀 코치 응답 (대화 수집 단계 등) — 문자열 또는 다중 화자 turns */
   onCoachMessage?: (
     message: string,
     history: CoachChatHistoryItem[],
-  ) => Promise<string | null | undefined>;
+  ) => Promise<CoachMessageHandlerResult>;
   onUserMessage?: (message: string) => void;
   onCoachReply?: (reply: string) => void;
   /** 코치 응답 표시 전 변환 (예: EDIT 메타 줄 제거) */
@@ -69,6 +92,11 @@ interface AnimatedCoachPanelProps {
     id: string;
     userText: string;
     coachText: string;
+  } | null;
+  /** 외부에서 Kevin/전문가 말풍선을 순차 삽입 (id 변경 시 1회) */
+  injectedSpeakerTurns?: {
+    id: string;
+    turns: CoachSpeakerTurnPayload[];
   } | null;
 }
 
@@ -91,20 +119,40 @@ export function AnimatedCoachPanel({
   staticCoachLines,
   queuedSend,
   injectedExchange,
+  injectedSpeakerTurns,
 }: AnimatedCoachPanelProps) {
+  const workspace = useOptionalProjectWorkspace();
+  const uiLocale = useUiLocale();
+  const t = useT();
+  const localizedStatusLabel = localizeCoachStatus(uiLocale, statusLabel);
+  const { text: localizedStatusSub } = useLocalizedContent(statusSub ?? "");
   const notifyIntroGate = useStageIntroGate();
   const reducedMotion = useReducedMotion();
-  const [introMessages, setIntroMessages] = useState(messages);
+  const taskFocused = workspace
+    ? isTaskFocusedProjectState({
+        guidanceStyle: workspace.guidanceStyle,
+        userLevel: workspace.coachingLevel,
+      })
+    : false;
+  const resolvedIntroMessages = useMemo(
+    () => briefCoachIntroForTaskFocus(messages, taskFocused),
+    [messages, taskFocused],
+  );
+  const [introMessages, setIntroMessages] = useState(resolvedIntroMessages);
   const [liveTurns, setLiveTurns] = useState<LiveTurn[]>([]);
   const [exchangeBusy, setExchangeBusy] = useState(false);
   const [chatLoading, setChatLoading] = useState(false);
   const [coachRevealing, setCoachRevealing] = useState(false);
   const [introRevealing, setIntroRevealing] = useState(false);
   const [introDialogDone, setIntroDialogDone] = useState(false);
+  const [activeExpertStatus, setActiveExpertStatus] = useState<string | null>(
+    null,
+  );
   const scrollRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const scrollEndRef = useRef<HTMLDivElement>(null);
   const sendLockRef = useRef(false);
+  const revealDoneRef = useRef<(() => void) | null>(null);
 
   const isSpeechGenerating =
     introRevealing || coachRevealing || chatLoading || exchangeBusy;
@@ -122,15 +170,80 @@ export function AnimatedCoachPanel({
   );
 
   useEffect(() => {
-    setIntroMessages(messages);
+    setIntroMessages(resolvedIntroMessages);
     setLiveTurns([]);
     setExchangeBusy(false);
     setChatLoading(false);
     setIntroDialogDone(false);
+    setActiveExpertStatus(null);
     sendLockRef.current = false;
-    // messages는 sceneKey 전환 시점 스냅샷만 반영 (참조 변경으로 인트로 리플레이 방지)
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- messages
-  }, [sceneKey]);
+    revealDoneRef.current = null;
+  }, [sceneKey, resolvedIntroMessages]);
+
+  const waitForReveal = useCallback(async () => {
+    await new Promise<void>((resolve) => {
+      let settled = false;
+      const done = () => {
+        if (settled) return;
+        settled = true;
+        if (revealDoneRef.current === done) revealDoneRef.current = null;
+        resolve();
+      };
+      revealDoneRef.current = done;
+      if (reducedMotion) {
+        queueMicrotask(done);
+        return;
+      }
+      window.setTimeout(done, 20_000);
+    });
+  }, [reducedMotion]);
+
+  const pushSpeakerTurns = useCallback(
+    async (payloads: CoachSpeakerTurnPayload[]) => {
+      for (let i = 0; i < payloads.length; i += 1) {
+        const payload = payloads[i]!;
+        const raw = payload.text.trim();
+        if (!raw) continue;
+        const display = formatCoachDialogBreaks(
+          (formatCoachReply?.(raw) ?? raw).trim(),
+        );
+        if (!display) continue;
+
+        if (payload.speaker === "expert") {
+          const label =
+            payload.expertLabelKo?.trim() ||
+            payload.expertLabelEn?.trim() ||
+            "전문가";
+          setActiveExpertStatus(label);
+        } else {
+          setActiveExpertStatus(null);
+        }
+
+        if (!reducedMotion && i > 0) {
+          await sleep(MOTION.coachReplyAfterUserMs);
+        }
+
+        const turnId = `coach-${Date.now()}-${i}`;
+        setLiveTurns((prev) => [
+          ...prev,
+          {
+            id: turnId,
+            role: "coach",
+            text: display,
+            replyRaw: raw,
+            speaker: payload.speaker,
+            expertId: payload.expertId,
+            expertLabelKo: payload.expertLabelKo,
+            expertLabelEn: payload.expertLabelEn,
+            lens: payload.lens,
+          },
+        ]);
+        await waitForReveal();
+      }
+      setActiveExpertStatus(null);
+    },
+    [formatCoachReply, reducedMotion, waitForReveal],
+  );
 
   useEffect(() => {
     followScroll(true);
@@ -150,9 +263,9 @@ export function AnimatedCoachPanel({
   const resolvedInputGuide =
     inputGuide ??
     (chatContext?.stageId != null
-      ? getStageWorkInputGuide(chatContext.stageId)
+      ? getStageWorkInputGuide(chatContext.stageId, uiLocale)
       : showComposer
-        ? DEFAULT_COACH_INPUT_GUIDE
+        ? getStageWorkInputGuide(0, uiLocale)
         : undefined);
 
   const hasExampleChips = Boolean(resolvedInputGuide?.examples?.length);
@@ -227,48 +340,42 @@ export function AnimatedCoachPanel({
 
         setChatLoading(true);
 
-        const pushCoachReply = async (raw: string) => {
-          const replyTrimmed = raw.trim();
-          if (!replyTrimmed) return;
-          const display = formatCoachDialogBreaks(
-            (formatCoachReply?.(replyTrimmed) ?? replyTrimmed).trim(),
-          );
-          if (!display) return;
-          if (!reducedMotion) {
-            await sleep(MOTION.coachReplyAfterFetchMs);
-          }
-          setLiveTurns((prev) => [
-            ...prev,
-            {
-              id: `coach-${Date.now()}`,
-              role: "coach",
-              text: display,
-              replyRaw: replyTrimmed,
-            },
-          ]);
-        };
-
         if (onCoachMessage) {
-          const reply = await onCoachMessage(trimmed, history);
-          if (reply?.trim()) await pushCoachReply(reply);
+          const result = await onCoachMessage(trimmed, history);
+          const turns = normalizeCoachMessageResult(result);
+          setChatLoading(false);
+          if (turns.length) await pushSpeakerTurns(turns);
           return;
         }
 
         if (!chatContext) return;
 
         const guide = resolvedInputGuide ?? DEFAULT_COACH_INPUT_GUIDE;
+        const artifactSummary = chatContext.artifactSummary
+          ? withCoachingLevelHint(
+              chatContext.artifactSummary,
+              workspace?.coachingLevel,
+            )
+          : chatContext.artifactSummary;
         const { reply } = await sendCoachChat({
           message: trimmed,
           history,
           context: {
             ...chatContext,
+            artifactSummary,
             inputGuideContext: formatInputGuideForContext(guide),
+            uiLocale,
           },
         });
-        await pushCoachReply(reply);
+        setChatLoading(false);
+        await pushSpeakerTurns([{ speaker: "kevin", text: reply }]);
       } catch (e) {
         const message =
-          e instanceof Error ? e.message : "응답을 받지 못했습니다.";
+          e instanceof Error
+            ? e.message
+            : uiLocale === "en"
+              ? "No response received."
+              : "응답을 받지 못했습니다.";
         setLiveTurns((prev) => [
           ...prev,
           { id: `err-${Date.now()}`, role: "error", text: message },
@@ -277,6 +384,7 @@ export function AnimatedCoachPanel({
         setChatLoading(false);
         setExchangeBusy(false);
         sendLockRef.current = false;
+        setActiveExpertStatus(null);
       }
     },
     [
@@ -284,14 +392,15 @@ export function AnimatedCoachPanel({
       coachRevealing,
       exchangeBusy,
       chatLoading,
-      formatCoachReply,
       introRevealing,
       liveTurns,
       onCoachMessage,
-      onCoachReply,
       onUserMessage,
+      pushSpeakerTurns,
       reducedMotion,
       resolvedInputGuide,
+      uiLocale,
+      workspace?.coachingLevel,
     ],
   );
 
@@ -321,18 +430,43 @@ export function AnimatedCoachPanel({
         role: "coach",
         text: injectedExchange.coachText,
         replyRaw: injectedExchange.coachText,
+        speaker: "kevin",
       },
     ]);
     setIntroDialogDone(true);
   }, [injectedExchange]);
 
+  const lastInjectedSpeakerTurnsIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!injectedSpeakerTurns?.turns?.length) return;
+    if (lastInjectedSpeakerTurnsIdRef.current === injectedSpeakerTurns.id) {
+      return;
+    }
+    lastInjectedSpeakerTurnsIdRef.current = injectedSpeakerTurns.id;
+    setIntroDialogDone(true);
+    setExchangeBusy(true);
+    void (async () => {
+      try {
+        await pushSpeakerTurns(injectedSpeakerTurns.turns);
+      } finally {
+        setExchangeBusy(false);
+      }
+    })();
+  }, [injectedSpeakerTurns, pushSpeakerTurns]);
+
   const isReplyBusy =
     exchangeBusy || chatLoading || coachRevealing || introRevealing;
   const displayStatus = chatLoading
-    ? "생각하는 중"
+    ? t("coach.status.thinking")
     : coachRevealing || introRevealing
-      ? "입력하는 중"
-      : statusLabel;
+      ? t("coach.status.typing")
+      : localizedStatusLabel || t("coach.status.listening");
+
+  const displayStatusSub = activeExpertStatus
+    ? activeExpertStatus
+    : statusSub?.trim()
+      ? localizedStatusSub
+      : "";
 
   const handleDialogComplete = useCallback(() => {
     setIntroDialogDone(true);
@@ -347,9 +481,13 @@ export function AnimatedCoachPanel({
           <IconBulb className="size-4 text-on-spotlight" stroke={2} />
         </div>
         <div className="min-w-0 flex-1">
-          <div className={stageCoachName}>{COACH_DISPLAY_NAME}</div>
+          <div className={stageCoachName}>
+            {activeExpertStatus || COACH_DISPLAY_NAME}
+          </div>
           <div className={stageCoachStatus}>
-            {statusSub ? `${displayStatus} · ${statusSub}` : displayStatus}
+            {displayStatusSub
+              ? `${displayStatus} · ${displayStatusSub}`
+              : displayStatus}
           </div>
         </div>
         <span
@@ -400,30 +538,62 @@ export function AnimatedCoachPanel({
               {turn.role === "user" ? (
                 <CoachUserBubble>{turn.text}</CoachUserBubble>
               ) : (
-                <CoachBubble
-                  variant={turn.role === "error" ? "secondary" : "primary"}
-                >
-                  {turn.role === "error" ? (
-                    <>
-                      <span className="font-semibold text-foreground">
-                        연결 문제
-                      </span>
-                      {" — "}
-                      {turn.text}
-                    </>
-                  ) : (
-                    <CoachRevealText
-                      text={turn.text}
-                      onProgress={() => followScroll()}
-                      onTypingChange={setCoachRevealing}
-                      onComplete={() => {
-                        if (turn.role === "coach") {
-                          onCoachReply?.(turn.replyRaw);
-                        }
-                      }}
-                    />
-                  )}
-                </CoachBubble>
+                <div className="space-y-1.5">
+                  {turn.role === "coach" && turn.speaker === "expert" ? (
+                    <div className="px-0.5">
+                      <p className="text-[13px] font-semibold text-foreground break-keep">
+                        {turn.expertLabelKo || "전문가"}
+                        {turn.expertLabelEn ? (
+                          <span className="ml-1.5 text-[12px] font-medium text-muted">
+                            {turn.expertLabelEn}
+                          </span>
+                        ) : null}
+                      </p>
+                      {turn.lens ? (
+                        <p className="text-[11px] text-muted break-keep">
+                          {turn.lens}
+                        </p>
+                      ) : null}
+                    </div>
+                  ) : turn.role === "coach" ? (
+                    <div className="px-0.5">
+                      <p className="text-[13px] font-semibold text-foreground break-keep">
+                        {COACH_DISPLAY_NAME}
+                      </p>
+                      <p className="text-[11px] text-muted break-keep">코치</p>
+                    </div>
+                  ) : null}
+                  <CoachBubble
+                    variant={
+                      turn.role === "error" || turn.speaker === "expert"
+                        ? "secondary"
+                        : "primary"
+                    }
+                  >
+                    {turn.role === "error" ? (
+                      <>
+                        <span className="font-semibold text-foreground">
+                          {t("coach.connectionIssue")}
+                        </span>
+                        {" — "}
+                        {turn.text}
+                      </>
+                    ) : (
+                      <CoachRevealText
+                        text={turn.text}
+                        onProgress={() => followScroll()}
+                        onTypingChange={setCoachRevealing}
+                        onComplete={() => {
+                          revealDoneRef.current?.();
+                          revealDoneRef.current = null;
+                          if (turn.role === "coach" && turn.speaker !== "expert") {
+                            onCoachReply?.(turn.replyRaw);
+                          }
+                        }}
+                      />
+                    )}
+                  </CoachBubble>
+                </div>
               )}
             </div>
           ))}

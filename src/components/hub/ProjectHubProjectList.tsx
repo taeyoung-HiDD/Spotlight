@@ -10,8 +10,10 @@ import {
 import Link from "next/link";
 import { useCallback, useState, type ReactNode } from "react";
 import { ProjectHubDeleteButton } from "@/components/hub/ProjectHubDeleteButton";
+import { ProjectHubInviteButton } from "@/components/hub/ProjectHubInviteButton";
+import { ProjectHubParticipantRow } from "@/components/hub/ProjectHubParticipantRow";
+import { HubMacroProgressRow } from "@/components/hub/HubMacroProgressRow";
 import { HubStageProgressBar } from "@/components/hub/HubStageProgressBar";
-import { ProjectHubTeamAvatars } from "@/components/hub/ProjectHubTeamAvatars";
 import type { HubProjectItem } from "@/lib/projects/fetchHubProjects";
 import { STAGE_COUNT } from "@/lib/stages/constants";
 import { getSidebarStage } from "@/lib/stages/sidebarNav";
@@ -36,29 +38,34 @@ function formatRelativeTime(iso: string): string {
 
 function ProjectCardTitleRow({
   title,
-  teamMembers,
   className = "mb-1.5",
   titleClassName = "m-0 text-[17px] font-bold leading-snug text-foreground",
   prefix,
 }: {
   title: string;
-  teamMembers: HubProjectItem["teamMembers"];
   className?: string;
   titleClassName?: string;
   prefix?: ReactNode;
 }) {
   return (
-    <div
-      className={[
-        "flex items-center justify-between gap-3",
-        className,
-      ].join(" ")}
-    >
-      <div className="flex min-w-0 items-center gap-1.5">
-        {prefix}
-        <h3 className={`min-w-0 truncate ${titleClassName}`}>{title}</h3>
-      </div>
-      <ProjectHubTeamAvatars members={teamMembers} className="shrink-0" />
+    <div className={["flex min-w-0 items-center gap-1.5", className].join(" ")}>
+      {prefix}
+      <h3 className={`min-w-0 truncate ${titleClassName}`}>{title}</h3>
+    </div>
+  );
+}
+
+function ProjectCardActionColumn({
+  project,
+  children,
+}: {
+  project: HubProjectItem;
+  children: ReactNode;
+}) {
+  return (
+    <div className="flex flex-col items-stretch gap-2 sm:min-w-[15rem] sm:items-end">
+      <ProjectHubParticipantRow members={project.teamMembers} align="end" />
+      {children}
     </div>
   );
 }
@@ -79,6 +86,7 @@ function ProjectCardActions({
         projectId={project.id}
         projectTitle={project.title}
         onDeleted={onDeleted}
+        disabled={!project.isOwner}
         className="w-full sm:w-auto"
       />
     </div>
@@ -99,10 +107,7 @@ function ActiveProjectCard({
     <article className="rounded-xl border-[1.5px] border-spotlight bg-panel p-5">
       <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-[1fr_auto] lg:gap-6">
         <div>
-          <ProjectCardTitleRow
-            title={project.title}
-            teamMembers={project.teamMembers}
-          />
+          <ProjectCardTitleRow title={project.title} />
           {project.description ? (
             <p className="mb-3.5 text-[11.5px] leading-[1.55] text-muted">
               {project.description}
@@ -116,6 +121,7 @@ function ActiveProjectCard({
                 단계 {project.resumeStage} · {progressPct}%
               </span>
             </div>
+            <HubMacroProgressRow stage={project.resumeStage} />
             <HubStageProgressBar stage={project.resumeStage} />
             {stageMeta ? (
               <p className="mt-1 text-[10px] text-muted">{stageMeta.navLabel}</p>
@@ -127,23 +133,27 @@ function ActiveProjectCard({
           </p>
         </div>
 
-        <div className="flex flex-col items-stretch sm:min-w-[7.5rem] sm:items-end">
-          <Link
-            href={`/project/${project.id}/stage/${project.resumeStage}`}
-            className="inline-flex w-full items-center justify-center gap-1.5 rounded-md bg-hub-cta-bg px-4 py-2 text-xs font-medium text-hub-cta-fg transition-opacity hover:opacity-90 sm:w-auto"
-          >
-            계속 진행
-            <IconArrowRight className="size-[13px] text-hub-cta-icon" stroke={2} />
-          </Link>
-        </div>
-      </div>
-
-      <div className="mt-4 border-t border-border-warm pt-3">
-        <ProjectHubDeleteButton
-          projectId={project.id}
-          projectTitle={project.title}
-          onDeleted={onDeleted}
-        />
+        <ProjectCardActionColumn project={project}>
+          <div className="flex w-full flex-col gap-1.5 sm:flex-row sm:justify-end">
+            <ProjectHubInviteButton
+              projectId={project.id}
+              projectTitle={project.title}
+            />
+            <Link
+              href={`/project/${project.id}/stage/${project.resumeStage}`}
+              className="inline-flex w-full items-center justify-center gap-1.5 rounded-md bg-hub-cta-bg px-4 py-2 text-xs font-medium text-hub-cta-fg transition-opacity hover:opacity-90 sm:w-auto"
+            >
+              계속 진행
+              <IconArrowRight className="size-[13px] text-hub-cta-icon" stroke={2} />
+            </Link>
+            <ProjectHubDeleteButton
+              projectId={project.id}
+              projectTitle={project.title}
+              onDeleted={onDeleted}
+              disabled={!project.isOwner}
+            />
+          </div>
+        </ProjectCardActionColumn>
       </div>
     </article>
   );
@@ -163,7 +173,6 @@ function PausedProjectCard({
       <div>
         <ProjectCardTitleRow
           title={project.title}
-          teamMembers={project.teamMembers}
           className="mb-1"
           titleClassName="m-0 text-sm font-semibold text-foreground"
         />
@@ -172,6 +181,7 @@ function PausedProjectCard({
           {formatRelativeTime(project.updatedAt)}
         </p>
         <div className="max-w-md">
+          <HubMacroProgressRow stage={project.resumeStage} />
           <HubStageProgressBar stage={project.resumeStage} />
           <p className="mt-1 text-[9.5px] text-muted">
             단계 {project.resumeStage}/{STAGE_COUNT} · {progressPct}%
@@ -179,12 +189,24 @@ function PausedProjectCard({
         </div>
       </div>
       <ProjectCardActions project={project} onDeleted={onDeleted}>
-        <Link
-          href={`/project/${project.id}/stage/${project.resumeStage}`}
-          className="w-full rounded-md border border-border-warm bg-panel px-3 py-1.5 text-center text-[10.5px] text-foreground sm:w-auto"
-        >
-          다시 시작
-        </Link>
+        <ProjectHubParticipantRow
+          members={project.teamMembers}
+          align="end"
+          compact
+        />
+        <div className="flex w-full flex-col gap-1.5 sm:w-auto sm:flex-row">
+          <ProjectHubInviteButton
+            projectId={project.id}
+            projectTitle={project.title}
+            variant="secondary"
+          />
+          <Link
+            href={`/project/${project.id}/stage/${project.resumeStage}`}
+            className="w-full rounded-md border border-border-warm bg-panel px-3 py-1.5 text-center text-[10.5px] text-foreground sm:w-auto"
+          >
+            다시 시작
+          </Link>
+        </div>
       </ProjectCardActions>
     </article>
   );
@@ -202,7 +224,6 @@ function CompletedProjectCard({
       <div>
         <ProjectCardTitleRow
           title={project.title}
-          teamMembers={project.teamMembers}
           className="mb-1"
           titleClassName="m-0 text-sm font-semibold text-foreground"
           prefix={
@@ -217,13 +238,23 @@ function CompletedProjectCard({
         </p>
       </div>
       <ProjectCardActions project={project} onDeleted={onDeleted}>
+        <ProjectHubParticipantRow
+          members={project.teamMembers}
+          align="end"
+          compact
+        />
         <div className="flex w-full flex-wrap justify-end gap-1 sm:w-auto">
-          <button
-            type="button"
+          <ProjectHubInviteButton
+            projectId={project.id}
+            projectTitle={project.title}
+            variant="secondary"
+          />
+          <Link
+            href={`/project/${project.id}/archive`}
             className="rounded-md border border-border-warm bg-panel px-2.5 py-1.5 text-[10.5px] text-foreground"
           >
             자료실
-          </button>
+          </Link>
           <button
             type="button"
             className="rounded-md border border-border-warm bg-panel px-2.5 py-1.5 text-[10.5px] text-foreground"
@@ -282,8 +313,8 @@ export function ProjectHubProjectList({
           <IconBulb className="size-[15px] text-on-spotlight" stroke={1.75} />
         </div>
         <p className="text-[11.5px] leading-[1.5] text-foreground">
-          여기는 <span className="font-medium">모든 프로젝트가 모인 허브</span>
-          예요. 마감 임박 자리부터 짚어드릴게요. 막히시면 우측 위{" "}
+          여기는 <span className="font-medium">내 프로젝트</span>
+          공간이에요. 마감 임박 자리부터 짚어드릴게요. 막히시면 우측 위{" "}
           <span className="font-medium">Kevin 부르기</span> 누르세요.
         </p>
       </div>

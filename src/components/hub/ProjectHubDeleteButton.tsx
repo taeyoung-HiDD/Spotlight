@@ -1,6 +1,7 @@
 "use client";
 
 import { IconTrash } from "@tabler/icons-react";
+import { useRouter } from "next/navigation";
 import { useCallback, useState } from "react";
 import { ProjectHubDeleteConfirmDialog } from "@/components/hub/ProjectHubDeleteConfirmDialog";
 import { deleteProjectAction } from "@/lib/projects/deleteProject";
@@ -10,6 +11,7 @@ interface ProjectHubDeleteButtonProps {
   projectTitle: string;
   onDeleted: (projectId: string) => void;
   className?: string;
+  disabled?: boolean;
 }
 
 export function ProjectHubDeleteButton({
@@ -17,13 +19,16 @@ export function ProjectHubDeleteButton({
   projectTitle,
   onDeleted,
   className = "",
+  disabled = false,
 }: ProjectHubDeleteButtonProps) {
+  const router = useRouter();
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [loading, setLoading] = useState(false);
 
   const handleOpenConfirm = useCallback(() => {
+    if (disabled || loading) return;
     setConfirmOpen(true);
-  }, []);
+  }, [disabled, loading]);
 
   const handleCancel = useCallback(() => {
     if (loading) return;
@@ -37,13 +42,16 @@ export function ProjectHubDeleteButton({
       if (result.ok) {
         setConfirmOpen(false);
         onDeleted(projectId);
+        router.refresh();
       } else {
         window.alert(result.error);
       }
     } finally {
       setLoading(false);
     }
-  }, [projectId, onDeleted]);
+  }, [onDeleted, projectId, router]);
+
+  if (disabled) return null;
 
   return (
     <>
@@ -52,7 +60,7 @@ export function ProjectHubDeleteButton({
         onClick={handleOpenConfirm}
         disabled={loading}
         className={[
-          "inline-flex items-center justify-center gap-1 rounded-md border border-border-warm bg-panel px-3 py-1.5 text-[10.5px] text-muted transition-colors hover:border-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50",
+          "inline-flex items-center justify-center gap-1 rounded-md border border-border-warm bg-panel px-3 py-1.5 text-[10.5px] text-muted transition-colors hover:border-rose-300 hover:text-rose-700 disabled:cursor-not-allowed disabled:opacity-50",
           className,
         ].join(" ")}
         aria-label={`${projectTitle} 프로젝트 삭제`}

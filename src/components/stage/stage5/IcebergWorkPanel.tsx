@@ -1,6 +1,8 @@
 "use client";
 
+import { useUiLocale } from "@/hooks/useUiLocale";
 import type { ReactNode } from "react";
+import { LocalizedEditableTextarea } from "@/components/i18n/LocalizedEditableField";
 import { StageWorkDiscoveryPlaceholder } from "@/components/stage/StageWorkDiscoveryPlaceholder";
 import { getStagePurposeCopy } from "@/lib/stages/discovery/stagePurposeCopy";
 import { isIcebergDiscoveryActive } from "@/lib/stages/iceberg/stage5IcebergDiscoveryFlow";
@@ -64,7 +66,8 @@ export function IcebergWorkPanel({
   const explicitCount = countItems(data.explicit.items);
   const tacitCount = countItems(data.tacit.items);
   const discoveryActive = isIcebergDiscoveryActive(data.prep);
-  const purposeCopy = getStagePurposeCopy(5);
+  const locale = useUiLocale();
+  const purposeCopy = getStagePurposeCopy(5, locale);
 
   if (discoveryActive) {
     return (
@@ -102,12 +105,12 @@ export function IcebergWorkPanel({
           count={explicitCount}
           variant="surface"
         >
-          <textarea
+          <LocalizedEditableTextarea
             value={itemsToText(data.explicit.items)}
-            onChange={(e) =>
+            onValueChange={(text) =>
               onChange({
                 ...data,
-                explicit: { items: textToItems(e.target.value) },
+                explicit: { items: textToItems(text) },
               })
             }
             rows={4}
@@ -123,12 +126,12 @@ export function IcebergWorkPanel({
           variant="tacit"
           waterline={WATERLINE}
         >
-          <textarea
+          <LocalizedEditableTextarea
             value={itemsToText(data.tacit.items)}
-            onChange={(e) =>
+            onValueChange={(text) =>
               onChange({
                 ...data,
-                tacit: { items: textToItems(e.target.value) },
+                tacit: { items: textToItems(text) },
               })
             }
             rows={3}
@@ -181,12 +184,12 @@ export function IcebergWorkPanel({
           </div>
           <label className="block">
             <span className={`mb-1.5 block ${stageLabel}`}>근거</span>
-            <textarea
+            <LocalizedEditableTextarea
               value={data.latent.evidence}
-              onChange={(e) =>
+              onValueChange={(evidence) =>
                 onChange({
                   ...data,
-                  latent: { ...data.latent, evidence: e.target.value },
+                  latent: { ...data.latent, evidence },
                 })
               }
               rows={2}

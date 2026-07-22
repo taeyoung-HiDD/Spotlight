@@ -23,6 +23,31 @@ export async function requestSlotBackfill(params: {
   return { content: json.content.trim() };
 }
 
+export async function requestIdeaSketchImage(params: {
+  projectId: string;
+  title: string;
+  description?: string;
+  hmwText?: string;
+}): Promise<{ imageUrl: string; model?: string }> {
+  const res = await fetch("/api/stage8/idea-sketch-image", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(params),
+  });
+  const json = (await res.json()) as {
+    imageUrl?: string;
+    model?: string;
+    error?: string;
+  };
+  if (!res.ok) {
+    throw new Error(json.error ?? "아이디어 스케치 생성에 실패했습니다.");
+  }
+  if (!json.imageUrl) {
+    throw new Error("이미지 URL을 받지 못했습니다.");
+  }
+  return { imageUrl: json.imageUrl, model: json.model };
+}
+
 export async function requestStoryboardImage(params: {
   projectId: string;
   conceptName: string;

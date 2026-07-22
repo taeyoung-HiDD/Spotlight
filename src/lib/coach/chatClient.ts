@@ -9,6 +9,8 @@ export interface CoachChatContext {
   inputGuideContext?: string;
   /** 단계별 코치 동작 규약 (예: 공감맵 페르소나 블록) */
   stageBehaviorNote?: string;
+  /** UI 로케일 — en이면 코치 응답도 English */
+  uiLocale?: "ko" | "en";
 }
 
 export interface CoachChatHistoryItem {

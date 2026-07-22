@@ -3,11 +3,17 @@ import {
   type ResearchMediaFile,
 } from "@/lib/stages/stage4/researchMediaTypes";
 import {
+  emptyMultidisciplinaryAnalysis,
+  hasMultidisciplinaryAnalysisContent,
+  normalizeMultidisciplinaryAnalysis,
+  type MultidisciplinaryAnalysisData,
+} from "@/lib/stages/stage4/multidisciplinaryAnalysis";
+import {
   normalizeResearchSubject,
   type ResearchSubject,
 } from "@/lib/stages/stage4/researchSynthesisSubject";
 
-export type { ResearchSubject };
+export type { ResearchSubject, MultidisciplinaryAnalysisData };
 
 /** 단계 4 · 데이터 정리 보드 — HCI 워크북 색상 분류 */
 export type SynthesisNoteKind = "quote" | "observation" | "finding";
@@ -78,8 +84,10 @@ export interface ResearchSynthesisData {
   notes: SynthesisNote[];
   themes: string[];
   teamDebriefNote: string;
-  /** 팀 디브리핑 세션 음성 */
+  /** 팀 디브리핑 세션 음성 (레거시) */
   teamDebriefMediaFiles: ResearchMediaFile[];
+  /** 다학제적 분석(Multi-disciplinary Analysis) */
+  multidisciplinaryAnalysis: MultidisciplinaryAnalysisData;
   stage3Imported: boolean;
   empathyImported: boolean;
 }
@@ -117,6 +125,7 @@ export function defaultResearchSynthesis(): ResearchSynthesisData {
     themes: [],
     teamDebriefNote: "",
     teamDebriefMediaFiles: [],
+    multidisciplinaryAnalysis: emptyMultidisciplinaryAnalysis(),
     stage3Imported: false,
     empathyImported: false,
   };
@@ -166,6 +175,9 @@ export function normalizeResearchSynthesis(
     teamDebriefMediaFiles: normalizeResearchMediaFiles(
       (raw as { teamDebriefMediaFiles?: unknown }).teamDebriefMediaFiles,
     ),
+    multidisciplinaryAnalysis: normalizeMultidisciplinaryAnalysis(
+      (raw as { multidisciplinaryAnalysis?: unknown }).multidisciplinaryAnalysis,
+    ),
     stage3Imported: Boolean(raw.stage3Imported),
     empathyImported: Boolean(raw.empathyImported),
   };
@@ -203,6 +215,9 @@ export function hasResearchSynthesisContent(
 ): boolean {
   if (synthesis.teamDebriefNote.trim()) return true;
   if (synthesis.teamDebriefMediaFiles.length > 0) return true;
+  if (hasMultidisciplinaryAnalysisContent(synthesis.multidisciplinaryAnalysis)) {
+    return true;
+  }
   if (synthesis.themes.some((t) => t.trim())) return true;
   return synthesis.notes.some((n) => n.text.trim());
 }

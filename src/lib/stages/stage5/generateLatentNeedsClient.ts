@@ -6,26 +6,27 @@ import {
   type Stage5SubjectRef,
 } from "@/lib/stages/stage5/latentNeedsTypes";
 
-export interface GenerateLatentNeedsSubjectInput {
+export interface GenerateLatentNeedsSourceInput {
+  sourceId: string;
   subjectId: string;
-  name: string;
-  quotes: string[];
-  observations: string[];
+  subjectName: string;
+  kind: "quote" | "observation" | "finding";
+  text: string;
 }
 
 export interface GenerateLatentNeedsResponse {
-  needs: Array<{ subjectId: string; items: string[] }>;
+  needs: Array<{ sourceId: string; subjectId: string; text: string }>;
   source?: string;
 }
 
 export async function requestLatentNeedsGeneration(
   projectId: string,
-  subjects: GenerateLatentNeedsSubjectInput[],
+  sources: GenerateLatentNeedsSourceInput[],
 ): Promise<GenerateLatentNeedsResponse> {
   const res = await fetch("/api/stage5/generate-latent-needs", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ projectId, subjects }),
+    body: JSON.stringify({ projectId, sources }),
   });
 
   const json = (await res.json()) as GenerateLatentNeedsResponse & {
@@ -39,69 +40,74 @@ export async function requestLatentNeedsGeneration(
   return json;
 }
 
-export function buildSubjectInputsFromBoard(
+/** 텍스트가 있는 조사 결과 포스트잇 → AI 입력 */
+export function buildSourceInputsFromBoard(
   data: Stage5LatentNeedsData,
-): GenerateLatentNeedsSubjectInput[] {
-  return data.subjects
-    .map((subject) => ({
-      subjectId: subject.id,
-      name: subject.name,
-      quotes: data.postits
-        .filter((p) => p.subjectId === subject.id && p.kind === "quote")
-        .map((p) => p.text.trim())
-        .filter(Boolean),
-      observations: data.postits
-        .filter(
-          (p) =>
-            p.subjectId === subject.id &&
-            (p.kind === "observation" || p.kind === "finding"),
-        )
-        .map((p) => p.text.trim())
-        .filter(Boolean),
-    }))
-    .filter((input) => input.quotes.length > 0 || input.observations.length > 0);
+): GenerateLatentNeedsSourceInput[] {
+  const nameById = new Map(
+    data.subjects.map((s) => [s.id, s.name.trim()] as const),
+  );
+
+  return data.postits
+    .filter(
+      (p) => isStage5SourcePostitKind(p.kind) && p.text.trim().length > 0,
+    )
+    .map((p) => ({
+      sourceId: p.id,
+      subjectId: p.subjectId,
+      subjectName: nameById.get(p.subjectId) ?? "",
+      kind: p.kind,
+      text: p.text.trim(),
+    }));
 }
 
+/**
+ * Kevin 초안 잠재 니즈를 교체하고, 각 조사 포스트잇에 1개씩 붙입니다.
+ * 사용자가 직접 쓴 잠재 니즈는 유지합니다.
+ */
 export function applyGeneratedLatentNeeds(
   data: Stage5LatentNeedsData,
   result: GenerateLatentNeedsResponse,
 ): Stage5LatentNeedsData {
-  const sourceAndUser = data.postits.filter(
+  const kept = data.postits.filter(
     (p) => p.kind !== "latent_need" || !p.kevinGenerated,
   );
 
+  const validSourceIds = new Set(
+    data.postits
+      .filter((p) => isStage5SourcePostitKind(p.kind))
+      .map((p) => p.id),
+  );
+
   const generated: Stage5LatentNeedsData["postits"] = [];
-  for (const block of result.needs) {
-    const sourceIds = data.postits
-      .filter(
-        (p) =>
-          p.subjectId === block.subjectId && isStage5SourcePostitKind(p.kind),
-      )
-      .map((p) => p.id);
+  const seenSource = new Set<string>();
 
-    const items = block.items
-      .map((text) => cleanLatentNeedText(text))
-      .filter(Boolean);
+  for (const item of result.needs) {
+    const sourceId = item.sourceId.trim();
+    if (!sourceId || !validSourceIds.has(sourceId) || seenSource.has(sourceId)) {
+      continue;
+    }
+    const trimmed = cleanLatentNeedText(item.text);
+    if (!trimmed) continue;
 
-    items.forEach((trimmed, idx) => {
-      const linkedId =
-        sourceIds.length > 0
-          ? sourceIds[idx % sourceIds.length]!
-          : undefined;
-      generated.push(
-        createStage5BoardPostit(block.subjectId, "latent_need", {
-          text: trimmed,
-          readonly: false,
-          kevinGenerated: true,
-          linkedSourceIds: linkedId ? [linkedId] : undefined,
-        }),
-      );
-    });
+    const source = data.postits.find((p) => p.id === sourceId);
+    const subjectId = source?.subjectId ?? item.subjectId;
+    if (!subjectId) continue;
+
+    seenSource.add(sourceId);
+    generated.push(
+      createStage5BoardPostit(subjectId, "latent_need", {
+        text: trimmed,
+        readonly: false,
+        kevinGenerated: true,
+        linkedSourceIds: [sourceId],
+      }),
+    );
   }
 
   return {
     ...data,
-    postits: [...sourceAndUser, ...generated],
+    postits: [...kept, ...generated],
     kevinGeneratedAt: new Date().toISOString(),
   };
 }

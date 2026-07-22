@@ -1,15 +1,17 @@
 "use client";
 
-import { useSyncExternalStore } from "react";
-import {
-  type UiLocale,
-  resolveUiLocaleFromNavigator,
-} from "@/lib/i18n/uiLocale";
+import { useOptionalUiLocale } from "@/components/i18n/UiLocaleProvider";
+import type { UiLocale } from "@/lib/i18n/uiLocale";
 
+/** 현재 UI 로케일 — Provider가 있으면 선택값, 없으면 ko */
 export function useUiLocale(): UiLocale {
-  return useSyncExternalStore(
-    () => () => {},
-    resolveUiLocaleFromNavigator,
-    () => "ko",
-  );
+  return useOptionalUiLocale().locale;
+}
+
+export function useSetUiLocale() {
+  return useOptionalUiLocale().setLocale;
+}
+
+export function useUiLocaleReady(): boolean {
+  return useOptionalUiLocale().ready;
 }

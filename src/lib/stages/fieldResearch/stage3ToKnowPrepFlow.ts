@@ -3,14 +3,14 @@ import {
   buildAdaptedToKnowTable,
   type ToKnowSeedContext,
 } from "@/lib/stages/fieldResearch/toKnowSeed";
-import type { CremaToKnowBuildContext } from "@/lib/stages/fieldResearch/cremaToKnowV5";
+import type { ToKnowBuildContext } from "@/lib/stages/fieldResearch/toKnowCatalogV5";
 import type {
   ToKnowDiscoveryStep,
   ToKnowPrepState,
   ToKnowRow,
 } from "@/lib/stages/fieldResearch/types";
 
-export type Stage3BaselineContext = CremaToKnowBuildContext;
+export type Stage3BaselineContext = ToKnowBuildContext;
 
 export interface AdvanceToKnowDiscoveryResult {
   prep: ToKnowPrepState;
@@ -30,15 +30,29 @@ export function isToKnowDiscoveryActive(prep: ToKnowPrepState): boolean {
 
 /** 코치 하이라이트 · 작업 영역 캡션 */
 export const TO_KNOW_PURPOSE_LABEL = "To-know list를 만드는 이유";
+export const TO_KNOW_PURPOSE_LABEL_EN = "Why build a To-know list";
 
 export const TO_KNOW_PURPOSE_WORK_CAPTION =
   "사용자 조사 준비하기 — 제안한 문제를 더 깊게 파기 위한 조사 질문 목록";
+export const TO_KNOW_PURPOSE_WORK_CAPTION_EN =
+  "Prepare user research — questions to dig deeper into the problem";
 
 /** 우측 코치 — 이번 단계 목적 설명 */
 export function getToKnowPurposeExplanation(
   baseline: Stage3BaselineContext,
+  locale: import("@/lib/i18n/uiLocale").UiLocale = "ko",
 ): string {
   const problem = baseline.startingPoint.trim();
+  if (locale === "en") {
+    const lead = problem
+      ? `To dig deeper into what you wrote in Stage 1 — 「${clip(problem, 72)}」`
+      : "To dig deeper into the problem you shared";
+    return formatCoachDialogBreaks(
+      `${lead}, this is the **Prepare user research** stage.
+
+A **To-know list** is a **question list** you write **before** field research: what to learn, from whom, and how. You organize topics · questions · methods. These are **hypotheses** to validate—not final answers.`,
+    );
+  }
   const lead = problem
     ? `1단계에서 적어 두신 「${clip(problem, 72)}」을(를) 더 깊고 정확하게 파보기 위해`
     : "제안하신 문제점을 더 깊고 정확하게 파보기 위해";
@@ -46,7 +60,7 @@ export function getToKnowPurposeExplanation(
   return formatCoachDialogBreaks(
     `${lead}, 지금은 **사용자 조사 준비하기** 단계예요.
 
-**To-know list**는 사용자 조사에 들어가기 **전**에, 무엇을·누구에게·어떤 방법으로 확인할지 적어 두는 **질문 목록**이에요. CREMA v5 형식(주제·질문·조사 방법)으로 정리하며, 확정 답이 아니라 검증할 **가설**이에요.`,
+**To-know list**는 사용자 조사에 들어가기 **전**에, 무엇을·누구에게·어떤 방법으로 확인할지 적어 두는 **질문 목록**이에요. 주제·질문·조사 방법 형식으로 정리하며, 확정 답이 아니라 검증할 **가설**이에요.`,
   );
 }
 
@@ -70,7 +84,7 @@ export function buildDiscoveryKickoff(
 
   lines.push(
     formatCoachDialogBreaks(
-      `앞에서 주신 내용을 바탕으로 보면, 이번 조사의 핵심 타겟은 ${targetHint} 사용자예요. ${contextHint}\n\n제가 이렇게 이해한 게 맞는지 먼저 확인하고, 그다음 대상 이름과 조사 범위를 함께 정할게요.`,
+      `앞에서 주신 내용을 바탕으로 보면, 이번 조사의 핵심 타겟은 ${targetHint} 사용자예요. ${contextHint}\n\n사전 조사에서 정리한 타겟·이해관계자는 To-know 조사 대상으로 넣어 둘게요. 제가 이렇게 이해한 게 맞는지 먼저 확인하고, 그다음 상황·조사 범위를 함께 정할게요.`,
     ),
   );
   const unknownCount = baseline.unknowns?.length ?? 0;
@@ -83,33 +97,25 @@ export function buildDiscoveryKickoff(
   }
 
   lines.push(
-    "제가 이렇게 이해한 내용이 맞는지 먼저 짧게 확인해 주세요. 확인되면 바로 대상 이름부터 질문을 이어갈게요.",
+    "제가 이렇게 이해한 내용이 맞는지 먼저 짧게 확인해 주세요. 확인되면 바로 상황 맥락부터 질문을 이어갈게요.",
   );
 
   return lines;
 }
 
-function normalizeTargetAnswer(
-  message: string,
+function autoTargetPersonFromBaseline(
   baseline: Stage3BaselineContext,
+  prep: ToKnowPrepState,
 ): string {
-  const t = message.trim();
-  if (!t) return t;
-  if (
-    baseline.personaName &&
-    /^(네|맞|응|그래|맞아|맞습니다|그 사람|이 사람)/i.test(t)
-  ) {
-    const parts = [baseline.personaName.trim()];
-    const situation = baseline.personaSituation?.trim() ?? "";
-    if (situation) {
-      parts.push(situation);
-    }
-    if (t.length > 4 && !/^(네|맞|응|그래)/i.test(t)) {
-      parts.push(t);
-    }
-    return parts.join(" — ");
-  }
-  return t;
+  if (prep.targetPerson.trim()) return prep.targetPerson.trim();
+  const fromPrePmf = [
+    ...(baseline.contextualAnswers?.primary_users ?? []),
+    ...(baseline.contextualAnswers?.stakeholders ?? []),
+  ]
+    .map((s) => s.trim())
+    .filter(Boolean);
+  if (fromPrePmf.length) return fromPrePmf.join(", ");
+  return baseline.personaName?.trim() ?? "";
 }
 
 function seedContext(
@@ -152,8 +158,8 @@ const USAGE_GUIDE = formatCoachDialogBreaks(`왼쪽 **To-know 표**에 리서치
 
 **표 항목**
 · **주제** — 사용자 · 현재 문제 · 행동 & 맥락 · 기존 솔루션 · 동기 & 목표 (표에서 이름·추가 수정 가능)
-· **핵심 질문** — 현장에서 물어볼 질문 (문제점과 연결)
-· **파악하고자 하는 정보** — 답으로 얻고 싶은 구체 내용
+· **풀고자 하는 사용자 문제** — To-know 맨 위에 한 번만 정리 (1단계 문제점)
+· **파악하고자 하는 정보** — 주제별로 현장에서 확인할 구체 항목
 · **리서치 방법** — FGD · 인뎁스 인터뷰 · 섀도잉 등
 
 질문을 추가·삭제하며 다듬어 보세요. 조사 방법이 궁금하면 방법 옆 ⓘ 아이콘을 보거나, 아래 입력창으로 Kevin에게 물어보세요.
@@ -175,22 +181,28 @@ export function advanceToKnowDiscovery(
 
   switch (prep.step) {
     case "alignment": {
-      const persona = baseline.personaName?.trim() ?? "";
+      const targetPerson = autoTargetPersonFromBaseline(baseline, prep);
       const next: ToKnowPrepState = {
         ...prep,
-        step: "target",
+        targetPerson,
+        step: "situation",
       };
+      const situationHint = baseline.startingPoint.trim()
+        ? `문제 「${clip(baseline.startingPoint, 50)}」와 관련해, `
+        : "";
       return {
         prep: next,
         coachReply: formatCoachDialogBreaks(
-          persona
-            ? `좋아요. 2단계에서 **${persona}**님을 페르소나로 잡으셨어요. 조사할 **대상**이 이 분이 맞는지, 맞다면 어떤 분인지 한 줄로 알려주세요.`
-            : "좋아요. 이번 조사에서 만나볼 **대상**은 어떤 분인가요?",
+          `${situationHint}조사 대상은 사전 조사에서 정리한 타겟·이해관계자로 넣어 두었어요. 그 대상이 **지금 어떤 상황**에 있나요? 일·생활·문제가 터지는 맥락을 알려주세요.`,
         ),
       };
     }
     case "target": {
-      const targetPerson = normalizeTargetAnswer(text, baseline);
+      // 레거시 step — 대상 이름 입력 단계 제거, 상황으로 이어감
+      const targetPerson = autoTargetPersonFromBaseline(baseline, {
+        ...prep,
+        targetPerson: text,
+      });
       const next: ToKnowPrepState = {
         ...prep,
         targetPerson,
@@ -314,7 +326,7 @@ export function resolveToKnowPrepFromLoad(
 
   if (
     resolved.phase === "discovery" &&
-    resolved.step === "target" &&
+    (resolved.step === "target" || resolved.step === "alignment") &&
     !hasCollectedAny
   ) {
     return { ...resolved, step: "alignment" };

@@ -11,7 +11,7 @@ import { STAGE_COUNT } from "@/lib/stages/constants";
 export type SidebarStageItem = {
   id: number;
   navLabel: string;
-  /** 10–15 서비스 확장: 점선 외곽 */
+  /** 11–16 서비스 확장: 점선 외곽 */
   isServiceExtension: boolean;
 };
 
@@ -28,8 +28,8 @@ export const SIDEBAR_MACRO_GROUPS: SidebarMacroGroup[] = [
     label: "공감하기",
     icon: IconHeart,
     stages: [
-      { id: 1, navLabel: "문제점 찾기", isServiceExtension: false },
-      { id: 2, navLabel: "맥락 이해하기", isServiceExtension: false },
+      { id: 1, navLabel: "문제 정의하기", isServiceExtension: false },
+      { id: 2, navLabel: "사전 조사하기", isServiceExtension: false },
       { id: 3, navLabel: "사용자 조사 준비하기", isServiceExtension: false },
     ],
   },
@@ -39,8 +39,8 @@ export const SIDEBAR_MACRO_GROUPS: SidebarMacroGroup[] = [
     icon: IconMountain,
     stages: [
       { id: 4, navLabel: "발견 정리하기", isServiceExtension: false },
-      { id: 5, navLabel: "진짜 필요 찾기", isServiceExtension: false },
-      { id: 6, navLabel: "사용자 여정 지도 그리기", isServiceExtension: false },
+      { id: 5, navLabel: "사용자 여정 지도 그리기", isServiceExtension: false },
+      { id: 6, navLabel: "진짜 필요 찾기", isServiceExtension: false },
     ],
   },
   {
@@ -48,27 +48,28 @@ export const SIDEBAR_MACRO_GROUPS: SidebarMacroGroup[] = [
     label: "아이디어 만들기",
     icon: IconBulb,
     stages: [
-      { id: 7, navLabel: "아이디어 만들기", isServiceExtension: false },
-      { id: 8, navLabel: "우선순위 정하기", isServiceExtension: false },
-      { id: 9, navLabel: "컨셉 정리하기", isServiceExtension: false },
+      { id: 7, navLabel: "HMW 질문 만들기", isServiceExtension: false },
+      { id: 8, navLabel: "아이디어 펼치기", isServiceExtension: false },
+      { id: 9, navLabel: "우선순위 정하기", isServiceExtension: false },
+      { id: 10, navLabel: "컨셉 정리하기", isServiceExtension: false },
     ],
   },
   {
     id: "prototype",
     label: "시제품 만들기",
     icon: IconDeviceMobile,
-    stages: [{ id: 10, navLabel: "시제품 만들기", isServiceExtension: true }],
+    stages: [{ id: 11, navLabel: "시제품 만들기", isServiceExtension: true }],
   },
   {
     id: "business",
     label: "사업화 검토",
     icon: IconRocket,
     stages: [
-      { id: 11, navLabel: "테스트로 검증", isServiceExtension: true },
-      { id: 12, navLabel: "사업 타당성", isServiceExtension: true },
-      { id: 13, navLabel: "90일 로드맵", isServiceExtension: true },
-      { id: 14, navLabel: "사업 제안서", isServiceExtension: true },
-      { id: 15, navLabel: "투자·지원 연결", isServiceExtension: true },
+      { id: 12, navLabel: "테스트로 검증", isServiceExtension: true },
+      { id: 13, navLabel: "사업 타당성", isServiceExtension: true },
+      { id: 14, navLabel: "90일 로드맵", isServiceExtension: true },
+      { id: 15, navLabel: "사업 제안서", isServiceExtension: true },
+      { id: 16, navLabel: "투자·지원 연결", isServiceExtension: true },
     ],
   },
 ];

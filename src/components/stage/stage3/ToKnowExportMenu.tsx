@@ -30,7 +30,10 @@ export function ToKnowExportMenu({
   const [exporting, setExporting] = useState<"pdf" | "xlsx" | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const exportableCount = buildToKnowExportRows(table).length;
+  const exportableCount = buildToKnowExportRows(
+    table,
+    meta.coreQuestion ?? meta.problem,
+  ).length;
   const blocked = disabled || exportableCount === 0;
 
   const runExport = useCallback(

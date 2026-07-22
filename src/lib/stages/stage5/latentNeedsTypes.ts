@@ -83,6 +83,7 @@ export function createStage5BoardPostit(
     text: partial?.text ?? "",
     readonly: partial?.readonly ?? kind !== "latent_need",
     sourceRef: partial?.sourceRef,
+    linkedSourceIds: partial?.linkedSourceIds,
     kevinGenerated: partial?.kevinGenerated,
   };
 }

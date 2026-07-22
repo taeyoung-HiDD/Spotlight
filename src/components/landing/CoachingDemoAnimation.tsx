@@ -75,14 +75,14 @@ const PHASES: CoachingPhase[] = [
   },
   {
     id: "ideas",
-    stage: "단계 6 · 아이디어 펼치기",
-    mode: "제안 중",
+    stage: "단계 7 · HMW 질문 만들기",
+    mode: "짚어주는 중",
     messages: [
       {
         id: "i1",
         role: "coach",
-        text: "니즈에서 아이디어 3방향을 펼쳐볼까요? 각각 다른 접근이에요.",
-        emphasis: ["아이디어"],
+        text: "잠재 니즈를 HMW 질문으로 바꿔 볼까요? 아직 답이 아니라 열린 질문이면 충분해요.",
+        emphasis: ["HMW"],
       },
     ],
     ideas: ["실시간 재고 알림", "바코드 스캔 키트", "예측 대시보드"],

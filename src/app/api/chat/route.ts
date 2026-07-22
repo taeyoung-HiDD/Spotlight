@@ -4,6 +4,7 @@ import { resolveGroqApiKey, resolveGroqTextModels } from "@/lib/ai/env";
 import { groqChat } from "@/lib/ai/providers/groqText";
 import type { GroqMessage } from "@/lib/ai/types";
 import { buildOfflineCoachReply } from "@/lib/coach/offlineCoachReply";
+import { sanitizeCoachKoreanText } from "@/lib/coach/sanitizeCoachKorean";
 import { COACH_SYSTEM_INSTRUCTION } from "@/lib/coach/systemInstruction";
 
 type ChatRole = "user" | "model";
@@ -24,6 +25,7 @@ interface ChatRequestBody {
     artifactSummary?: string;
     inputGuideContext?: string;
     stageBehaviorNote?: string;
+    uiLocale?: "ko" | "en";
   };
 }
 
@@ -69,6 +71,11 @@ function buildContextPrefix(context: ChatRequestBody["context"]): string {
   if (context.stageBehaviorNote?.trim()) {
     lines.push(context.stageBehaviorNote.trim());
   }
+  if (context.uiLocale === "en") {
+    lines.push(
+      "- Response language: English. Reply entirely in clear, natural English. Keep Korean only for unavoidable proper nouns.",
+    );
+  }
   return lines.length > 1 ? `${lines.join("\n")}\n\n` : "";
 }
 
@@ -89,8 +96,12 @@ export async function POST(request: Request) {
   }
 
   if (!resolveGroqApiKey()) {
+    const offline = buildOfflineCoachReply(message, body.context);
+    const preferEnglish = body.context?.uiLocale === "en";
     return NextResponse.json({
-      reply: buildOfflineCoachReply(message, body.context),
+      reply: preferEnglish
+        ? "I'm offline right now (no API key). Keep going on the left panel—I'll help again once the connection is back."
+        : sanitizeCoachKoreanText(offline),
       model: "offline",
       source: "offline",
     });
@@ -99,9 +110,18 @@ export async function POST(request: Request) {
   const history = parseHistory(body.history);
   const userTurn = `${buildContextPrefix(body.context)}${message}`;
 
+  const preferEnglish = body.context?.uiLocale === "en";
+  const system = preferEnglish
+    ? `${COACH_SYSTEM_INSTRUCTION}
+
+---
+[Language override]
+The user interface is in English. Respond entirely in English (natural, concise). Do not default to Korean.`
+    : COACH_SYSTEM_INSTRUCTION;
+
   try {
     const result = await groqChat({
-      system: COACH_SYSTEM_INSTRUCTION,
+      system,
       messages: toGroqHistory(history),
       user: userTurn,
       models: resolveGroqTextModels(),
@@ -109,7 +129,9 @@ export async function POST(request: Request) {
     });
 
     return NextResponse.json({
-      reply: result.text,
+      reply: preferEnglish
+        ? result.text.trim()
+        : sanitizeCoachKoreanText(result.text),
       model: result.model,
       source: "groq",
     });

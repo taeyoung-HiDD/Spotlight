@@ -2,6 +2,8 @@
  * Kevin 발화 가독성 — 문장·문단 사이 빈 줄(숨 쉴 틈)
  */
 
+import { sanitizeCoachKoreanText } from "@/lib/coach/sanitizeCoachKorean";
+
 /** UI에 마크다운 `**`가 그대로 보이지 않도록 제거 */
 export function stripCoachMarkdownMarkers(text: string): string {
   return text.replace(/\*\*/g, "");
@@ -44,7 +46,9 @@ function paragraphize(block: string): string[] {
 
 /** 코치 말풍선·타이핑 텍스트에 문단 줄바꿈 적용 */
 export function formatCoachDialogBreaks(text: string): string {
-  const raw = stripCoachMarkdownMarkers(text.replace(/\r\n/g, "\n")).trim();
+  const raw = stripCoachMarkdownMarkers(
+    sanitizeCoachKoreanText(text.replace(/\r\n/g, "\n")),
+  ).trim();
   if (!raw) return raw;
 
   const exampleIdx = raw.search(/\n\n예를 들어/);

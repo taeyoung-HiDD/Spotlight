@@ -11,6 +11,11 @@ export type DeleteProjectResult =
 export async function deleteProjectAction(
   projectId: string,
 ): Promise<DeleteProjectResult> {
+  const trimmedId = projectId.trim();
+  if (!trimmedId) {
+    return { ok: false, error: "프로젝트를 찾을 수 없습니다." };
+  }
+
   const supabase = await createClient();
   const {
     data: { user },
@@ -21,14 +26,22 @@ export async function deleteProjectAction(
     return { ok: false, error: "로그인이 필요합니다." };
   }
 
-  const { error } = await supabase
+  const { data: deleted, error } = await supabase
     .from("projects")
     .delete()
-    .eq("id", projectId)
-    .eq("user_id", user.id);
+    .eq("id", trimmedId)
+    .eq("user_id", user.id)
+    .select("id");
 
   if (error) {
     return { ok: false, error: "프로젝트를 삭제할 수 없습니다." };
+  }
+
+  if (!deleted?.length) {
+    return {
+      ok: false,
+      error: "삭제 권한이 없거나 이미 삭제된 프로젝트예요.",
+    };
   }
 
   revalidatePath("/home");

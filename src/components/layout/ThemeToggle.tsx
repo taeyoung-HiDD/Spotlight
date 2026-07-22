@@ -6,19 +6,17 @@ import {
   IconSun,
 } from "@tabler/icons-react";
 import { useThemePreference } from "@/hooks/useThemePreference";
-import {
-  THEME_PREFERENCE_LABELS,
-  type ThemePreference,
-} from "@/lib/theme/constants";
+import { useT } from "@/hooks/useT";
+import type { ThemePreference } from "@/lib/theme/constants";
 
 const OPTIONS: {
   id: ThemePreference;
   icon: typeof IconSun;
-  label: string;
+  labelKey: "theme.system" | "theme.light" | "theme.dark";
 }[] = [
-  { id: "system", icon: IconDeviceDesktop, label: THEME_PREFERENCE_LABELS.system },
-  { id: "light", icon: IconSun, label: THEME_PREFERENCE_LABELS.light },
-  { id: "dark", icon: IconMoon, label: THEME_PREFERENCE_LABELS.dark },
+  { id: "system", icon: IconDeviceDesktop, labelKey: "theme.system" },
+  { id: "light", icon: IconSun, labelKey: "theme.light" },
+  { id: "dark", icon: IconMoon, labelKey: "theme.dark" },
 ];
 
 interface ThemeToggleProps {
@@ -29,22 +27,24 @@ interface ThemeToggleProps {
 /** GNB 우측 — System / Light / Dark 테마 전환 */
 export function ThemeToggle({ variant = "compact" }: ThemeToggleProps) {
   const { preference, ready, setThemePreference } = useThemePreference();
+  const t = useT();
 
   return (
     <div
       role="radiogroup"
-      aria-label="화면 테마"
+      aria-label={t("theme.aria")}
       className="flex items-center rounded-md border border-border-warm bg-cream p-0.5"
     >
-      {OPTIONS.map(({ id, icon: Icon, label }) => {
+      {OPTIONS.map(({ id, icon: Icon, labelKey }) => {
         const selected = ready && preference === id;
+        const label = t(labelKey);
         return (
           <button
             key={id}
             type="button"
             role="radio"
             aria-checked={selected}
-            aria-label={`${label} 테마`}
+            aria-label={label}
             title={label}
             onClick={() => setThemePreference(id)}
             className={[

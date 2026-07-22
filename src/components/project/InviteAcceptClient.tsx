@@ -91,7 +91,7 @@ export function InviteAcceptClient({ token }: InviteAcceptClientProps) {
               </p>
             </div>
             <p className={stageCaption}>
-              수락하면 Hopes·Fears 단계부터 함께 진행할 수 있어요.
+              수락하면 이 프로젝트에서 함께 진행할 수 있어요.
             </p>
           </div>
         ) : (

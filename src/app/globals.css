@@ -384,6 +384,11 @@ body {
     padding-left: 0.55rem;
   }
 
+  .empathy-map-quadrant--thinks,
+  .empathy-map-quadrant--feels {
+    padding-right: 0.55rem;
+  }
+
   .empathy-quadrant-postit-area {
     width: 100%;
     min-width: 0;
@@ -664,19 +669,49 @@ body {
 
   /* 데이터 정리 보드 — HCI 색상 분류 포스트잇 (세로형) */
   .synthesis-postit-paper {
+    --postit-inset-top: 0.5rem;
+    --postit-inset-right: 0.5rem;
+    --postit-inset-bottom: 0.5rem;
+    --postit-inset-left: 0.5rem;
+    --postit-inset-close-right: 2.75rem;
+    --postit-inset-badge-bottom: 2.75rem;
+
     position: relative;
-    display: flex;
-    flex-direction: column;
+    display: grid;
+    grid-template: minmax(0, 1fr) / minmax(0, 1fr);
     box-sizing: border-box;
     width: 100%;
     aspect-ratio: 1 / 1;
-    padding: 0.42rem 1.38rem 0.46rem 0.4rem;
+    padding: 0;
     border-radius: 2px;
     color-scheme: light;
     color: #1c1a16;
     box-shadow:
       0 1px 0 rgb(0 0 0 / 0.08),
       2px 4px 10px rgb(0 0 0 / 0.12);
+  }
+
+  /* 닫기(우상) · 썸네일(우하) 밖 — 작성 가능 영역 */
+  .synthesis-postit-paper:has(> .synthesis-postit-remove) {
+    --postit-inset-right: var(--postit-inset-close-right);
+  }
+
+  .synthesis-postit-paper:has(.subject-initial-badge__mark) {
+    --postit-inset-bottom: var(--postit-inset-badge-bottom);
+  }
+
+  .synthesis-postit-paper > .synthesis-postit-text,
+  .synthesis-postit-paper > textarea.synthesis-postit-text,
+  .synthesis-postit-paper > p.synthesis-postit-text {
+    grid-area: 1 / 1;
+    align-self: stretch;
+    justify-self: stretch;
+    box-sizing: border-box;
+    width: auto;
+    height: auto;
+    min-height: 0;
+    margin: var(--postit-inset-top) var(--postit-inset-right)
+      var(--postit-inset-bottom) var(--postit-inset-left);
   }
 
   .synthesis-postit-paper--quote {
@@ -695,6 +730,11 @@ body {
     background: #e1bee7;
   }
 
+  .synthesis-postit-paper--hmw {
+    background: #fffdf4;
+    border: 1px solid rgb(139 105 20 / 0.35);
+  }
+
   .synthesis-postit-text {
     font-family: var(--font-sans);
     font-size: 0.95rem;
@@ -702,17 +742,14 @@ body {
     font-weight: 600;
     letter-spacing: -0.02em;
     color: #1c1a16 !important;
-    flex: 1 1 0;
-    min-height: 0;
-    width: 100%;
     resize: none;
     border: none;
     outline: none;
-    border-radius: 0;
+    border-radius: 1px;
     background: transparent !important;
     overflow: hidden;
     overflow-wrap: break-word;
-    padding: 0.2rem 0.28rem 0.28rem 0.35rem;
+    padding: 0.1rem 0.08rem;
     caret-color: #1c1a16;
     -webkit-text-fill-color: #1c1a16 !important;
   }
@@ -892,38 +929,12 @@ body {
   z-index: 2;
 }
 
-/* 5단계 니즈 보드 — 포스트잇 텍스트 여백(+3px) · 폰트는 언급·관찰과 동일 */
-.latent-needs-board .synthesis-postit-paper .synthesis-postit-text,
-.latent-needs-board .synthesis-postit-paper textarea.synthesis-postit-text {
-  font-family: var(--font-sans);
-  font-size: 0.95rem !important;
-  font-weight: 600;
-  line-height: 1.42;
-  letter-spacing: -0.02em;
-  padding-top: calc(0.2rem + 3px);
-  padding-right: calc(0.28rem + 3px);
-  padding-bottom: calc(0.28rem + 3px);
-  padding-left: calc(0.35rem + 3px);
-}
-
-/* 잠재 니즈 textarea — 포스트잇 flex 자식으로 전체 높이 사용(언급·관찰 p와 동일) */
+/* 5단계 니즈 보드 — 잠재 니즈 textarea 스크롤 */
 .latent-needs-board
   .synthesis-postit-paper:has(> .synthesis-postit-remove)
   > textarea.synthesis-postit-text {
-  flex: 1 1 0;
-  min-height: 0;
   overflow-x: hidden;
   overflow-y: auto;
-}
-
-/* 닫기 버튼(우상단)과 첫 줄 겹침 방지 — 상단 여백은 다른 포스트잇과 동일, 우측만 확보 */
-.latent-needs-board
-  .synthesis-postit-paper:has(> .synthesis-postit-remove)
-  .synthesis-postit-text,
-.latent-needs-board
-  .synthesis-postit-paper:has(> .synthesis-postit-remove)
-  textarea.synthesis-postit-text {
-  padding-right: 2.75rem;
 }
 
 /* 5단계 — 조사 포스트잇 1장 + 아래 잠재 니즈 펼침 */
@@ -936,6 +947,44 @@ body {
 .source-latent-pair__paper-slot {
   width: 100%;
   flex-shrink: 0;
+}
+
+/* 7단계 HMW — 잠재 니즈 포스트잇과 동일 정사각 크기 */
+.hmw-question__paper-slot {
+  width: 100%;
+  flex-shrink: 0;
+}
+
+.hmw-question__paper-slot .synthesis-postit-paper--hmw {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+}
+
+/* 7단계 HMW 보드 — 다크 모드에서도 밝은 포스트잇·검정 잉크 유지 */
+.dark .hmw-board .synthesis-postit-paper--hmw,
+.dark .hmw-board .synthesis-postit-paper--hmw .synthesis-postit-text,
+.dark .hmw-board .synthesis-postit-paper--hmw textarea,
+.dark .hmw-board .synthesis-postit-paper--hmw p.synthesis-postit-text {
+  color: #1c1a16 !important;
+  -webkit-text-fill-color: #1c1a16 !important;
+  caret-color: #1c1a16 !important;
+}
+
+.dark .hmw-board .synthesis-postit-paper--hmw {
+  background: #fffdf4 !important;
+  border-color: rgb(212 168 42 / 0.45);
+  color-scheme: light;
+}
+
+.dark .hmw-board .synthesis-postit-paper--hmw textarea::placeholder,
+.dark .hmw-board .synthesis-postit-paper--hmw .synthesis-postit-text::placeholder {
+  color: rgb(28 26 22 / 0.42) !important;
+  -webkit-text-fill-color: rgb(28 26 22 / 0.42) !important;
+}
+
+.hmw-board .synthesis-postit-paper--hmw > textarea.synthesis-postit-text {
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
 .source-latent-pair__kind {
@@ -1097,11 +1146,16 @@ body {
   border-color: #403e48;
 }
 
+.user-journey-board__step-header {
+  text-align: center;
+}
+
 .user-journey-board__step-input {
   background: var(--cream);
   color: var(--foreground);
   caret-color: var(--foreground);
   border-color: var(--border-warm);
+  text-align: center;
 }
 
 .user-journey-board__step-input::placeholder {
@@ -1126,6 +1180,107 @@ body {
   color: var(--foreground);
 }
 
+.user-journey-board__row-labels {
+  text-align: left;
+  position: sticky;
+  left: 0;
+  z-index: 3;
+  background: var(--panel);
+  box-shadow: 4px 0 10px -6px rgb(28 26 22 / 0.18);
+}
+
+.user-journey-board__scroll {
+  overflow-x: auto;
+  overflow-y: visible;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
+  scrollbar-gutter: stable;
+}
+
+.user-journey-board__canvas {
+  min-width: min-content;
+  width: max-content;
+  max-width: none;
+  align-items: stretch;
+}
+
+.user-journey-board__zone {
+  box-sizing: border-box;
+  max-height: 16rem;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.user-journey-board__zone-items {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.25rem;
+  align-content: start;
+}
+
+.user-journey-board__row-label {
+  color: var(--foreground);
+}
+
+.user-journey-board__row-label-hint {
+  color: var(--muted);
+}
+
+.user-journey-board__zone--behavior {
+  background: rgb(255 249 196 / 0.08);
+  border-top: 1px solid var(--border-warm);
+}
+
+.user-journey-board__zone--needs {
+  background: rgb(237 231 246 / 0.12);
+  border-top: 1px solid var(--border-warm);
+}
+
+.user-journey-board__zone-placeholder {
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--muted);
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+
+.dark .user-journey-board__zone--behavior {
+  background: rgb(249 168 37 / 0.06);
+}
+
+.dark .user-journey-board__zone--needs {
+  background: rgb(126 87 194 / 0.08);
+}
+
+.user-journey-board__zone--touchpoint {
+  background: rgb(220 237 245 / 0.35);
+  border-top: 1px solid var(--border-warm);
+}
+
+.user-journey-board__zone--feeling {
+  background: rgb(255 236 224 / 0.35);
+  border-top: 1px solid var(--border-warm);
+  max-height: none;
+  overflow: visible;
+}
+
+.user-journey-board__zone--pain_point {
+  background: rgb(255 224 224 / 0.3);
+  border-top: 1px solid var(--border-warm);
+}
+
+.dark .user-journey-board__zone--touchpoint {
+  background: rgb(100 181 246 / 0.08);
+}
+
+.dark .user-journey-board__zone--feeling {
+  background: rgb(255 183 77 / 0.08);
+}
+
+.dark .user-journey-board__zone--pain_point {
+  background: rgb(239 83 80 / 0.08);
+}
+
 .user-journey-board__step-count {
   color: #1c1a16;
 }
@@ -1146,4 +1301,9 @@ body {
   border-color: rgb(126 87 194 / 0.35);
   background: rgb(126 87 194 / 0.14);
   color: #ce93d8;
+}
+
+/* 자료실 상세 — 단계 이동·가이드 네비 숨김 */
+.archive-artifact-detail .stage-workspace-nav {
+  display: none;
 }

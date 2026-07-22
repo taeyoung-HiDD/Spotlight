@@ -7,14 +7,21 @@ import { StageRevealGroup } from "@/components/stage/motion/StageReveal";
 import { StageContinueGatePanel } from "@/components/stage/StageContinueGatePanel";
 import { FieldResearchCoachPanel } from "@/components/stage/stage3/FieldResearchCoachPanel";
 import { FieldResearchWorkPanel } from "@/components/stage/stage3/FieldResearchWorkPanel";
+import { Stage3ResearchPrepWorkPanel } from "@/components/stage/stage3/Stage3ResearchPrepWorkPanel";
 import {
   fetchStage3FieldResearch,
   saveStage3FieldResearch,
   touchProjectPhaseStage3,
 } from "@/lib/artifacts/stage3FieldResearch";
 import { DEFAULT_FIELD_RESEARCH } from "@/lib/stages/fieldResearch/defaults";
-import { bootstrapFieldResearchForProject } from "@/lib/stages/fieldResearch/stage3Bootstrap";
+import {
+  hydrateFieldResearchForProject,
+  loadToKnowBuildContext,
+} from "@/lib/stages/fieldResearch/stage3Bootstrap";
+import { researchPrepTargetLabels } from "@/lib/stages/fieldResearch/stage3ResearchPrep";
 import { isToKnowDiscoveryActive } from "@/lib/stages/fieldResearch/stage3ToKnowPrepFlow";
+import { fetchStage2PrePmf } from "@/lib/artifacts/stage2PrePmf";
+import { useArchiveView } from "@/lib/archive/archiveViewContext";
 import type { FieldResearchData } from "@/lib/stages/fieldResearch/types";
 import { useWorkspaceScrollOnEnter } from "@/lib/motion/pageEnterScroll";
 import {
@@ -41,6 +48,7 @@ function formatSavedTime() {
 
 export function Stage3FieldResearch({ projectId }: Stage3FieldResearchProps) {
   const router = useRouter();
+  const archiveView = useArchiveView();
   const [data, setData] = useState<FieldResearchData>(DEFAULT_FIELD_RESEARCH);
   const [artifactId, setArtifactId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -49,10 +57,21 @@ export function Stage3FieldResearch({ projectId }: Stage3FieldResearchProps) {
   const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
   const [pendingDiscoveryData, setPendingDiscoveryData] =
     useState<FieldResearchData | null>(null);
+  const [prepContext, setPrepContext] = useState<{
+    problem: string;
+    prePmfSummary: string;
+    targetLabels: string[];
+  }>({ problem: "", prePmfSummary: "", targetLabels: [] });
   const discoveryConversationActive = isToKnowDiscoveryActive(data.toKnowPrep);
+  const showResearchPrepPhase =
+    !archiveView && data.prepWorkflowPhase === "research_prep";
   const showDiscoveryScreen =
-    discoveryConversationActive || pendingDiscoveryData !== null;
-  useWorkspaceScrollOnEnter(showDiscoveryScreen ? "discovery" : "work");
+    !archiveView &&
+    !showResearchPrepPhase &&
+    (discoveryConversationActive || pendingDiscoveryData !== null);
+  useWorkspaceScrollOnEnter(
+    showDiscoveryScreen ? "discovery" : showResearchPrepPhase ? "work" : "work",
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -60,12 +79,21 @@ export function Stage3FieldResearch({ projectId }: Stage3FieldResearchProps) {
       try {
         const result = await fetchStage3FieldResearch(projectId);
         if (cancelled) return;
-        let next = result.data;
-        if (!next.toKnowTable.length) {
-          next = await bootstrapFieldResearchForProject(projectId, next);
-        }
+        const next = await hydrateFieldResearchForProject(
+          projectId,
+          result.data,
+        );
         setData(next);
         setArtifactId(result.artifactId);
+        const [ctx, s2] = await Promise.all([
+          loadToKnowBuildContext(projectId),
+          fetchStage2PrePmf(projectId),
+        ]);
+        setPrepContext({
+          problem: ctx.startingPoint,
+          prePmfSummary: ctx.contextualInsights ?? "",
+          targetLabels: researchPrepTargetLabels(s2.data),
+        });
       } catch (e) {
         if (!cancelled) {
           setSaveError(
@@ -135,6 +163,10 @@ export function Stage3FieldResearch({ projectId }: Stage3FieldResearchProps) {
     setPendingDiscoveryData(null);
   }, [pendingDiscoveryData, persistNow]);
 
+  const handleBackToResearchPrep = useCallback(() => {
+    setData((prev) => ({ ...prev, prepWorkflowPhase: "research_prep" }));
+  }, []);
+
   if (loading) {
     return (
       <div className="rounded-2xl border border-border-warm bg-white px-6 py-12 text-center text-[16px] text-muted">
@@ -177,17 +209,34 @@ export function Stage3FieldResearch({ projectId }: Stage3FieldResearchProps) {
     <div key="work" className="coach-page-enter">
     <StageContainer
       stageNumber={3}
-      sceneKey={`stage-3-field-${projectId}`}
+      sceneKey={`stage-3-field-${projectId}-${data.prepWorkflowPhase}`}
       work={
-        <FieldResearchWorkPanel
-          projectId={projectId}
-          data={data}
-          onChange={setData}
-          onContinue={handleContinue}
-          saving={saving}
-          saveError={saveError}
-          lastSavedAt={lastSavedAt}
-        />
+        showResearchPrepPhase ? (
+          <Stage3ResearchPrepWorkPanel
+            projectId={projectId}
+            data={data}
+            onChange={setData}
+            onContinue={handleContinue}
+            problem={prepContext.problem}
+            prePmfSummary={prepContext.prePmfSummary}
+            targetLabels={prepContext.targetLabels}
+            editable={!archiveView}
+            saving={saving}
+            saveError={saveError}
+            lastSavedAt={lastSavedAt}
+          />
+        ) : (
+          <FieldResearchWorkPanel
+            projectId={projectId}
+            data={data}
+            onChange={setData}
+            onContinue={handleContinue}
+            onBackToResearchPrep={handleBackToResearchPrep}
+            saving={saving}
+            saveError={saveError}
+            lastSavedAt={lastSavedAt}
+          />
+        )
       }
       coach={
         <FieldResearchCoachPanel

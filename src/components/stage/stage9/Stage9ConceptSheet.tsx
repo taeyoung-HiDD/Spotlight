@@ -124,7 +124,7 @@ export function Stage9ConceptSheet({ projectId }: Stage9ConceptSheetProps) {
 
   return (
     <StageContainer
-      stageNumber={9}
+      stageNumber={10}
       sceneKey={`stage-9-concept-${projectId}`}
       introCoach={
         <ConceptSheetCoachPanel
@@ -151,7 +151,7 @@ export function Stage9ConceptSheet({ projectId }: Stage9ConceptSheetProps) {
             lastSavedAt={lastSavedAt}
           />
           <div
-            className={`${stagePanel} mt-4 flex flex-wrap items-center justify-between gap-3`}
+            className={`${stagePanel} stage-workspace-nav mt-4 flex flex-wrap items-center justify-between gap-3`}
           >
             <p className={stageCaption}>
               스토리보드까지 마치면 시제품 만들기로 넘어가 보세요.
@@ -159,12 +159,12 @@ export function Stage9ConceptSheet({ projectId }: Stage9ConceptSheetProps) {
             <div className="flex flex-wrap gap-2.5">
               <WorkspaceBackButton
                 projectId={projectId}
-                fallbackStageId={8}
+                fallbackStageId={9}
               />
               <WorkspaceForwardButton
-                stageId={10}
+                stageId={11}
                 onClick={() =>
-                  router.push(`/project/${projectId}/stage/10`)
+                  router.push(`/project/${projectId}/stage/11`)
                 }
               />
             </div>

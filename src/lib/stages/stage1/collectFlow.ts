@@ -7,6 +7,7 @@ import {
   type CoachInputGuide,
 } from "@/lib/coach/inputGuidance";
 import { STAGE1_CUSTOMER_PROBLEM_RATIONALE } from "@/lib/stages/stage1/customerProblemRationale";
+import { DT_PROBLEM_STATEMENT_CAPTURE_HINT } from "@/lib/stages/problemStatement";
 import {
   parseTeamCollaborationChoice,
   wantsProjectNameRevision,
@@ -16,12 +17,7 @@ export type Stage1CollectStep =
   | "starting_point"
   | "project_name"
   | "team_collaboration"
-  | "team_invite"
-  /** Hopes·Fears 대화 전 — 「다음으로 진행하기」 버튼 대기 */
-  | "hopes_gate"
-  | "hopes"
-  | "fears"
-  | "principle";
+  | "team_invite";
 
 export interface Stage1CollectedData {
   displayName?: string;
@@ -29,7 +25,9 @@ export interface Stage1CollectedData {
   startingPoint: string;
   projectTitle: string;
   teamWantsCollaboration: boolean | null;
+  /** @deprecated Hopes & Fears 단계 제거 — 레거시 저장 호환용 */
   hope: string;
+  /** @deprecated Hopes & Fears 단계 제거 — 레거시 저장 호환용 */
   fear: string;
   principleAck: boolean;
 }
@@ -58,33 +56,73 @@ function askWithGuide(question: string, guide: CoachInputGuide): string {
 
 const TEAM_COLLABORATION_QUESTION = [
   "이 문제를 다른 사람들과 팀으로 함께 풀고 싶으신가요?",
-  "같이 하시면 초대 링크로 팀원을 부를 수 있고, 팀원은 Hopes·Fears 단계부터 함께할 수 있어요.",
+  "같이 하시면 초대 링크로 팀원을 부를 수 있어요.",
 ].join("\n\n");
 
 export const TEAM_INVITE_COACH_MESSAGE = formatCoachDialogBreaks(
   [
     "좋아요. 아래에서 초대 링크를 복사해 팀원에게 보내 주세요.",
-    "팀원이 초대를 수락하면 이 프로젝트에 합류하고, Hopes·Fears부터 같이 진행해요.",
+    "팀원이 초대를 수락하면 이 프로젝트에 합류해 함께 진행할 수 있어요.",
     "링크를 보내셨으면 아래 「다음으로 진행하기」를 눌러 주세요.",
   ].join("\n\n"),
 );
 
-/** 온보딩 전 · 출발 문제점만 수집 (프로젝트 제목 등 선행 힌트 없음) */
-export function firstProblemCaptureCoachMessage(): string {
+export function collectCompleteCoachReply(): string {
+  return formatCoachDialogBreaks(
+    [
+      "좋아요. 문제 정의와 프로젝트 이름을 정리했어요.",
+      "아래 「다음으로 이동」을 누르면 사전 조사 단계로 이어갈게요.",
+      "팀원은 내 프로젝트에서 「팀원 초대」로 언제든 부를 수 있어요.",
+    ].join("\n\n"),
+  );
+}
+
+export function problemAfterProjectNameCoachMessage(
+  projectTitle: string,
+  displayName?: string,
+): string {
   const guide = getStage1CollectInputGuide("starting_point");
+  const prefix = displayName?.trim() ? `${displayName.trim()}님, ` : "";
+  const title = projectTitle.trim();
   return askWithGuide(
     [
-      STAGE1_CUSTOMER_PROBLEM_RATIONALE,
-      "어떤 고객·상황의 어떤 문제에서 시작할지, 한두 문장으로 직접 말씀해 주세요.",
+      `${prefix}프로젝트 「${title}」 이름 잘 받았어요.`,
+      "이제 알고 계신 **사용자 문제**와 떠오른 **아이디어**를 편하게 모두 적어 주세요.",
+      DT_PROBLEM_STATEMENT_CAPTURE_HINT,
+      "문제만, 아이디어만 있어도 괜찮고, 둘 다 있으면 함께 들려주셔도 돼요. 여러 문장이어도 괜찮아요.",
     ].join("\n\n"),
     guide,
   );
 }
 
-/** 문제점 저장 직후 — 이름 질문은 온보딩 단계에서 이어서 함 */
+/** @deprecated 이름 입력 직후 같은 대화에서 문제·아이디어로 이어감 */
+export function projectNameCapturedCoachReply(): string {
+  return formatCoachDialogBreaks(
+    [
+      "좋아요. 프로젝트 이름을 정리했어요.",
+      "아래 「다음으로 이동」을 누르면 문제 정의로 이어갈게요.",
+    ].join("\n\n"),
+  );
+}
+
+/** 온보딩 전 · 출발 문제·아이디어 수집 (프로젝트 제목 등 선행 힌트 없음) */
+export function firstProblemCaptureCoachMessage(): string {
+  const guide = getStage1CollectInputGuide("starting_point");
+  return askWithGuide(
+    [
+      "지금 알고 계신 **사용자 문제**와 떠오른 **아이디어**를 편하게 모두 적어 주세요.",
+      DT_PROBLEM_STATEMENT_CAPTURE_HINT,
+      "문제만, 아이디어만 있어도 괜찮고, 둘 다 있으면 함께 들려주셔도 돼요. 여러 문장이어도 괜찮아요.",
+      "이 내용을 바탕으로 다음 단계 사전 조사를 진행할게요.",
+    ].join("\n\n"),
+    guide,
+  );
+}
+
+/** 문제·아이디어 저장 직후 — 이름 질문은 온보딩 단계에서 이어서 함 */
 export function problemCaptureCompleteCoachReply(): string {
   return formatCoachDialogBreaks(
-    "고마워요. 출발 문제를 잡아 두었어요.\n\n아래 「다음으로 이동」을 누르면 코칭 맞춤 단계로 이어갈게요.",
+    "고마워요. 들려주신 내용을 출발점으로 잡아 두었어요.\n\n아래 「다음으로 이동」을 누르면 사전 조사 단계로 이어갈게요.",
   );
 }
 
@@ -115,7 +153,7 @@ export function projectNameRevisionCoachReply(
   return askWithGuide(
     [
       `${prefix}알겠어요. 프로젝트 이름을 다시 정해 볼게요.`,
-      problem ? `출발 문제점은 그대로 「${problem}」이에요.` : "",
+      problem ? `입력해 두신 내용은 그대로 「${problem}」이에요.` : "",
       "목록·팀 초대에 쓸 짧은 프로젝트 이름을 알려주세요.",
     ]
       .filter(Boolean)
@@ -127,9 +165,6 @@ export function projectNameRevisionCoachReply(
 const PROJECT_NAME_REVISION_STEPS = new Set<Stage1CollectStep>([
   "team_collaboration",
   "team_invite",
-  "hopes_gate",
-  "hopes",
-  "fears",
 ]);
 
 export function firstProjectNameCoachMessage(
@@ -139,9 +174,18 @@ export function firstProjectNameCoachMessage(
   const guide = getStage1CollectInputGuide("project_name");
   const prefix = displayName?.trim() ? `${displayName.trim()}님, ` : "";
   const problem = startingPoint.trim();
+  if (!problem) {
+    return askWithGuide(
+      [
+        `${prefix}이제 프로젝트 목록에 쓸 이름을 정할게요.`,
+        "프로젝트 목록·팀 초대에서 구분할 짧은 이름을 알려주세요.",
+      ].join("\n\n"),
+      guide,
+    );
+  }
   return askWithGuide(
     [
-      `${prefix}아까 정리한 출발 문제점을 다시 볼게요.`,
+      `${prefix}아까 정리해 두신 문제·아이디어를 다시 볼게요.`,
       `「${problem}」`,
       "프로젝트 목록·팀 초대에서 구분할 프로젝트 이름을 정해 주세요. 짧은 제목이면 충분해요.",
     ].join("\n\n"),
@@ -159,7 +203,7 @@ export function firstCollectCoachMessage(
     return askWithGuide(
       [
         STAGE1_CUSTOMER_PROBLEM_RATIONALE,
-        `${prefix}그럼 첫으로, 문제점을 같이 잡아볼게요. 아래에 적힌 한 줄이 맞는지, 아니면 다르게 말씀해 주실래요?`,
+        `${prefix}그럼 첫으로, 알고 계신 사용자 문제와 떠오른 아이디어를 모두 들려주세요. 한두 문장이면 충분해요.`,
       ].join("\n\n"),
       guide,
     );
@@ -167,7 +211,7 @@ export function firstCollectCoachMessage(
   return askWithGuide(
     [
       STAGE1_CUSTOMER_PROBLEM_RATIONALE,
-      `${prefix}그럼 첫으로, 문제점을 같이 잡아볼게요. 어떤 고객·상황의 어떤 문제에서 시작할지, 한두 문장이면 충분해요.`,
+      `${prefix}그럼 첫으로, 알고 계신 사용자 문제와 떠오른 아이디어를 모두 들려주세요. 한두 문장이면 충분해요.`,
     ].join("\n\n"),
     guide,
   );
@@ -177,30 +221,58 @@ export function getCollectInputGuideForStep(
   step: Stage1CollectStep,
   hasStartingHint?: boolean,
 ): CoachInputGuide | undefined {
-  if (step === "team_invite" || step === "hopes_gate") return undefined;
+  if (step === "team_invite") return undefined;
   return getStage1CollectInputGuide(step, hasStartingHint);
 }
 
-/** 팀·프로젝트 이름 정리 후 Hopes·Fears 진입 전 안내 */
-export const HOPES_GATE_COACH_REPLY = formatCoachDialogBreaks(
-  [
-    "프로젝트 이름과 진행 방식을 정리했어요.",
-    "이제 Hopes·Fears를 함께 맞춰 볼 차례예요.",
-    "준비되시면 아래 「다음으로 진행하기」를 눌러 주세요.",
-  ].join("\n\n"),
-);
+/** 레거시 collectStep → 현재 단계 */
+export function normalizeLegacyCollectStep(
+  saved: string,
+  state: Pick<
+    Stage1CollectedData,
+    "startingPoint" | "projectTitle" | "teamWantsCollaboration"
+  >,
+): Stage1CollectStep {
+  if (!state.projectTitle.trim()) return "project_name";
+  if (!state.startingPoint.trim()) return "starting_point";
 
-export function hopesStepCoachReply(): string {
-  return askWithGuide(
-    "고마워요. 출발 문제를 잡았으니, 이제 그다음 단계로 갈 준비가 됐어요.\n\n이번 과정에서 얻고 싶은 것 — Hopes — 은 무엇인가요?",
-    getStage1CollectInputGuide("hopes"),
-  );
+  if (
+    saved === "hopes_gate" ||
+    saved === "hopes" ||
+    saved === "fears" ||
+    saved === "principle" ||
+    saved === "team_collaboration" ||
+    saved === "team_invite"
+  ) {
+    if (state.projectTitle.trim() && state.startingPoint.trim()) {
+      return "project_name";
+    }
+    if (state.teamWantsCollaboration === true) return "team_invite";
+    if (state.projectTitle.trim()) return "project_name";
+    return "project_name";
+  }
+  if (
+    saved === "starting_point" ||
+    saved === "project_name" ||
+    saved === "team_collaboration" ||
+    saved === "team_invite"
+  ) {
+    if (saved === "team_collaboration" || saved === "team_invite") {
+      return "project_name";
+    }
+    return saved;
+  }
+  return "project_name";
 }
 
 export function advanceStage1Collect(
   step: Stage1CollectStep,
   userText: string,
-  context?: { startingPoint?: string; displayName?: string },
+  context?: {
+    startingPoint?: string;
+    displayName?: string;
+    projectTitle?: string;
+  },
 ): {
   patch: Partial<Stage1CollectedData>;
   nextStep: Stage1CollectStep | "done";
@@ -234,12 +306,16 @@ export function advanceStage1Collect(
   }
 
   switch (step) {
-    case "starting_point":
+    case "starting_point": {
+      const projectTitle = context?.projectTitle?.trim() ?? "";
       return {
         patch: { startingPoint: text },
-        nextStep: "project_name",
-        coachReply: firstProjectNameCoachMessage(text),
+        nextStep: projectTitle ? "done" : "project_name",
+        coachReply: projectTitle
+          ? collectCompleteCoachReply()
+          : firstProjectNameCoachMessage(text, context?.displayName),
       };
+    }
     case "project_name": {
       const projectTitle = normalizeProjectTitle(text);
       if (!projectTitle) {
@@ -252,15 +328,19 @@ export function advanceStage1Collect(
           ),
         };
       }
+      if (context?.startingPoint?.trim()) {
+        return {
+          patch: { projectTitle },
+          nextStep: "done",
+          coachReply: collectCompleteCoachReply(),
+        };
+      }
       return {
         patch: { projectTitle },
-        nextStep: "team_collaboration",
-        coachReply: askWithGuide(
-          [
-            `고마워요. 프로젝트 이름은 「${projectTitle}」로 맞춰 둘게요.`,
-            TEAM_COLLABORATION_QUESTION,
-          ].join("\n\n"),
-          getStage1CollectInputGuide("team_collaboration"),
+        nextStep: "starting_point",
+        coachReply: problemAfterProjectNameCoachMessage(
+          projectTitle,
+          context?.displayName,
         ),
       };
     }
@@ -269,8 +349,8 @@ export function advanceStage1Collect(
       if (choice === "no") {
         return {
           patch: { teamWantsCollaboration: false },
-          nextStep: "hopes_gate",
-          coachReply: HOPES_GATE_COACH_REPLY,
+          nextStep: "done",
+          coachReply: collectCompleteCoachReply(),
         };
       }
       if (choice === "yes") {
@@ -297,73 +377,18 @@ export function advanceStage1Collect(
           "초대 링크는 아래에서 복사할 수 있어요.\n\n보내셨으면 아래 「다음으로 진행하기」를 눌러 주세요.",
         ),
       };
-    case "hopes_gate":
-      return {
-        patch: {},
-        nextStep: "hopes_gate",
-        coachReply: formatCoachDialogBreaks(
-          "아래 「다음으로 진행하기」를 누르면 Hopes·Fears 단계로 이어갈게요.",
-        ),
-      };
-    case "hopes":
-      return {
-        patch: { hope: text },
-        nextStep: "fears",
-        coachReply: askWithGuide(
-          "이해했어요.\n\n그럼 걱정되는 것 — Fears — 은 무엇인가요?",
-          getStage1CollectInputGuide("fears"),
-        ),
-      };
-    case "fears":
-      return {
-        patch: { fear: text, principleAck: true },
-        nextStep: "done",
-        coachReply: formatCoachDialogBreaks(
-          [
-            "이해했어요. 원칙 하나만 짚고 넘어갈게요.",
-            `「${STAGE1_PRINCIPLE.match}」 — ${STAGE1_PRINCIPLE.text}`,
-            "좋아요. 문제점·Hopes·Fears를 모두 들었어요.",
-            "아래 「다음으로 이동」을 누르면 왼쪽 검토 화면으로 이어갈게요.",
-          ].join("\n\n"),
-        ),
-      };
-    case "principle":
-      return {
-        patch: { principleAck: true },
-        nextStep: "done",
-        coachReply: formatCoachDialogBreaks(
-          [
-            "좋아요. 문제점·Hopes·Fears를 모두 들었어요.",
-            "아래 「다음으로 이동」을 누르면 왼쪽 검토 화면으로 이어갈게요.",
-          ].join("\n\n"),
-        ),
-      };
   }
 }
 
-/** 「다음으로 진행하기」 — Hopes·Fears 대화 시작 */
-export function advanceToHopesAndFears(): {
-  patch: Partial<Stage1CollectedData>;
-  nextStep: Stage1CollectStep;
-  coachReply: string;
-} {
-  return {
-    patch: {},
-    nextStep: "hopes",
-    coachReply: hopesStepCoachReply(),
-  };
-}
-
-/** 초대 UI · Hopes 단계로 진행 */
+/** 초대 UI · 다음 단계로 진행 */
 export function advanceFromTeamInvite(): {
   patch: Partial<Stage1CollectedData>;
-  nextStep: Stage1CollectStep;
+  nextStep: "done";
   coachReply: string;
 } {
-  const next = advanceToHopesAndFears();
   return {
     patch: { teamWantsCollaboration: true },
-    nextStep: next.nextStep,
-    coachReply: next.coachReply,
+    nextStep: "done",
+    coachReply: collectCompleteCoachReply(),
   };
 }

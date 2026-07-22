@@ -1,5 +1,7 @@
 "use client";
 
+import { LocalizedText } from "@/components/i18n/LocalizedText";
+import { useT } from "@/hooks/useT";
 import type { CoachInputGuide } from "@/lib/coach/inputGuidance";
 import {
   stageCoachGuideChip,
@@ -14,7 +16,6 @@ interface CoachInputGuideProps {
   onPickExample: (example: string) => void;
   disabled?: boolean;
   examplesReferenceOnly?: boolean;
-  /** 복수 선택 모드일 때 선택된 예시 */
   selectedExamples?: string[];
   onToggleExample?: (example: string) => void;
 }
@@ -28,14 +29,21 @@ export function CoachInputGuidePanel({
   selectedExamples = [],
   onToggleExample,
 }: CoachInputGuideProps) {
+  const t = useT();
   if (!guide.examples.length) return null;
 
   const multiSelect = Boolean(guide.examplesMultiSelect && onToggleExample);
 
   return (
     <div className={stageCoachGuidePanel} role="region" aria-label={guide.title}>
-      <div className={stageCoachGuideTitle}>{guide.title}</div>
-      {guide.hint ? <p className={stageCoachGuideHint}>{guide.hint}</p> : null}
+      <div className={stageCoachGuideTitle}>
+        <LocalizedText>{guide.title}</LocalizedText>
+      </div>
+      {guide.hint ? (
+        <p className={stageCoachGuideHint}>
+          <LocalizedText>{guide.hint}</LocalizedText>
+        </p>
+      ) : null}
       <ul className="flex flex-col gap-2">
         {guide.examples.map((example) => {
           const selected = multiSelect && selectedExamples.includes(example);
@@ -54,27 +62,18 @@ export function CoachInputGuidePanel({
                   selected ? stageCoachGuideChipSelected : "",
                 ].join(" ")}
                 aria-pressed={multiSelect ? selected : undefined}
-                aria-label={
-                  multiSelect
-                    ? selected
-                      ? `입력란에서 제거: ${example}`
-                      : `입력란에 추가: ${example}`
-                    : examplesReferenceOnly
-                      ? `참고 예시를 입력란에 넣기: ${example}`
-                      : `예시 보내기: ${example}`
-                }
               >
                 <span className={selected ? "text-on-spotlight/90" : "text-subtle"}>
                   {multiSelect
                     ? selected
-                      ? "추가됨"
-                      : "추가"
+                      ? t("coach.guide.added")
+                      : t("coach.guide.add")
                     : examplesReferenceOnly
-                      ? "참고"
-                      : "예"}
+                      ? t("coach.guide.reference")
+                      : t("coach.guide.example")}
                   :
                 </span>{" "}
-                {example}
+                <LocalizedText>{example}</LocalizedText>
               </button>
             </li>
           );

@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
-import { resolveGeminiApiKey } from "@/lib/ai/env";
-import { geminiGenerateImage } from "@/lib/ai/providers/geminiImage";
+import {
+  generateImage,
+  resolveImageProvider,
+} from "@/lib/ai/providers/imageGenerate";
 import {
   buildPersonaCartoonImagePrompt,
   personaLineCartoonFallbackUrl,
@@ -24,23 +26,22 @@ export async function POST(request: Request) {
       : "";
 
   const fallbackUrl = personaLineCartoonFallbackUrl(name, context);
-  const apiKey = resolveGeminiApiKey();
 
-  if (!apiKey) {
+  if (!resolveImageProvider()) {
     return NextResponse.json({
       imageUrl: fallbackUrl,
       source: "fallback",
-      message: "AI 키가 없어 기본 라인드로잉 아바타를 붙였어요.",
+      message: "이미지 API 키가 없어 기본 라인드로잉 아바타를 붙였어요.",
     });
   }
 
   const prompt = buildPersonaCartoonImagePrompt(name, context);
-  const generated = await geminiGenerateImage(apiKey, prompt);
+  const generated = await generateImage(prompt);
 
   if (generated) {
     return NextResponse.json({
       imageUrl: generated.dataUrl,
-      source: "ai",
+      source: generated.source,
       model: generated.model,
     });
   }

@@ -3,9 +3,7 @@
 import { IconPlus } from "@tabler/icons-react";
 import { SynthesisKindHoverChip } from "@/components/stage/stage4/SynthesisKindHoverChip";
 import { SynthesisPostitTextarea } from "@/components/stage/stage4/SynthesisPostitTextarea";
-import { SynthesisThemeAssignControl } from "@/components/stage/stage4/SynthesisThemeAssignControl";
 import { POSTIT_SHELL_WIDTH } from "@/lib/stages/stage4/postitLayout";
-import { themeColorForName } from "@/lib/stages/stage4/synthesisThemeColors";
 import {
   SYNTHESIS_NOTE_KINDS,
   type SynthesisNote,
@@ -15,20 +13,19 @@ import { stageCaption } from "@/lib/stages/ui";
 
 interface SynthesisPostitBoardProps {
   notes: SynthesisNote[];
-  themes: string[];
   onAdd: (kind: SynthesisNoteKind) => void;
   onChange: (id: string, text: string) => void;
-  onThemeChange: (id: string, theme: string) => void;
   onRemove: (id: string) => void;
+  /** 다학제 근거 노트 하이라이트 */
+  highlightedNoteId?: string | null;
 }
 
 export function SynthesisPostitBoard({
   notes,
-  themes,
   onAdd,
   onChange,
-  onThemeChange,
   onRemove,
+  highlightedNoteId = null,
 }: SynthesisPostitBoardProps) {
   return (
     <div className="space-y-3">
@@ -71,16 +68,15 @@ export function SynthesisPostitBoard({
           </p>
         ) : null}
         {notes.map((note) => {
-          const themeColor = note.theme.trim()
-            ? themeColorForName(note.theme, themes)
-            : null;
-
+          const highlighted = highlightedNoteId === note.id;
           return (
-          <div key={note.id} className={`flex flex-col gap-1 ${POSTIT_SHELL_WIDTH}`}>
             <div
+              key={note.id}
+              id={`synthesis-note-${note.id}`}
+              data-note-id={note.id}
               className={[
-                "rounded-sm",
-                themeColor ? `ring-2 ${themeColor.ringClass}` : "",
+                POSTIT_SHELL_WIDTH,
+                highlighted ? "relative z-[1] ring-2 ring-spotlight ring-offset-2" : "",
               ].join(" ")}
             >
               <div
@@ -100,13 +96,6 @@ export function SynthesisPostitBoard({
                 />
               </div>
             </div>
-            <SynthesisThemeAssignControl
-              noteId={note.id}
-              theme={note.theme}
-              themes={themes}
-              onThemeChange={onThemeChange}
-            />
-          </div>
           );
         })}
       </div>

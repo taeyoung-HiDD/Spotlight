@@ -1,11 +1,15 @@
+"use client";
+
 import {
   IconBell,
   IconChevronDown,
   IconSearch,
 } from "@tabler/icons-react";
+import { LocaleToggle } from "@/components/layout/LocaleToggle";
 import { ThemeToggle } from "@/components/layout/ThemeToggle";
 import { WorkspaceHomeLink } from "@/components/layout/WorkspaceHomeLink";
 import { ProjectSwitcher } from "@/components/project/ProjectSwitcher";
+import { useT } from "@/hooks/useT";
 import type { UserProjectListItem } from "@/lib/projects/fetchUserProjects";
 
 interface WorkspaceTopBarProps {
@@ -26,6 +30,8 @@ export function WorkspaceTopBar({
   userInitial = "민",
   notificationCount = 3,
 }: WorkspaceTopBarProps) {
+  const t = useT();
+
   return (
     <header className="flex items-center gap-2.5 border-b border-border-warm bg-panel px-[18px] py-[11px]">
       <WorkspaceHomeLink />
@@ -40,7 +46,7 @@ export function WorkspaceTopBar({
         <div className="flex min-w-[280px] max-w-md flex-1 items-center gap-1.5 rounded-md border border-border-warm bg-cream px-3 py-1.5 lg:max-w-lg">
           <IconSearch className="size-[13px] shrink-0 text-subtle" stroke={2} />
           <span className="flex-1 text-[10.5px] text-subtle">
-            자료실·단계·메모리에서 검색
+            {t("nav.search.workspace")}
           </span>
           <kbd className="rounded border border-border-warm bg-panel px-1 py-px font-mono text-[9.5px] text-subtle">
             ⌘K
@@ -49,11 +55,12 @@ export function WorkspaceTopBar({
       </div>
 
       <div className="flex items-center gap-2.5">
+        <LocaleToggle />
         <ThemeToggle />
         <button
           type="button"
           className="relative flex size-8 items-center justify-center rounded-md bg-cream"
-          aria-label={`알림 ${notificationCount}건`}
+          aria-label={`${t("nav.notifications")} ${notificationCount}`}
         >
           <IconBell className="size-4 text-foreground" stroke={1.75} />
           {notificationCount > 0 ? (
@@ -66,7 +73,7 @@ export function WorkspaceTopBar({
         <button
           type="button"
           className="flex items-center gap-1.5 rounded-full bg-cream py-1 pr-2.5 pl-1"
-          aria-label="사용자 메뉴"
+          aria-label={t("nav.userMenu")}
         >
           <span className="flex size-[26px] items-center justify-center rounded-full bg-spotlight text-[11px] font-bold text-on-spotlight">
             {userInitial}

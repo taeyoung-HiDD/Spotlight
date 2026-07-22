@@ -1,7 +1,11 @@
 import { createClient } from "@/lib/supabase/client";
 import { ensureAuthSession } from "@/lib/supabase/ensureSession";
-import type { Stage1CollectStep } from "@/lib/stages/stage1/collectFlow";
+import {
+  normalizeLegacyCollectStep,
+  type Stage1CollectStep,
+} from "@/lib/stages/stage1/collectFlow";
 import type { UserCoachingLevel } from "@/lib/stages/stage1/levelDiagnostic";
+import type { GuidanceStyle } from "@/lib/stages/stage1/guidanceStyle";
 import type { ArtifactSlots, ConfidenceLevel, SlotState } from "@/types/database";
 
 export interface Stage1PersistedState {
@@ -11,6 +15,7 @@ export interface Stage1PersistedState {
   collectStep: Stage1CollectStep;
   displayName?: string;
   userLevel?: UserCoachingLevel;
+  guidanceStyle?: GuidanceStyle;
   hope: string;
   fear: string;
   principleAck: boolean;
@@ -48,10 +53,19 @@ function parseState(slots: ArtifactSlots | null | undefined): Stage1PersistedSta
   if (!raw || typeof raw !== "object") return { ...DEFAULT_STAGE1_STATE };
   const o = raw as Partial<Stage1PersistedState>;
   const startingPoint = typeof o.startingPoint === "string" ? o.startingPoint : "";
-  let collectStep = (o.collectStep as Stage1CollectStep) ?? "starting_point";
-  if (collectStep === "starting_point" && startingPoint.trim()) {
-    collectStep = "project_name";
-  }
+  let collectStep = normalizeLegacyCollectStep(
+    String(o.collectStep ?? "starting_point"),
+    {
+      startingPoint,
+      projectTitle: typeof o.projectTitle === "string" ? o.projectTitle : "",
+      teamWantsCollaboration:
+        typeof o.teamWantsCollaboration === "boolean"
+          ? o.teamWantsCollaboration
+          : o.teamWantsCollaboration === null
+            ? null
+            : null,
+    },
+  );
   return {
     ...DEFAULT_STAGE1_STATE,
     ...o,
@@ -93,12 +107,37 @@ export async function saveStage1CollectState(
   const supabase = createClient();
   await ensureAuthSession(supabase);
 
-  const slots = emptySlot(state, state.principleAck ? "complete" : "in_progress");
-  const titleSnippet = (
-    state.projectTitle.trim() || state.startingPoint.trim()
-  ).slice(0, 80);
-
+  let mergedState = state;
   let resolvedId = artifactId;
+
+  if (resolvedId) {
+    const { data: existingRow } = await supabase
+      .from("artifacts")
+      .select("slots")
+      .eq("id", resolvedId)
+      .maybeSingle();
+    if (existingRow?.slots) {
+      const existing = parseState(existingRow.slots as ArtifactSlots);
+      mergedState = {
+        ...existing,
+        ...state,
+        guidanceStyle: state.guidanceStyle ?? existing.guidanceStyle,
+        userLevel: state.userLevel ?? existing.userLevel,
+      };
+    }
+  }
+
+  const slots = emptySlot(
+    mergedState,
+    mergedState.principleAck &&
+      mergedState.startingPoint.trim() &&
+      mergedState.projectTitle.trim()
+      ? "complete"
+      : "in_progress",
+  );
+  const titleSnippet = (
+    mergedState.projectTitle.trim() || mergedState.startingPoint.trim()
+  ).slice(0, 80);
 
   if (resolvedId) {
     const { error } = await supabase
@@ -126,7 +165,7 @@ export async function saveStage1CollectState(
 
   const projectPatch: { title?: string; description?: string } = {};
   if (titleSnippet) projectPatch.title = titleSnippet;
-  const problemSnippet = state.startingPoint.trim();
+  const problemSnippet = mergedState.startingPoint.trim();
   if (problemSnippet) projectPatch.description = problemSnippet.slice(0, 500);
   if (Object.keys(projectPatch).length > 0) {
     await supabase.from("projects").update(projectPatch).eq("id", projectId);

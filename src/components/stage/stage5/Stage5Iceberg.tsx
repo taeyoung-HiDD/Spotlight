@@ -13,7 +13,6 @@ import {
   saveStage5LatentNeeds,
 } from "@/lib/artifacts/stage5LatentNeeds";
 import { touchProjectPhase } from "@/lib/artifacts/stage5Iceberg";
-import { STAGE4_DATA_SYNTHESIS_PAGE } from "@/lib/navigation/stageNavLabels";
 import {
   isStage5SourcePostitKind,
   mergeStage4DiscoveriesIntoLatentNeeds,
@@ -21,7 +20,7 @@ import {
 } from "@/lib/stages/stage5/bootstrapLatentNeedsFromStage4";
 import {
   applyGeneratedLatentNeeds,
-  buildSubjectInputsFromBoard,
+  buildSourceInputsFromBoard,
   requestLatentNeedsGeneration,
 } from "@/lib/stages/stage5/generateLatentNeedsClient";
 import {
@@ -112,7 +111,7 @@ export function Stage5Iceberg({ projectId }: Stage5IcebergProps) {
           bootstrapRef.current = true;
           setGenerating(true);
           try {
-            const inputs = buildSubjectInputsFromBoard(next);
+            const inputs = buildSourceInputsFromBoard(next);
             const result = await requestLatentNeedsGeneration(
               projectId,
               inputs,
@@ -192,6 +191,36 @@ export function Stage5Iceberg({ projectId }: Stage5IcebergProps) {
     setData(next);
   }, []);
 
+  const handleGenerateLatentNeeds = useCallback(async () => {
+    const inputs = buildSourceInputsFromBoard(data);
+    if (inputs.length === 0) {
+      setSaveError("잠재 니즈를 만들 조사 결과 포스트잇이 없어요.");
+      return;
+    }
+
+    setGenerating(true);
+    setSaveError(null);
+    try {
+      const result = await requestLatentNeedsGeneration(projectId, inputs);
+      const withNeeds = applyGeneratedLatentNeeds(data, result);
+      setData(withNeeds);
+      const { artifactId: id } = await saveStage5LatentNeeds({
+        projectId,
+        artifactId,
+        data: withNeeds,
+        existingSlots: allSlots,
+      });
+      setArtifactId(id);
+      setLastSavedAt(formatSavedTime(new Date().toISOString()));
+    } catch (e) {
+      setSaveError(
+        e instanceof Error ? e.message : "잠재 니즈 생성에 실패했습니다.",
+      );
+    } finally {
+      setGenerating(false);
+    }
+  }, [allSlots, artifactId, data, projectId]);
+
   if (loading) {
     return (
       <div className="rounded-2xl border border-border-warm bg-white px-6 py-12 text-center text-[16px] text-muted">
@@ -200,11 +229,11 @@ export function Stage5Iceberg({ projectId }: Stage5IcebergProps) {
     );
   }
 
-  const sceneKey = `stage-5-needs-${projectId}`;
+  const sceneKey = `stage-6-needs-${projectId}`;
 
   return (
     <StageContainer
-      stageNumber={5}
+      stageNumber={6}
       sceneKey={sceneKey}
       introCoach={
         <LatentNeedsCoachPanel
@@ -225,28 +254,27 @@ export function Stage5Iceberg({ projectId }: Stage5IcebergProps) {
           <LatentNeedsWorkPanel
             data={data}
             onChange={handleDataChange}
+            onGenerate={handleGenerateLatentNeeds}
             generating={generating}
             saving={saving}
             saveError={saveError}
             lastSavedAt={lastSavedAt}
           />
           <div
-            className={`${stagePanel} mt-4 flex flex-wrap items-center justify-between gap-3`}
+            className={`${stagePanel} stage-workspace-nav mt-4 flex flex-wrap items-center justify-between gap-3`}
           >
             <p className={stageCaption}>
-              언급·관찰을 바탕으로 잠재 니즈를 다듬은 뒤, 사용자 여정 지도
-              그리기로 넘어가 보세요.
+              잠재 니즈를 다듬은 뒤 HMW 질문 만들기로 넘어가 보세요.
             </p>
             <div className="flex flex-wrap gap-2.5">
               <WorkspaceBackButton
                 projectId={projectId}
-                fallbackStageId={4}
-                backPageName={STAGE4_DATA_SYNTHESIS_PAGE}
+                fallbackStageId={5}
               />
               <WorkspaceForwardButton
-                stageId={6}
+                stageId={7}
                 onClick={() =>
-                  router.push(`/project/${projectId}/stage/6`)
+                  router.push(`/project/${projectId}/stage/7`)
                 }
               />
             </div>

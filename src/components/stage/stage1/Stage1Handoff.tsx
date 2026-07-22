@@ -1,29 +1,18 @@
 "use client";
 
+import { useProjectWorkspace } from "@/components/project/ProjectWorkspaceContext";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { StageIntroGateProvider } from "@/components/layout/StageIntroGate";
 import { AnimatedCoachPanel } from "@/components/stage/motion/AnimatedCoachPanel";
 import { StageRevealGroup } from "@/components/stage/motion/StageReveal";
-import { StageTwoColumnLayout } from "@/components/stage/StageTwoColumnLayout";
 import { Stage1ConversationalCollect } from "@/components/stage/stage1/Stage1ConversationalCollect";
 import { Stage1OnboardingCollect } from "@/components/stage/stage1/Stage1OnboardingCollect";
-import { useProjectWorkspace } from "@/components/project/ProjectWorkspaceContext";
-import { Stage1ProblemCollect } from "@/components/stage/stage1/Stage1ProblemCollect";
-import { Stage1ReviewPanel } from "@/components/stage/stage1/Stage1ReviewPanel";
 import { getStageConfig } from "@/config/stageConfig";
-import { summarizeStage1Artifact } from "@/lib/coach/artifactSummary";
-import {
-  formatInputGuideForContext,
-  getStageWorkInputGuide,
-} from "@/lib/coach/inputGuidance";
-import { stageChatTitle } from "@/lib/coach/chatClient";
 import { introMessagesToCoachDialog } from "@/lib/coach/renderIntroMessages";
 import type { Stage1CollectedData } from "@/lib/stages/stage1/collectFlow";
-import {
-  levelCoachToneHint,
-  type UserCoachingLevel,
-} from "@/lib/stages/stage1/levelDiagnostic";
+import type { UserCoachingLevel } from "@/lib/stages/stage1/levelDiagnostic";
+import { resolveCoachingLevel } from "@/lib/stages/stage1/guidanceStyle";
 import type { Stage1OnboardingResult } from "@/lib/stages/stage1/onboardingFlow";
 import {
   fetchStage1CollectState,
@@ -33,11 +22,6 @@ import {
 import { createClient } from "@/lib/supabase/client";
 import { fetchUserDisplayName } from "@/lib/users/displayName";
 import { updateProjectTitleAction } from "@/lib/projects/updateProjectTitle";
-import {
-  parseCoachEdit,
-  STAGE1_REVIEW_CHAT_HINT,
-  stripEditMetaLine,
-} from "@/lib/stages/stage1/parseCoachEdit";
 import { useWorkspaceScrollOnEnter } from "@/lib/motion/pageEnterScroll";
 import { pushWorkspaceVisit } from "@/lib/navigation/workspaceVisitHistory";
 import {
@@ -47,12 +31,12 @@ import {
   stageIntroShell,
 } from "@/lib/stages/ui";
 
-type Stage1Phase = "intro" | "problem" | "onboarding" | "collect" | "review";
+type Stage1Phase = "intro" | "onboarding" | "collect";
 
 interface Stage1HandoffProps {
   projectId: string;
   projectTitle: string;
-  /** 초대로 합류한 팀원 — 온보딩 생략, Hopes부터 */
+  /** 초대로 합류한 팀원 — 온보딩 생략 */
   isInviteMember?: boolean;
 }
 
@@ -62,11 +46,12 @@ export function Stage1Handoff({
   isInviteMember = false,
 }: Stage1HandoffProps) {
   const router = useRouter();
-  const { setProjectTitle: syncWorkspaceProjectTitle } = useProjectWorkspace();
+  const { setProjectTitle: syncWorkspaceProjectTitle, setCoachingLevel, setGuidanceStyle } =
+    useProjectWorkspace();
   const stageConfig = getStageConfig(1);
   const sceneKey = `stage-1-${projectId}`;
   const [phase, setPhase] = useState<Stage1Phase>(
-    isInviteMember ? "collect" : "intro",
+    isInviteMember ? "collect" : "onboarding",
   );
   const [introDialogDone, setIntroDialogDone] = useState(false);
   const [displayName, setDisplayName] = useState("");
@@ -75,23 +60,10 @@ export function Stage1Handoff({
   const [projectTitle, setProjectTitle] = useState(
     serverProjectTitle === "새 프로젝트" ? "" : serverProjectTitle,
   );
-  const [hope, setHope] = useState("");
-  const [fear, setFear] = useState("");
-  const [principleAck, setPrincipleAck] = useState(false);
-  const lastUserMessageRef = useRef("");
-  const reviewSaveTimerRef = useRef<number | null>(null);
   const teamWantsCollaborationRef = useRef<boolean | null>(null);
   const [artifactId, setArtifactId] = useState<string | null>(null);
 
   useWorkspaceScrollOnEnter(phase);
-
-  useEffect(() => {
-    return () => {
-      if (reviewSaveTimerRef.current) {
-        window.clearTimeout(reviewSaveTimerRef.current);
-      }
-    };
-  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -110,25 +82,39 @@ export function Stage1Handoff({
           syncWorkspaceProjectTitle(state.projectTitle);
         }
         if (state.startingPoint.trim()) setStartingPoint(state.startingPoint);
-        if (state.hope.trim()) setHope(state.hope);
-        if (state.fear.trim()) setFear(state.fear);
-        if (state.principleAck) setPrincipleAck(true);
         if (profileName.trim()) {
           setDisplayName(profileName);
         } else if (state.displayName?.trim()) {
           setDisplayName(state.displayName);
         }
-        if (state.userLevel) setUserLevel(state.userLevel);
+        const resolvedLevel = resolveCoachingLevel(state);
+        if (state.guidanceStyle) {
+          setGuidanceStyle(state.guidanceStyle);
+        }
+        if (resolvedLevel) {
+          setUserLevel(resolvedLevel);
+          setCoachingLevel(resolvedLevel);
+        }
         teamWantsCollaborationRef.current = state.teamWantsCollaboration;
-        if (
-          state.principleAck &&
-          state.startingPoint.trim() &&
-          state.projectTitle.trim() &&
-          state.hope.trim() &&
-          state.fear.trim() &&
-          phase !== "review"
-        ) {
-          setPhase("review");
+        if (!isInviteMember) {
+          const hasGuidanceStyle = Boolean(
+            state.guidanceStyle || resolvedLevel,
+          );
+          const resumeCollect =
+            state.principleAck ||
+            state.collectStep === "team_collaboration" ||
+            state.collectStep === "team_invite";
+          if (resumeCollect) {
+            setPhase("collect");
+          } else if (!hasGuidanceStyle) {
+            setPhase("onboarding");
+          } else if (!state.projectTitle.trim()) {
+            setPhase("collect");
+          } else if (!state.startingPoint.trim()) {
+            setPhase("collect");
+          } else {
+            setPhase("collect");
+          }
         }
       } catch {
         /* 로컬 진행 */
@@ -140,30 +126,24 @@ export function Stage1Handoff({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- projectId 진입 시 1회
   }, [projectId]);
 
-  const persistReviewState = useCallback(
-    (next: {
-      projectTitle: string;
-      startingPoint: string;
-      hope: string;
-      fear: string;
-      principleAck: boolean;
-    }) => {
+  const persistCollectComplete = useCallback(
+    (data: Stage1CollectedData) => {
       const state: Stage1PersistedState = {
-        startingPoint: next.startingPoint,
-        projectTitle: next.projectTitle,
-        teamWantsCollaboration: teamWantsCollaborationRef.current,
-        collectStep: "principle",
-        displayName,
-        userLevel,
-        hope: next.hope,
-        fear: next.fear,
-        principleAck: next.principleAck,
+        startingPoint: data.startingPoint,
+        projectTitle: data.projectTitle,
+        teamWantsCollaboration: data.teamWantsCollaboration,
+        collectStep: "team_collaboration",
+        displayName: data.displayName ?? displayName,
+        userLevel: data.userLevel ?? userLevel,
+        hope: "",
+        fear: "",
+        principleAck: true,
       };
       void (async () => {
         try {
           const id = await saveStage1CollectState(projectId, state, artifactId);
           setArtifactId(id);
-          const trimmed = next.projectTitle.trim();
+          const trimmed = data.projectTitle.trim();
           if (trimmed) {
             await updateProjectTitleAction(projectId, trimmed);
           }
@@ -174,32 +154,6 @@ export function Stage1Handoff({
     },
     [artifactId, displayName, projectId, userLevel],
   );
-
-  useEffect(() => {
-    if (phase !== "review") return;
-    syncWorkspaceProjectTitle(projectTitle);
-    if (reviewSaveTimerRef.current) {
-      window.clearTimeout(reviewSaveTimerRef.current);
-    }
-    reviewSaveTimerRef.current = window.setTimeout(() => {
-      persistReviewState({
-        projectTitle,
-        startingPoint,
-        hope,
-        fear,
-        principleAck,
-      });
-    }, 500);
-  }, [
-    phase,
-    projectTitle,
-    startingPoint,
-    hope,
-    fear,
-    principleAck,
-    syncWorkspaceProjectTitle,
-    persistReviewState,
-  ]);
 
   const transitionToPhase = useCallback(
     (next: Stage1Phase, applyState?: () => void) => {
@@ -219,63 +173,47 @@ export function Stage1Handoff({
     [stageConfig.introMessages],
   );
 
-  const gatePassed = useMemo(
-    () =>
-      startingPoint.trim().length > 0 &&
-      projectTitle.trim().length > 0 &&
-      hope.trim().length > 0 &&
-      fear.trim().length > 0 &&
-      principleAck,
-    [startingPoint, projectTitle, hope, fear, principleAck],
-  );
-
-  const handleProblemComplete = useCallback(
-    (problem: string) => {
-      transitionToPhase("onboarding", () => {
-        setStartingPoint(problem);
-      });
-    },
-    [transitionToPhase],
-  );
-
-  const handleContinue = useCallback(() => {
-    if (!gatePassed) return;
-    router.push(`/project/${projectId}/stage/2`);
-  }, [gatePassed, projectId, router]);
-
   const handleOnboardingComplete = useCallback(
     (result: Stage1OnboardingResult) => {
       transitionToPhase("collect", () => {
         setDisplayName(result.displayName);
         setUserLevel(result.userLevel);
+        setCoachingLevel(result.userLevel);
+        setGuidanceStyle(result.guidanceStyle);
       });
     },
-    [transitionToPhase],
+    [setCoachingLevel, setGuidanceStyle, transitionToPhase],
   );
 
   const handleCollectComplete = useCallback(
     (data: Stage1CollectedData) => {
-      transitionToPhase("review", () => {
-        setStartingPoint(data.startingPoint);
-        setProjectTitle(data.projectTitle);
-        if (data.projectTitle.trim()) {
-          syncWorkspaceProjectTitle(data.projectTitle);
-        }
-        setHope(data.hope);
-        setFear(data.fear);
-        setPrincipleAck(data.principleAck);
-        if (data.displayName) setDisplayName(data.displayName);
-        if (data.userLevel) setUserLevel(data.userLevel);
-        persistReviewState({
-          projectTitle: data.projectTitle,
-          startingPoint: data.startingPoint,
-          hope: data.hope,
-          fear: data.fear,
-          principleAck: data.principleAck,
-        });
-      });
+      const payload: Stage1CollectedData = {
+        ...data,
+        displayName: data.displayName ?? displayName,
+        userLevel: data.userLevel ?? userLevel,
+        startingPoint: data.startingPoint.trim() || startingPoint,
+        principleAck: true,
+      };
+      setStartingPoint(payload.startingPoint);
+      setProjectTitle(payload.projectTitle);
+      if (payload.projectTitle.trim()) {
+        syncWorkspaceProjectTitle(payload.projectTitle);
+      }
+      if (payload.displayName) setDisplayName(payload.displayName);
+      if (payload.userLevel) setUserLevel(payload.userLevel);
+      teamWantsCollaborationRef.current = payload.teamWantsCollaboration;
+      persistCollectComplete(payload);
+      router.push(`/project/${projectId}/stage/2`);
     },
-    [persistReviewState, syncWorkspaceProjectTitle, transitionToPhase],
+    [
+      displayName,
+      persistCollectComplete,
+      projectId,
+      router,
+      startingPoint,
+      syncWorkspaceProjectTitle,
+      userLevel,
+    ],
   );
 
   const handleProjectTitleChange = useCallback(
@@ -286,54 +224,17 @@ export function Stage1Handoff({
     [syncWorkspaceProjectTitle],
   );
 
-  const reviewInputGuide = useMemo(() => getStageWorkInputGuide(1), []);
-
-  const chatContext = useMemo(
-    () => ({
-      projectId,
-      stageId: 1,
-      stageTitle: stageChatTitle(1),
-      artifactSummary: [
-        STAGE1_REVIEW_CHAT_HINT,
-        levelCoachToneHint(userLevel),
-        summarizeStage1Artifact({
-          displayName,
-          userLevel,
-          startingPoint,
-          projectTitle,
-          hope,
-          fear,
-          principleAck,
-        }),
-      ].join("\n\n"),
-      inputGuideContext: formatInputGuideForContext(reviewInputGuide),
-    }),
-    [
-      projectId,
-      displayName,
-      userLevel,
-      startingPoint,
-      projectTitle,
-      hope,
-      fear,
-      principleAck,
-      reviewInputGuide,
-    ],
-  );
-
-  const handleCoachReply = useCallback(
-    (reply: string, userMessage: string) => {
-      const patch = parseCoachEdit(userMessage, reply);
-      if (patch?.startingPoint != null) setStartingPoint(patch.startingPoint);
-      if (patch?.hope != null) setHope(patch.hope);
-      if (patch?.fear != null) setFear(patch.fear);
-    },
-    [],
-  );
-
-  const reviewCoachGreeting = displayName.trim()
-    ? `${displayName.trim()}님, `
-    : "";
+  if (phase === "onboarding") {
+    return (
+      <div key="onboarding" className="coach-page-enter">
+        <Stage1OnboardingCollect
+          projectId={projectId}
+          displayName={displayName}
+          onComplete={handleOnboardingComplete}
+        />
+      </div>
+    );
+  }
 
   if (phase === "intro") {
     return (
@@ -354,12 +255,12 @@ export function Stage1Handoff({
               <div className="mt-5 flex flex-col items-center gap-2 border-t border-border-warm pt-5">
                 <p className={`text-center break-keep ${stageCoachCaption}`}>
                   사업 계획보다 고객의 문제에서 출발해, 아이디어와 컨셉을
-                  순서대로 만들어 갈게요. 출발 문제점 → 코칭 맞춤 → 프로젝트
-                  이름 → 팀 여부 → Hopes·Fears 순으로 진행해요.
+                  순서대로 만들어 갈게요. 문제 정의 → 프로젝트 이름 순으로
+                  진행해요. 팀원은 내 프로젝트에서 초대할 수 있어요.
                 </p>
                 <button
                   type="button"
-                  onClick={() => transitionToPhase("problem")}
+                  onClick={() => transitionToPhase("collect")}
                   className={`${stageCoachBtnPrimary} w-full max-w-sm sm:w-auto`}
                 >
                   시작하기 →
@@ -373,100 +274,18 @@ export function Stage1Handoff({
     );
   }
 
-  if (phase === "problem") {
-    return (
-      <div key="problem" className="coach-page-enter">
-        <Stage1ProblemCollect
-          projectId={projectId}
-          onComplete={handleProblemComplete}
-        />
-      </div>
-    );
-  }
-
-  if (phase === "onboarding") {
-    return (
-      <div key="onboarding" className="coach-page-enter">
-        <Stage1OnboardingCollect
-          projectId={projectId}
-          displayName={displayName}
-          afterProblemCapture
-          onComplete={handleOnboardingComplete}
-        />
-      </div>
-    );
-  }
-
-  if (phase === "collect") {
-    return (
-      <div key="collect" className="coach-page-enter">
-        <Stage1ConversationalCollect
-          projectId={projectId}
-          startingPoint={startingPoint}
-          initialProjectTitle={projectTitle}
-          displayName={displayName}
-          userLevel={userLevel}
-          isInviteMember={isInviteMember}
-          onProjectTitleChange={handleProjectTitleChange}
-          onComplete={handleCollectComplete}
-        />
-      </div>
-    );
-  }
-
   return (
-    <StageRevealGroup>
-      <div key="review" className="coach-page-enter">
-      <StageTwoColumnLayout
-        work={
-          <Stage1ReviewPanel
-            displayName={displayName}
-            userLevel={userLevel}
-            projectTitle={projectTitle}
-            startingPoint={startingPoint}
-            hope={hope}
-            fear={fear}
-            principleAck={principleAck}
-            onProjectTitleChange={handleProjectTitleChange}
-            onStartingPointChange={setStartingPoint}
-            onHopeChange={setHope}
-            onFearChange={setFear}
-            onPrincipleAckChange={setPrincipleAck}
-            gatePassed={gatePassed}
-            onContinue={handleContinue}
-            onBack={() => transitionToPhase("collect")}
-            projectId={projectId}
-          />
-        }
-        coach={
-          <AnimatedCoachPanel
-            sceneKey={`${sceneKey}-review`}
-            statusLabel={stageConfig.workStatusLabel ?? "짚어주는 중"}
-            statusSub="검토 · 수정"
-            messages={[
-              {
-                type: "bubble",
-                content: (
-                  <>
-                    {reviewCoachGreeting}왼쪽에 정리해 두었어요. 직접 고치거나,
-                    바꾸고 싶은 내용을 말씀해 주세요.
-                  </>
-                ),
-              },
-            ]}
-            chatContext={chatContext}
-            formatCoachReply={stripEditMetaLine}
-            inputGuide={reviewInputGuide}
-            onUserMessage={(msg) => {
-              lastUserMessageRef.current = msg;
-            }}
-            onCoachReply={(reply) => {
-              handleCoachReply(reply, lastUserMessageRef.current);
-            }}
-          />
-        }
+    <div key="collect" className="coach-page-enter">
+      <Stage1ConversationalCollect
+        projectId={projectId}
+        startingPoint={startingPoint}
+        initialProjectTitle={projectTitle}
+        displayName={displayName}
+        userLevel={userLevel}
+        isInviteMember={isInviteMember}
+        onProjectTitleChange={handleProjectTitleChange}
+        onComplete={handleCollectComplete}
       />
-      </div>
-    </StageRevealGroup>
+    </div>
   );
 }

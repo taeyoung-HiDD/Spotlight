@@ -2,8 +2,10 @@
 
 import { IconPlus } from "@tabler/icons-react";
 import { useCallback, useRef } from "react";
-import { useUiLocale } from "@/hooks/useUiLocale";
+import { LocalizedText } from "@/components/i18n/LocalizedText";
 import { EmpathyPostitTextarea } from "@/components/stage/stage4/EmpathyPostitTextarea";
+import { useUiLocale } from "@/hooks/useUiLocale";
+import { useArchiveView } from "@/lib/archive/archiveViewContext";
 import type { EmpathyQuadrantId, EmpathyStickyItem } from "@/lib/stages/stage2/empathyMap";
 import {
   EMPATHY_QUADRANT_MAX_VISIBLE,
@@ -43,8 +45,15 @@ export function EmpathyQuadrantPostits({
 }: EmpathyQuadrantPostitsProps) {
   const focusIdRef = useRef<string | null>(null);
   const uiLocale = useUiLocale();
+  const archiveView = useArchiveView();
   const canAddQuadrantPostit =
-    variant !== "quadrant" || items.length < EMPATHY_QUADRANT_MAX_VISIBLE;
+    !archiveView &&
+    (variant !== "quadrant" || items.length < EMPATHY_QUADRANT_MAX_VISIBLE);
+  const title = uiLocale === "en" ? labelEn : labelKo;
+  /** 우측 사분면(생각함·느낌)은 중앙 프로필과 겹치지 않도록 제목·힌트를 우측 정렬 */
+  const alignEnd =
+    variant === "quadrant" &&
+    (quadrantId === "thinks" || quadrantId === "feels");
 
   const updateItemText = useCallback(
     (id: string, text: string) => {
@@ -81,32 +90,46 @@ export function EmpathyQuadrantPostits({
           POSTIT_PAPER_CLASS[quadrantId],
         ].join(" ")}
       >
-        <button
-          type="button"
-          className="empathy-postit-remove"
-          aria-label="포스트잇 삭제"
-          onClick={() => removeItem(item.id)}
-        >
-          <span className="empathy-postit-remove-x" aria-hidden>
-            ×
-          </span>
-        </button>
-        <EmpathyPostitTextarea
-          value={item.text}
-          onChange={(text) => updateItemText(item.id, text)}
-          placeholder={
-            showExample
-              ? empathyQuadrantPostitExample(quadrantId, uiLocale)
-              : ""
-          }
-          compact={isQuadrant}
-          onMountRef={(el) => {
-            if (el && focusIdRef.current === item.id) {
-              el.focus();
-              focusIdRef.current = null;
+        {!archiveView ? (
+          <button
+            type="button"
+            className="empathy-postit-remove"
+            aria-label="포스트잇 삭제"
+            onClick={() => removeItem(item.id)}
+          >
+            <span className="empathy-postit-remove-x" aria-hidden>
+              ×
+            </span>
+          </button>
+        ) : null}
+        {archiveView ? (
+          <p className="empathy-postit-text whitespace-pre-wrap break-keep px-2 py-1.5 text-[13px] leading-relaxed">
+            {item.text.trim() ? (
+              <LocalizedText>{item.text}</LocalizedText>
+            ) : (
+              <span className="text-muted">
+                {empathyQuadrantPostitExample(quadrantId, uiLocale)}
+              </span>
+            )}
+          </p>
+        ) : (
+          <EmpathyPostitTextarea
+            value={item.text}
+            onChange={(text) => updateItemText(item.id, text)}
+            placeholder={
+              showExample
+                ? empathyQuadrantPostitExample(quadrantId, uiLocale)
+                : ""
             }
-          }}
-        />
+            compact={isQuadrant}
+            onMountRef={(el) => {
+              if (el && focusIdRef.current === item.id) {
+                el.focus();
+                focusIdRef.current = null;
+              }
+            }}
+          />
+        )}
       </div>
     );
 
@@ -125,7 +148,7 @@ export function EmpathyQuadrantPostits({
     <button
       type="button"
       onClick={addItem}
-      aria-label={`${labelKo} 포스트잇 추가`}
+      aria-label={`${title} add sticky`}
       className={[
         "empathy-postit-paper empathy-postit-paper--add flex items-center justify-center",
         variant === "quadrant"
@@ -167,35 +190,40 @@ export function EmpathyQuadrantPostits({
     ) : (
       <div className="flex min-h-[19rem] flex-wrap items-start gap-2">
         {items.map((item, index) => renderPostit(item, index))}
-        {addButton}
+        {canAddQuadrantPostit ? addButton : null}
       </div>
     );
-
-  const quadrantTitle =
-    labelEn.charAt(0) + labelEn.slice(1).toLowerCase();
-
-  if (variant === "quadrant") {
-    return (
-      <div className="flex h-full min-h-0 flex-col">
-        <p className="empathy-map-quadrant-label">{quadrantTitle}</p>
-        <p className="empathy-map-quadrant-hint break-keep">
-          {empathyQuadrantHint(quadrantId, uiLocale)}
-        </p>
-        <p className="sr-only">
-          {labelKo} — {description}
-        </p>
-        {postits}
-      </div>
-    );
-  }
 
   return (
-    <div className="rounded-lg border border-border-warm bg-cream/40 p-3">
-      <div className="mb-2">
+    <div
+      className={
+        variant === "quadrant"
+          ? "flex h-full min-h-0 flex-col"
+          : "flex flex-col gap-2"
+      }
+    >
+      <div
+        className={
+          variant === "quadrant"
+            ? [
+                "shrink-0 px-1 pb-1",
+                alignEnd ? "pr-2 text-right sm:pr-3" : "pl-1 sm:pl-2",
+              ].join(" ")
+            : undefined
+        }
+      >
         <p className={stageLabel}>
-          {labelEn} · {labelKo}
+          {title}
+          {uiLocale === "ko" ? (
+            <span className="ml-1.5 font-normal text-muted">{labelEn}</span>
+          ) : null}
         </p>
-        <p className={`mt-0.5 ${stageCaption}`}>{description}</p>
+        <p className={`${stageCaption} text-muted`}>
+          {empathyQuadrantHint(quadrantId, uiLocale)}
+        </p>
+        {variant === "card" ? (
+          <p className={`${stageCaption} mt-0.5 text-muted`}>{description}</p>
+        ) : null}
       </div>
       {postits}
     </div>

@@ -7,12 +7,24 @@ import {
   normalizeEmpathyStickyItems,
 } from "@/lib/stages/stage4/empathySticky";
 import {
+  normalizeNemotronPersonaProfile,
+  type NemotronPersonaProfile,
+} from "@/lib/personas/nemotronPersona";
+import {
   defaultResearchSynthesis,
   normalizeResearchSynthesis,
   type ResearchSynthesisData,
   type Stage4WorkflowPhase,
 } from "@/lib/stages/stage4/researchSynthesisTypes";
 import { personaLineCartoonFallbackUrl } from "@/lib/stages/stage4/personaThumbnail";
+import {
+  emptyPersonaBio,
+  formatPersonaBioSummary,
+  normalizePersonaBio,
+  type PersonaBio,
+} from "@/lib/stages/stage4/personaBio";
+
+export type { PersonaBio };
 
 export type { ResearchSynthesisData, Stage4WorkflowPhase };
 
@@ -33,6 +45,9 @@ export interface Stage4PersonaEmpathyMap {
   id: string;
   personaName: string;
   personaContext: string;
+  personaBio: PersonaBio;
+  /** Nemotron-Personas-Korea 매칭 가상 사용자 — 실제 인물처럼 생각·답변하는 배경 */
+  personaProfile?: NemotronPersonaProfile;
   /** 업로드 data URL 또는 AI·외부 이미지 URL */
   personaThumbnailUrl: string;
   quadrants: Record<EmpathyQuadrantId, EmpathyStickyItem[]>;
@@ -51,8 +66,25 @@ export function createStage4PersonaMap(index = 0): Stage4PersonaEmpathyMap {
     id: `p-${Date.now()}-${Math.random().toString(36).slice(2, 7)}-${index}`,
     personaName: "",
     personaContext: "",
+    personaBio: emptyPersonaBio(),
     personaThumbnailUrl: "",
     quadrants: emptyStage4Quadrants(),
+  };
+}
+
+export function applyPersonaBioToMapFields(
+  map: Stage4PersonaEmpathyMap,
+  bio: PersonaBio,
+): Pick<Stage4PersonaEmpathyMap, "personaBio" | "personaName" | "personaContext"> {
+  const normalized = normalizePersonaBio(bio, {
+    name: map.personaName,
+    context: map.personaContext,
+  });
+  const summary = formatPersonaBioSummary(normalized);
+  return {
+    personaBio: normalized,
+    personaName: normalized.name.trim() || map.personaName,
+    personaContext: summary || map.personaContext,
   };
 }
 
@@ -62,7 +94,7 @@ export function defaultStage4Data(): Stage4DiscoveriesData {
     empathyMaps: [createStage4PersonaMap(0)],
     synthesisNote: "",
     researchSynthesis: defaultResearchSynthesis(),
-    workflowPhase: "empathy_maps",
+    workflowPhase: "research_synthesis",
   };
 }
 
@@ -74,13 +106,18 @@ export function normalizeStage4Data(
 
   const maps =
     Array.isArray(raw.empathyMaps) && raw.empathyMaps.length
-      ? raw.empathyMaps.slice(0, 8)
+      ? raw.empathyMaps.slice(0, 12)
       : [];
 
   const normalizedMaps: Stage4PersonaEmpathyMap[] = maps.map((m, idx) => ({
     id: m.id || createStage4PersonaMap(idx).id,
     personaName: m.personaName || "",
     personaContext: m.personaContext || "",
+    personaBio: normalizePersonaBio(m.personaBio, {
+      name: m.personaName,
+      context: m.personaContext,
+    }),
+    personaProfile: normalizeNemotronPersonaProfile(m.personaProfile),
     personaThumbnailUrl: migratePersonaThumbnailUrl(
       m.personaThumbnailUrl,
       m.personaName || "",
@@ -98,11 +135,6 @@ export function normalizeStage4Data(
     normalizedMaps.push(createStage4PersonaMap(normalizedMaps.length));
   }
 
-  const workflowPhase: Stage4WorkflowPhase =
-    raw.workflowPhase === "research_synthesis"
-      ? "research_synthesis"
-      : "empathy_maps";
-
   return {
     personaTargetCount: normalizedMaps.length,
     empathyMaps: normalizedMaps,
@@ -110,6 +142,6 @@ export function normalizeStage4Data(
     researchSynthesis: normalizeResearchSynthesis(
       raw.researchSynthesis as Partial<ResearchSynthesisData> | undefined,
     ),
-    workflowPhase,
+    workflowPhase: "research_synthesis",
   };
 }

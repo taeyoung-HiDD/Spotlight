@@ -1,3 +1,5 @@
+"use client";
+
 import {
   IconBell,
   IconChevronDown,
@@ -5,17 +7,12 @@ import {
   IconSearch,
 } from "@tabler/icons-react";
 import Link from "next/link";
+import { LocaleToggle } from "@/components/layout/LocaleToggle";
 import { ThemeToggle } from "@/components/layout/ThemeToggle";
+import { useT } from "@/hooks/useT";
 import { brandScript } from "@/lib/fonts/brand";
 
 export type TopNavItem = "home" | "projects" | "archive" | "invest";
-
-const NAV_LINKS: { id: TopNavItem; label: string; href: string }[] = [
-  { id: "home", label: "홈", href: "/home" },
-  { id: "projects", label: "프로젝트", href: "/home#projects" },
-  { id: "archive", label: "자료실", href: "/home#archive" },
-  { id: "invest", label: "투자·지원", href: "/home#programs" },
-];
 
 export interface TopNavProps {
   active?: TopNavItem;
@@ -30,6 +27,15 @@ export function TopNav({
   userInitial = "민",
   notificationCount = 3,
 }: TopNavProps) {
+  const t = useT();
+
+  const navLinks: { id: TopNavItem; label: string; href: string }[] = [
+    { id: "home", label: t("nav.home"), href: "/home" },
+    { id: "projects", label: t("nav.projects"), href: "/home#projects" },
+    { id: "archive", label: t("nav.archive"), href: "/home#archive" },
+    { id: "invest", label: t("nav.invest"), href: "/home#programs" },
+  ];
+
   return (
     <header className="flex items-center gap-[18px] border-b border-border-warm bg-panel px-[22px] py-3">
       <Link href="/home" className="flex items-center gap-2">
@@ -45,9 +51,9 @@ export function TopNav({
 
       <nav
         className="ml-3.5 flex items-center gap-4"
-        aria-label="시스템 메뉴"
+        aria-label={t("nav.systemMenu")}
       >
-        {NAV_LINKS.map((item) => (
+        {navLinks.map((item) => (
           <Link
             key={item.id}
             href={item.href}
@@ -69,19 +75,20 @@ export function TopNav({
       <div className="flex min-w-[200px] items-center gap-1.5 rounded-md border border-border-warm bg-cream px-[11px] py-1.5">
         <IconSearch className="size-3.5 shrink-0 text-muted" stroke={2} />
         <span className="flex-1 text-[11px] text-subtle">
-          프로젝트·자료실·프로그램 검색…
+          {t("nav.search.home")}
         </span>
         <kbd className="rounded border border-border-warm bg-panel px-[5px] py-px text-[9.5px] text-muted">
           ⌘ K
         </kbd>
       </div>
 
+      <LocaleToggle />
       <ThemeToggle />
 
       <button
         type="button"
         className="relative p-1 text-foreground"
-        aria-label={`알림 ${notificationCount}건`}
+        aria-label={`${t("nav.notifications")} ${notificationCount}`}
       >
         <IconBell className="size-[18px]" stroke={1.75} />
         {notificationCount > 0 && (
@@ -94,7 +101,7 @@ export function TopNav({
       <button
         type="button"
         className="flex items-center gap-[7px] rounded-full border border-border-warm bg-cream py-1 pr-2.5 pl-1"
-        aria-label="사용자 메뉴"
+        aria-label={t("nav.userMenu")}
       >
         <span className="flex size-7 items-center justify-center rounded-full bg-spotlight text-xs font-semibold text-on-spotlight">
           {userInitial}

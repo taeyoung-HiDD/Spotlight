@@ -2,6 +2,7 @@
 
 import type { ReactNode } from "react";
 import { StageRevealItem } from "@/components/stage/motion/StageReveal";
+import { useArchiveView } from "@/lib/archive/archiveViewContext";
 import { MOTION } from "@/lib/motion/timings";
 import { stageCoachColumn, stageWorkColumn, stageWorkSplit } from "@/lib/stages/ui";
 
@@ -15,6 +16,14 @@ interface StageTwoColumnLayoutProps {
  * 모든 2열 스테이지(컷 2+)에서 동일 순서.
  */
 export function StageTwoColumnLayout({ work, coach }: StageTwoColumnLayoutProps) {
+  const archiveView = useArchiveView();
+
+  if (archiveView) {
+    return (
+      <StageRevealItem index={MOTION.columnWorkRevealIndex}>{work}</StageRevealItem>
+    );
+  }
+
   return (
     <div className={stageWorkSplit}>
       <div className={stageWorkColumn}>

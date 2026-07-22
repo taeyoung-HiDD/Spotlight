@@ -1,5 +1,6 @@
 "use client";
 
+import { useUiLocale } from "@/hooks/useUiLocale";
 import { useMemo } from "react";
 import { AnimatedCoachPanel } from "@/components/stage/motion/AnimatedCoachPanel";
 import type { CoachDialogItem } from "@/components/stage/motion/CoachSequentialDialog";
@@ -34,8 +35,9 @@ export function PrototypeCoachPanel({
   data,
   variant,
 }: PrototypeCoachPanelProps) {
-  const stageConfig = getStageConfig(10);
-  const purpose = getStagePurposeCopy(10);
+  const stageConfig = getStageConfig(11);
+  const locale = useUiLocale();
+  const purpose = getStagePurposeCopy(11, locale);
 
   const introMessages = useMemo((): CoachDialogItem[] => {
     return [
@@ -56,7 +58,7 @@ export function PrototypeCoachPanel({
   const chatContext = useMemo(
     () => ({
       projectId,
-      stageId: 10,
+      stageId: 11,
       stageTitle: "시제품 만들기",
       artifactSummary: summarizePrototype(concept, data),
       stageBehaviorNote:
@@ -96,7 +98,7 @@ export function PrototypeCoachPanel({
       ]}
       showComposer
       chatContext={chatContext}
-      inputGuide={getStageWorkInputGuide(10)}
+      inputGuide={getStageWorkInputGuide(11, locale)}
     />
   );
 }

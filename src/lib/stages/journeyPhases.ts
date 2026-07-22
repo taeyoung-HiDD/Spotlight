@@ -15,14 +15,14 @@ export type JourneyPhaseGroup = {
   stages: readonly number[];
 };
 
-/** 6개 매크로 흐름 ↔ 세부 단계 1–15 */
+/** 6개 매크로 흐름 ↔ 세부 단계 1–16 */
 export const JOURNEY_PHASE_GROUPS: readonly JourneyPhaseGroup[] = [
   { label: "공감하기", stages: [1, 2, 3] },
   { label: "분석하기", stages: [4, 5, 6] },
-  { label: "아이디어 내기", stages: [7, 8, 9] },
-  { label: "시제품 만들기", stages: [10] },
-  { label: "사업 검토하기", stages: [11, 12, 13] },
-  { label: "사업 제안하기", stages: [14, 15] },
+  { label: "아이디어 내기", stages: [7, 8, 9, 10] },
+  { label: "시제품 만들기", stages: [11] },
+  { label: "사업 검토하기", stages: [12, 13, 14] },
+  { label: "사업 제안하기", stages: [15, 16] },
 ] as const;
 
 export function formatJourneyPhases(separator = " → "): string {

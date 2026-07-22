@@ -1,4 +1,6 @@
 /** 무드 가이드 v3 — 스토리보드 일러스트 스타일 토큰 */
+import { appendImageNoTextConstraint } from "@/lib/ai/prompts/imageNoTextConstraint";
+
 const STYLE_TOKENS = `
 - 차콜 선 (#2D2D2A), 흰 배경 (#FFFFFF), 노랑 강조 (#F4C430)
 - 일관된 라인 일러스트, 평면·미니멀, 텍스트·워터마크 없음
@@ -25,7 +27,7 @@ export function buildStoryboardImagePrompt(input: StoryboardImageInput): string 
     ? `페르소나·맥락: ${input.personaContext.trim().slice(0, 500)}`
     : "";
 
-  return `
+  const body = `
 DT Coach 스토리보드 일러스트 1컷을 생성하세요.
 
 컨셉: ${input.conceptName.trim().slice(0, 120)}
@@ -41,5 +43,8 @@ ${STYLE_TOKENS}
 - UI 목업이 아닌 스토리보드 일러스트
 - 인물·상황·인터랙션·결과가 한 장면에 읽히게
 - 노랑은 핵심 포인트(손·아이콘·강조 오브젝트)에만 소량 사용
+- UI 슬롯(헤더·버튼·캡션 영역)은 비워 둔 채 레이아웃만 표현
 `.trim();
+
+  return appendImageNoTextConstraint(body);
 }

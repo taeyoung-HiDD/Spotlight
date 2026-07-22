@@ -1,5 +1,12 @@
 const STORAGE_KEY = "spotlight:stage-guide-dismissed";
 
+/** 단계 활동 가이드(게이트·다이얼로그)를 쓰지 않는 단계 */
+const STAGES_WITHOUT_ACTIVITY_GUIDE = new Set([1]);
+
+export function isStageActivityGuideEnabled(stageNumber: number): boolean {
+  return !STAGES_WITHOUT_ACTIVITY_GUIDE.has(stageNumber);
+}
+
 function readMap(): Record<string, boolean> {
   if (typeof window === "undefined") return {};
   try {

@@ -9,17 +9,28 @@ import {
   IconLayoutSidebarLeftExpand,
 } from "@tabler/icons-react";
 import Link from "next/link";
-import { useCallback, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { fetchProjectArchiveCount } from "@/lib/artifacts/fetchProjectArchiveCount";
+import { useT } from "@/hooks/useT";
+import { archiveStageNavLabel } from "@/lib/artifacts/archiveArtifactLabels";
+import { useUiLocale } from "@/hooks/useUiLocale";
 import {
   getMacroGroupStatus,
   getSidebarStage,
-  macroStatusSuffix,
   SIDEBAR_MACRO_GROUPS,
   STAGE_COUNT,
   type MacroGroupStatus,
 } from "@/lib/stages/sidebarNav";
-import { canNavigateToStage } from "@/lib/stages/stageAccess";
 import { getStageNavDescription } from "@/lib/stages/stageNavDescriptions";
+import type { MessageKey } from "@/lib/i18n/messages";
+
+const MACRO_MESSAGE_KEYS: Record<string, MessageKey> = {
+  empathize: "macro.empathize",
+  analyze: "macro.analyze",
+  ideate: "macro.ideate",
+  prototype: "macro.prototype",
+  business: "macro.business",
+};
 
 const SIDEBAR_COLLAPSED_KEY = "spotlight-sidebar-collapsed";
 
@@ -30,6 +41,8 @@ interface ProjectStageSidebarProps {
   completedStages: number[];
   collapsed: boolean;
   onCollapsedChange: (collapsed: boolean) => void;
+  archiveActive?: boolean;
+  archiveEntryCount?: number;
 }
 
 function StageNumberBadge({
@@ -108,7 +121,6 @@ function SidebarStageRow({
   isServiceExtension,
   isCurrent,
   isComplete,
-  accessible,
   collapsed,
 }: {
   projectId: string;
@@ -117,7 +129,6 @@ function SidebarStageRow({
   isServiceExtension: boolean;
   isCurrent: boolean;
   isComplete: boolean;
-  accessible: boolean;
   collapsed: boolean;
 }) {
   const description = getStageNavDescription(stageId);
@@ -128,17 +139,13 @@ function SidebarStageRow({
     collapsed
       ? isCurrent
         ? "h-[30px] w-11 justify-center rounded-r-md border-l-[3px] border-spotlight bg-yellow-tint"
-        : "h-7 w-9 justify-center px-0"
+        : "h-7 w-9 justify-center px-0 hover:bg-cream"
       : "gap-2 px-2.5 py-1.5",
     !collapsed && isCurrent
       ? "border-l-[3px] border-spotlight bg-yellow-tint pl-2"
-      : !collapsed && accessible
+      : !collapsed
         ? "hover:bg-cream"
-        : !collapsed
-          ? "cursor-not-allowed opacity-60"
-          : accessible
-            ? "hover:bg-cream"
-            : "cursor-not-allowed opacity-60",
+        : "",
   ].join(" ");
 
   const label = collapsed
@@ -176,31 +183,18 @@ function SidebarStageRow({
         <p className="mt-0.5 text-[10px] leading-snug text-tooltip-fg/90">
           {description.summary}
         </p>
-        {!accessible ? (
-          <p className="mt-1 text-[9px] text-tooltip-fg/65">
-            이전 단계를 완료하면 이동할 수 있어요.
-          </p>
-        ) : null}
       </div>
     </>
   );
 
-  if (accessible) {
-    return (
-      <Link
-        href={href}
-        className={rowClass}
-        aria-current={isCurrent ? "step" : undefined}
-      >
-        {content}
-      </Link>
-    );
-  }
-
   return (
-    <span className={rowClass} aria-disabled="true">
+    <Link
+      href={href}
+      className={rowClass}
+      aria-current={isCurrent ? "step" : undefined}
+    >
       {content}
-    </span>
+    </Link>
   );
 }
 
@@ -211,7 +205,33 @@ export function ProjectStageSidebar({
   completedStages,
   collapsed,
   onCollapsedChange,
+  archiveActive = false,
+  archiveEntryCount: archiveEntryCountProp,
 }: ProjectStageSidebarProps) {
+  const t = useT();
+  const locale = useUiLocale();
+  const [archiveCount, setArchiveCount] = useState<number | null>(
+    archiveEntryCountProp ?? null,
+  );
+
+  useEffect(() => {
+    if (archiveEntryCountProp != null) {
+      setArchiveCount(archiveEntryCountProp);
+      return;
+    }
+    let cancelled = false;
+    void fetchProjectArchiveCount(projectId).then((count) => {
+      if (!cancelled) setArchiveCount(count);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [archiveEntryCountProp, projectId]);
+
+  const archiveHref = `/project/${projectId}/archive`;
+  const archiveBadge =
+    archiveCount != null && archiveCount > 0 ? String(archiveCount) : undefined;
+
   const toggle = useCallback(() => {
     onCollapsedChange(!collapsed);
   }, [collapsed, onCollapsedChange]);
@@ -285,7 +305,8 @@ export function ProjectStageSidebar({
             </div>
           ) : (
             <div className="text-[11px] leading-snug font-semibold text-foreground">
-              단계 {currentStage} · {currentMeta?.navLabel ?? "작업"}
+              {t("stage.prefix")} {currentStage} ·{" "}
+              {archiveStageNavLabel(currentStage, locale)}
             </div>
           )}
           <div
@@ -319,7 +340,15 @@ export function ProjectStageSidebar({
           const status =
             macroStatuses.find((m) => m.id === group.id)?.status ?? "upcoming";
           const MacroIcon = group.icon;
-          const stageIds = group.stages.map((s) => s.id);
+          const macroLabel =
+            (MACRO_MESSAGE_KEYS[group.id]
+              ? t(MACRO_MESSAGE_KEYS[group.id]!)
+              : group.label) +
+            (status === "complete"
+              ? t("macro.complete")
+              : status === "in_progress"
+                ? t("macro.inProgress")
+                : "");
           const hasServiceDot = group.stages.some((s) => s.isServiceExtension);
 
           return (
@@ -332,7 +361,7 @@ export function ProjectStageSidebar({
                   <MacroDivider status={status} collapsed />
                   <div
                     className="group/macro relative my-1 flex size-10 items-center justify-center rounded-md"
-                    title={`${group.label}${macroStatusSuffix(status)}`}
+                    title={macroLabel}
                   >
                     <MacroIcon
                       className={[
@@ -346,8 +375,7 @@ export function ProjectStageSidebar({
                       stroke={1.75}
                     />
                     <div className="pointer-events-none absolute left-full top-1/2 z-30 ml-2 -translate-y-1/2 whitespace-nowrap rounded border border-badge-fill-ring bg-tooltip-bg px-2 py-1 text-[9.5px] text-tooltip-fg opacity-0 transition-opacity group-hover/macro:opacity-100">
-                      {group.label}
-                      {macroStatusSuffix(status)}
+                      {macroLabel}
                     </div>
                   </div>
                 </>
@@ -370,8 +398,7 @@ export function ProjectStageSidebar({
                           : "text-muted",
                     ].join(" ")}
                   >
-                    {group.label}
-                    {macroStatusSuffix(status)}
+                    {macroLabel}
                   </span>
                   <div
                     className={[
@@ -397,23 +424,17 @@ export function ProjectStageSidebar({
                 {group.stages.map((stage) => {
                   const isCurrent = stage.id === currentStage;
                   const isComplete = completedStages.includes(stage.id);
-                  const accessible = canNavigateToStage(
-                    stage.id,
-                    completedStages,
-                    currentStage,
-                    maxReachedStage,
-                  );
+                  const navLabel = archiveStageNavLabel(stage.id, locale);
 
                   return (
                     <SidebarStageRow
                       key={stage.id}
                       projectId={projectId}
                       stageId={stage.id}
-                      navLabel={stage.navLabel}
+                      navLabel={navLabel}
                       isServiceExtension={stage.isServiceExtension}
                       isCurrent={isCurrent}
                       isComplete={isComplete}
-                      accessible={accessible}
                       collapsed={collapsed}
                     />
                   );
@@ -435,17 +456,27 @@ export function ProjectStageSidebar({
         ].join(" ")}
       >
         {[
-          { icon: IconArchive, label: "자료실", badge: "11", href: "#" },
-          { icon: IconHistory, label: "코치 메모리", href: "#" },
-          { icon: IconFolder, label: "프로젝트 허브", href: "/home" },
+          {
+            icon: IconArchive,
+            label: t("sidebar.archive"),
+            badge: archiveBadge,
+            href: archiveHref,
+            active: archiveActive,
+          },
+          { icon: IconHistory, label: locale === "en" ? "Coach memory" : "코치 메모리", href: "#" },
+          { icon: IconFolder, label: t("sidebar.myProjects"), href: "/home" },
         ].map((item) => (
           <Link
             key={item.label}
             href={item.href}
             className={[
-              "relative flex items-center rounded-md text-foreground transition-colors hover:bg-cream",
+              "relative flex items-center rounded-md transition-colors",
+              item.active
+                ? "bg-[#FFFDF4] font-semibold text-foreground"
+                : "text-foreground hover:bg-cream",
               collapsed ? "size-9 justify-center" : "gap-2.5 px-2 py-1.5",
             ].join(" ")}
+            aria-current={item.active ? "page" : undefined}
             title={collapsed ? item.label : undefined}
           >
             <item.icon className="size-3.5" stroke={1.75} />

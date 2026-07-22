@@ -13,6 +13,7 @@ import {
 import type { EmpathyMapData } from "@/lib/stages/stage2/empathyMap";
 import type { CoachInputGuide } from "@/lib/coach/inputGuidance";
 import { formatSelectedDimensionsLabel } from "@/lib/stages/stage2/selectContextualDimensions";
+import { insightToQuestion } from "@/lib/stages/fieldResearch/toKnowInfoQuestions";
 
 /** intro: 코치 안내 → research: 자동 사전 조사·코치 보완 질문 */
 export type ContextualPrepPhase = "intro" | "research";
@@ -246,8 +247,9 @@ export function deriveToKnowFromContextual(
 
   const items: string[] = [];
   if (p) {
+    const clipped = p.length > 48 ? `${p.slice(0, 48)}…` : p;
     items.push(
-      `「${p.slice(0, 48)}${p.length > 48 ? "…" : ""}」 — 사용자 조사로 검증·구체화할 핵심 문제`,
+      `「${clipped}」은(는) 실제 사용자 경험에서 어떻게 드러나나요?`,
     );
   }
 
@@ -255,14 +257,14 @@ export function deriveToKnowFromContextual(
     const list = answers[d.id];
     if (!list?.length) {
       items.push(
-        `${d.label} — 「${p || "문제"}」 해결을 위해 사용자 조사로 파악할 내용`,
+        `「${p.length > 48 ? `${p.slice(0, 48)}…` : p || "문제점"}」 해결과 관련된 ${d.label}은(는) 현장에서 어떻게 확인할 수 있나요?`,
       );
       continue;
     }
     const summary = formatAnswerList(list);
-    items.push(
-      `${d.label}(${summary.length > 36 ? `${summary.slice(0, 36)}…` : summary}) — 사전 조사 가설을 사용자 조사로 확인`,
-    );
+    const clippedSummary =
+      summary.length > 56 ? `${summary.slice(0, 56)}…` : summary;
+    items.push(insightToQuestion(d.id, clippedSummary, p, "목표 사용자"));
   }
   return items.slice(0, 12);
 }

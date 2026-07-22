@@ -2,6 +2,7 @@
 
 import { IconMicrophone, IconTrash } from "@tabler/icons-react";
 import { useCallback, useId, useRef, useState } from "react";
+import { LocalizedEditableTextarea } from "@/components/i18n/LocalizedEditableField";
 import {
   removeTeamDebriefAudio,
   summarizeTeamDebriefAudio,
@@ -170,10 +171,10 @@ export function TeamDebriefSection({
         </ul>
       ) : null}
 
-      <textarea
+      <LocalizedEditableTextarea
         rows={5}
         value={note}
-        onChange={(e) => onNoteChange(e.target.value)}
+        onValueChange={onNoteChange}
         placeholder="의외였던 점 · 핵심 인용 · 다음에 확인할 것"
         className={`mt-3 w-full rounded-md border border-border-warm px-3 py-2 ${stageField} ${stageTextarea}`}
       />

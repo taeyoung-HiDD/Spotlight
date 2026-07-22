@@ -4,6 +4,10 @@ import {
   IconHistory,
   IconLayoutSidebarLeftCollapse,
 } from "@tabler/icons-react";
+import {
+  WORKSPACE_HOME_PAGE_NAME,
+  WORKSPACE_HOME_PAGE_NAME_EN,
+} from "@/lib/navigation/stageNavLabels";
 import { SIDEBAR_MACRO_GROUPS } from "@/lib/stages/sidebarNav";
 
 /** 컷 21 · 평행 자리 사이드바 (허브 활성 · 단계 미리보기 비활성) */
@@ -31,14 +35,16 @@ export function ProjectHubSidebar() {
         <div className="flex items-center gap-2 rounded-lg border border-spotlight bg-highlight px-2.5 py-2">
           <IconFolder className="size-[15px] shrink-0 text-gold" stroke={1.75} />
           <div className="min-w-0 flex-1">
-            <div className="text-[11px] font-semibold text-foreground">프로젝트 허브</div>
-            <div className="text-[9.5px] text-gold">지금 자리</div>
+            <div className="text-[11px] font-semibold text-foreground">
+              {WORKSPACE_HOME_PAGE_NAME}
+            </div>
+            <div className="text-[9.5px] text-gold">{WORKSPACE_HOME_PAGE_NAME_EN}</div>
           </div>
         </div>
       </div>
 
       <div className="mb-2.5 px-2">
-        <nav className="flex flex-col gap-0.5" aria-label="허브 메뉴">
+        <nav className="flex flex-col gap-0.5" aria-label={`${WORKSPACE_HOME_PAGE_NAME} 메뉴`}>
           <div className="flex items-center gap-2.5 rounded-md px-2 py-1.5">
             <IconArchive className="size-[14px] text-foreground" stroke={1.75} />
             <span className="text-[11px] text-foreground">자료실</span>

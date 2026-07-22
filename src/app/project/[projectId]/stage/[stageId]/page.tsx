@@ -3,12 +3,14 @@ import { notFound } from "next/navigation";
 import type { ReactNode } from "react";
 import { ProjectStageShell } from "@/components/project/ProjectStageShell";
 import { Stage1Handoff } from "@/components/stage/stage1/Stage1Handoff";
-import { Stage2EmpathyMap } from "@/components/stage/stage2/Stage2EmpathyMap";
+import { Stage2PrePmfOverview } from "@/components/stage/stage2/Stage2PrePmfOverview";
 import { Stage3FieldResearch } from "@/components/stage/stage3/Stage3FieldResearch";
 import { Stage4Discoveries } from "@/components/stage/stage4/Stage4Discoveries";
 import { StageDiscoveryShell } from "@/components/stage/StageDiscoveryShell";
 import { Stage5Iceberg } from "@/components/stage/stage5/Stage5Iceberg";
 import { Stage6UserJourney } from "@/components/stage/stage6/Stage6UserJourney";
+import { Stage7Hmw } from "@/components/stage/stage7/Stage7Hmw";
+import { Stage8Ideation } from "@/components/stage/stage8/Stage8Ideation";
 import { Stage9ConceptSheet } from "@/components/stage/stage9/Stage9ConceptSheet";
 import { Stage10Prototype } from "@/components/stage/stage10/Stage10Prototype";
 import { fetchMaxStageReachedForProject } from "@/lib/projects/fetchMaxStageReachedForProject";
@@ -24,7 +26,7 @@ export default async function StagePage({ params }: StagePageProps) {
   const { projectId, stageId } = await params;
   const stageNum = Number.parseInt(stageId, 10);
 
-  if (!Number.isFinite(stageNum) || stageNum < 1 || stageNum > 15) {
+  if (!Number.isFinite(stageNum) || stageNum < 1 || stageNum > 16) {
     notFound();
   }
 
@@ -59,18 +61,22 @@ export default async function StagePage({ params }: StagePageProps) {
       />
     );
   } else if (stageNum === 2) {
-    stageContent = <Stage2EmpathyMap projectId={projectId} />;
+    stageContent = <Stage2PrePmfOverview projectId={projectId} />;
   } else if (stageNum === 3) {
     stageContent = <Stage3FieldResearch projectId={projectId} />;
   } else if (stageNum === 4) {
     stageContent = <Stage4Discoveries projectId={projectId} />;
   } else if (stageNum === 5) {
-    stageContent = <Stage5Iceberg projectId={projectId} />;
-  } else if (stageNum === 6) {
     stageContent = <Stage6UserJourney projectId={projectId} />;
-  } else if (stageNum === 9) {
-    stageContent = <Stage9ConceptSheet projectId={projectId} />;
+  } else if (stageNum === 6) {
+    stageContent = <Stage5Iceberg projectId={projectId} />;
+  } else if (stageNum === 7) {
+    stageContent = <Stage7Hmw projectId={projectId} />;
+  } else if (stageNum === 8) {
+    stageContent = <Stage8Ideation projectId={projectId} />;
   } else if (stageNum === 10) {
+    stageContent = <Stage9ConceptSheet projectId={projectId} />;
+  } else if (stageNum === 11) {
     stageContent = <Stage10Prototype projectId={projectId} />;
   } else {
     stageContent = (

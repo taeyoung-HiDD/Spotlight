@@ -7,7 +7,7 @@ import { StageContinueGatePanel } from "@/components/stage/StageContinueGatePane
 import { StageRevealGroup } from "@/components/stage/motion/StageReveal";
 import type { CoachInputGuide } from "@/lib/coach/inputGuidance";
 import {
-  DEFAULT_STAGE1_STATE,
+  fetchStage1CollectState,
   saveStage1CollectState,
 } from "@/lib/artifacts/stage1Collect";
 import { formatCoachDialogBreaks } from "@/lib/coach/formatCoachDialog";
@@ -27,7 +27,7 @@ const KICKOFF: CoachDialogItem[] = [
   {
     type: "bubble",
     content: formatCoachDialogBreaks(
-      `먼저 출발할 문제점부터 잡을게요.\n\n${STAGE1_CUSTOMER_PROBLEM_RATIONALE_BRIEF}`,
+      `먼저 출발점을 잡을게요.\n\n${STAGE1_CUSTOMER_PROBLEM_RATIONALE_BRIEF}`,
     ),
   },
 ];
@@ -37,7 +37,7 @@ interface Stage1ProblemCollectProps {
   onComplete: (startingPoint: string) => void;
 }
 
-/** 단계 1 · 온보딩(이름) 전 출발 문제점 수집 */
+/** 단계 1 · 온보딩(이름) 전 출발 문제·아이디어 수집 */
 export function Stage1ProblemCollect({
   projectId,
   onComplete,
@@ -76,12 +76,14 @@ export function Stage1ProblemCollect({
       const startingPoint = patch.startingPoint?.trim();
       if (!startingPoint) return coachReply;
 
+      const { artifactId: aid, state: existing } =
+        await fetchStage1CollectState(projectId);
       const state = {
-        ...DEFAULT_STAGE1_STATE,
+        ...existing,
         startingPoint,
         collectStep: "project_name" as const,
       };
-      const id = await saveStage1CollectState(projectId, state, artifactId);
+      const id = await saveStage1CollectState(projectId, state, aid ?? artifactId);
       setArtifactId(id);
       setDone(true);
       setPendingStartingPoint(startingPoint);
@@ -104,7 +106,7 @@ export function Stage1ProblemCollect({
           <AnimatedCoachPanel
             sceneKey={sceneKey}
             statusLabel="듣는 중"
-            statusSub="출발 문제점"
+            statusSub="문제·아이디어"
             messages={kickoffMessages}
             onCoachMessage={handleCoachMessage}
             inputGuide={done ? undefined : inputGuide}
@@ -114,7 +116,7 @@ export function Stage1ProblemCollect({
               done && pendingStartingPoint ? (
                 <div className={stageCoachComposerShell}>
                   <StageContinueGatePanel
-                    caption="출발 문제점을 정리했어요. 코칭 맞춤 질문으로 이어갈게요."
+                    caption="들려주신 문제·아이디어를 출발점으로 잡았어요. 사전 조사 단계로 이어갈게요."
                     onContinue={handleContinue}
                   />
                 </div>

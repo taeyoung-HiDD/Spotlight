@@ -56,9 +56,14 @@ export async function POST(request: Request) {
   });
 
   if (error) {
+    const msg = error.message || "업로드에 실패했습니다.";
+    const isMissingBucket =
+      /bucket not found/i.test(msg) || /not found/i.test(msg);
     return NextResponse.json(
       {
-        error: error.message,
+        error: isMissingBucket
+          ? "스토리지 버킷(research-media)이 아직 없어요. Supabase Dashboard → Storage에서 research-media 버킷을 만들거나, supabase/migrations/003_research_media_storage.sql 을 실행해 주세요."
+          : msg,
         fallback: kind === "photo",
       },
       { status: kind === "photo" ? 503 : 500 },

@@ -14,7 +14,7 @@ function looksLikeProblemStatement(text: string): boolean {
 }
 
 /**
- * 단계 2+에서 쓸 1단계 출발 문제점.
+ * 단계 2+에서 쓸 1단계 출발 입력(사용자 문제·초기 아이디어).
  * artifact → projects.description → (레거시) 문제형 프로젝트 제목 순으로 조회.
  */
 export async function resolveStage1StartingPoint(projectId: string): Promise<string> {

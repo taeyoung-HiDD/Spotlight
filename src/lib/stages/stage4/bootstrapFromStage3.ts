@@ -1,5 +1,11 @@
 import type { FieldResearchData } from "@/lib/stages/fieldResearch/types";
 import {
+  isStage4ResearchSynthesisMethod,
+} from "@/lib/stages/fieldResearch/researchMethodCatalog";
+import type {
+  Stage3ResearchPrep,
+} from "@/lib/stages/fieldResearch/stage3ResearchPrep";
+import {
   guessMethodIdFromText,
   type ResearchSubject,
 } from "@/lib/stages/stage4/researchSynthesisSubject";
@@ -8,9 +14,95 @@ import type { Stage4PersonaEmpathyMap } from "@/lib/stages/stage4/types";
 import {
   createResearchSubject,
   createSynthesisNote,
+  filterMeaningfulResearchSubjects,
   type ResearchSynthesisData,
   type SynthesisNoteKind,
 } from "@/lib/stages/stage4/researchSynthesisTypes";
+
+/** 데이터 정리 조사 대상 슬롯 상한 (패널과 동일) */
+const MAX_RESEARCH_SUBJECTS = 12;
+
+function pickDefaultResearchMethod(
+  prep: Stage3ResearchPrep,
+): ResearchSubject["researchMethodId"] {
+  for (const id of prep.selectedMethods) {
+    if (isStage4ResearchSynthesisMethod(id)) return id;
+  }
+  return "";
+}
+
+function buildSubjectSlotsFromPrep(
+  prep: Stage3ResearchPrep,
+  targetCount: number,
+): Array<{ name: string; context: string }> {
+  const slots: Array<{ name: string; context: string }> = [];
+  for (const seg of prep.segments) {
+    const n = Math.max(0, Math.floor(seg.selectedCount));
+    for (let i = 0; i < n && slots.length < targetCount; i += 1) {
+      const label = seg.label.trim();
+      slots.push({
+        name: n > 1 && label ? `${label} ${i + 1}` : label,
+        context: "",
+      });
+    }
+  }
+  while (slots.length < targetCount) {
+    slots.push({ name: "", context: "" });
+  }
+  return slots;
+}
+
+/**
+ * 단계 3 「사용자 조사 준비하기」에서 정한 인원·세그먼트에 맞춰
+ * 데이터 정리 조사 대상 슬롯을 맞춘다. 이미 내용이 있는 대상은 유지하고
+ * 부족분만 채운다. 전부 빈 슬롯이면 준비 내용으로 재구성한다.
+ */
+export function ensureSubjectsFromStage3ResearchPrep(
+  synthesis: ResearchSynthesisData,
+  field: Pick<FieldResearchData, "researchPrep">,
+): ResearchSynthesisData {
+  const prep = field.researchPrep;
+  const targetCount = Math.min(
+    MAX_RESEARCH_SUBJECTS,
+    Math.max(1, Math.round(Number(prep.selectedParticipantCount)) || 1),
+  );
+
+  const meaningful = filterMeaningfulResearchSubjects(synthesis);
+  const defaultMethod = pickDefaultResearchMethod(prep);
+
+  if (meaningful.length >= targetCount) {
+    return synthesis;
+  }
+
+  if (meaningful.length > 0) {
+    if (synthesis.subjects.length >= targetCount) return synthesis;
+    const subjects = [...synthesis.subjects];
+    while (subjects.length < targetCount) {
+      subjects.push({
+        ...createResearchSubject(subjects.length),
+        researchMethodId: defaultMethod,
+      });
+    }
+    return { ...synthesis, subjects };
+  }
+
+  const slots = buildSubjectSlotsFromPrep(prep, targetCount);
+  const subjects = slots.map((slot, index) => ({
+    ...createResearchSubject(index),
+    name: slot.name,
+    context: slot.context,
+    researchMethodId: defaultMethod,
+  }));
+  const subjectIds = new Set(subjects.map((s) => s.id));
+
+  return {
+    ...synthesis,
+    subjects,
+    notes: synthesis.notes.filter(
+      (n) => subjectIds.has(n.subjectId) && n.text.trim(),
+    ),
+  };
+}
 
 function logKindToNoteKind(
   kind: "behavior" | "quote" | "note",
@@ -193,6 +285,24 @@ export function importFromEmpathyMaps(
         "observation",
         item.text,
         `s4-does-${map.id}-${item.id}`,
+      );
+    }
+    for (const item of map.quadrants.thinks) {
+      addNoteIfNew(
+        next,
+        subjectId,
+        "finding",
+        item.text,
+        `s4-thinks-${map.id}-${item.id}`,
+      );
+    }
+    for (const item of map.quadrants.feels) {
+      addNoteIfNew(
+        next,
+        subjectId,
+        "finding",
+        item.text,
+        `s4-feels-${map.id}-${item.id}`,
       );
     }
   });

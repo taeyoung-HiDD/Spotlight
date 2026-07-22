@@ -1,5 +1,6 @@
 "use client";
 
+import { useUiLocale } from "@/hooks/useUiLocale";
 import { useMemo } from "react";
 import { AnimatedCoachPanel } from "@/components/stage/motion/AnimatedCoachPanel";
 import type { CoachDialogItem } from "@/components/stage/motion/CoachSequentialDialog";
@@ -37,8 +38,9 @@ export function ConceptSheetCoachPanel({
   data,
   variant,
 }: ConceptSheetCoachPanelProps) {
-  const stageConfig = getStageConfig(9);
-  const purpose = getStagePurposeCopy(9);
+  const stageConfig = getStageConfig(10);
+  const locale = useUiLocale();
+  const purpose = getStagePurposeCopy(10, locale);
   const ready = isConceptSheetReadyForStoryboard(data);
 
   const introMessages = useMemo((): CoachDialogItem[] => {
@@ -60,7 +62,7 @@ export function ConceptSheetCoachPanel({
   const chatContext = useMemo(
     () => ({
       projectId,
-      stageId: 9,
+      stageId: 10,
       stageTitle: "컨셉 정리하기",
       artifactSummary: summarizeConcept(data),
       stageBehaviorNote:
@@ -71,7 +73,7 @@ export function ConceptSheetCoachPanel({
 
   const workHint = ready
     ? "4 필드가 채워졌어요. 스토리보드 문장을 다듬고 「AI 스토리보드 생성」을 눌러 보세요."
-    : "빈 칸은 「AI로 채우기」로 가설 초안을 받을 수 있어요. 5단계 진짜 동기는 자동으로 연결됩니다.";
+    : "빈 칸은 「AI로 채우기」로 가설 초안을 받을 수 있어요. 6단계 진짜 동기는 자동으로 연결됩니다.";
 
   if (variant === "intro") {
     return (
@@ -98,7 +100,7 @@ export function ConceptSheetCoachPanel({
       ]}
       showComposer
       chatContext={chatContext}
-      inputGuide={getStageWorkInputGuide(9)}
+      inputGuide={getStageWorkInputGuide(10, locale)}
     />
   );
 }

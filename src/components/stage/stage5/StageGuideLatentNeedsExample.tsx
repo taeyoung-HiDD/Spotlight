@@ -2,8 +2,10 @@
 
 import { IconChevronDown, IconPlus } from "@tabler/icons-react";
 import type { ReactNode } from "react";
+import { LocalizedText } from "@/components/i18n/LocalizedText";
 import { SubjectInitialBadge } from "@/components/stage/stage5/SubjectInitialBadge";
-import { POSTIT_SHELL_WIDTH } from "@/lib/stages/stage4/postitLayout";
+import { useUiLocale } from "@/hooks/useUiLocale";
+import { POSTIT_SHELL_WIDTH_STAGE5 } from "@/lib/stages/stage4/postitLayout";
 import type {
   StageGuideLatentNeedsPairExample,
   StageGuideVisualExample,
@@ -14,8 +16,8 @@ import type {
 } from "@/lib/stages/stage5/latentNeedsTypes";
 
 const SOURCE_KIND_LABEL = {
-  quote: "언급한 것",
-  observation: "관찰한 것",
+  quote: { ko: "언급한 것", en: "Quoted" },
+  observation: { ko: "관찰한 것", en: "Observed" },
 } as const;
 
 function demoSubject(name: string, index: number): Stage5SubjectRef {
@@ -65,12 +67,13 @@ function GuidePairCard({
   pair: StageGuideLatentNeedsPairExample;
   subjectIndex: number;
 }) {
+  const locale = useUiLocale();
   const subject = demoSubject(pair.subjectName, subjectIndex);
-  const sourceLabel = SOURCE_KIND_LABEL[pair.sourceKind];
+  const sourceLabel = SOURCE_KIND_LABEL[pair.sourceKind][locale];
 
   return (
     <div
-      className={`${POSTIT_SHELL_WIDTH} shrink-0 source-latent-pair pointer-events-none select-none`}
+      className={`${POSTIT_SHELL_WIDTH_STAGE5} shrink-0 source-latent-pair pointer-events-none select-none`}
       aria-hidden
     >
       <div className="source-latent-pair__frame flex flex-col gap-2">
@@ -84,8 +87,8 @@ function GuidePairCard({
             subject={subject}
             subjectIndex={subjectIndex}
           >
-            <p className="synthesis-postit-text break-keep pb-8">
-              {pair.sourceText}
+            <p className="synthesis-postit-text break-keep">
+              <LocalizedText>{pair.sourceText}</LocalizedText>
             </p>
           </GuidePostitPaper>
         </div>
@@ -98,12 +101,12 @@ function GuidePairCard({
                 subject={subject}
                 subjectIndex={subjectIndex}
               >
-                <p className="synthesis-postit-text break-keep pb-8">
-                  {pair.latentText}
+                <p className="synthesis-postit-text break-keep">
+                  <LocalizedText>{pair.latentText}</LocalizedText>
                 </p>
                 {pair.kevinGenerated ? (
                   <span className="synthesis-postit-caption absolute bottom-2.5 left-2 pr-9 text-[11px] font-medium">
-                    Kevin 초안
+                    {locale === "en" ? "Kevin draft" : "Kevin 초안"}
                   </span>
                 ) : null}
               </GuidePostitPaper>
@@ -114,9 +117,11 @@ function GuidePairCard({
             className="source-latent-pair__preview"
             aria-hidden
           >
-            <span className="source-latent-pair__preview-badge">잠재 니즈</span>
+            <span className="source-latent-pair__preview-badge">
+              {locale === "en" ? "Latent need" : "잠재 니즈"}
+            </span>
             <span className="source-latent-pair__preview-text truncate">
-              {pair.latentText}
+              <LocalizedText>{pair.latentText}</LocalizedText>
             </span>
             <IconChevronDown
               className="source-latent-pair__preview-icon size-3.5 shrink-0"
@@ -136,6 +141,7 @@ interface StageGuideLatentNeedsExampleProps {
 export function StageGuideLatentNeedsExample({
   visual,
 }: StageGuideLatentNeedsExampleProps) {
+  const locale = useUiLocale();
   return (
     <div className="latent-needs-board rounded-xl border border-border-warm bg-cream/25 px-3 py-4 sm:px-4">
       <div className="mb-3 flex flex-wrap items-center gap-2">
@@ -144,21 +150,25 @@ export function StageGuideLatentNeedsExample({
         ).map((kind) => {
           const meta =
             kind === "quote"
-              ? { label: "언급한 것", class: "latent-needs-board__legend latent-needs-board__legend--quote" }
+              ? {
+                  label: locale === "en" ? "Quoted" : "언급한 것",
+                  class:
+                    "latent-needs-board__legend latent-needs-board__legend--quote",
+                }
               : kind === "observation"
                 ? {
-                    label: "관찰한 것",
+                    label: locale === "en" ? "Observed" : "관찰한 것",
                     class:
                       "latent-needs-board__legend latent-needs-board__legend--observation",
                   }
                 : kind === "finding"
                   ? {
-                      label: "발견한 것",
+                      label: locale === "en" ? "Finding" : "발견한 것",
                       class:
                         "latent-needs-board__legend latent-needs-board__legend--finding",
                     }
                   : {
-                      label: "잠재 니즈",
+                      label: locale === "en" ? "Latent need" : "잠재 니즈",
                       class:
                         "latent-needs-board__legend latent-needs-board__legend--latent",
                     };

@@ -1,17 +1,11 @@
 import { STAGE_COUNT } from "@/lib/stages/constants";
 
-/** 한 번 도달한 구간(maxReached) 안에서, 선행 단계가 완료된 세부 단계만 이동 가능 */
+/** 사이드바에서 1~STAGE_COUNT 모든 단계로 자유 이동 가능 */
 export function canNavigateToStage(
   stage: number,
-  completedStages: number[],
-  currentStage: number,
-  maxReachedStage: number,
+  _completedStages: number[] = [],
+  _currentStage = 1,
+  _maxReachedStage = STAGE_COUNT,
 ): boolean {
-  if (stage < 1 || stage > STAGE_COUNT) return false;
-  if (stage > maxReachedStage) return false;
-  if (stage === currentStage) return true;
-  for (let s = 1; s < stage; s++) {
-    if (!completedStages.includes(s)) return false;
-  }
-  return true;
+  return stage >= 1 && stage <= STAGE_COUNT;
 }

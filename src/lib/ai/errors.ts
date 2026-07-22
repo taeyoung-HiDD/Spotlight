@@ -12,13 +12,24 @@ export function formatGroqError(error: unknown): string {
   return "AI 응답을 생성하지 못했습니다. 잠시 후 다시 시도해 주세요.";
 }
 
-export function formatGeminiImageError(error: unknown): string {
+export function formatImageGenerateError(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error);
-  if (message.includes("429") || message.toLowerCase().includes("quota")) {
-    return "Gemini 이미지 API 한도에 도달했습니다. 잠시 후 다시 시도해 주세요.";
+  const lower = message.toLowerCase();
+  if (lower.includes("429") || lower.includes("quota") || lower.includes("rate")) {
+    return "이미지 API 요청 한도에 도달했습니다. 잠시 후 다시 시도해 주세요.";
   }
-  if (message.includes("403") || message.toLowerCase().includes("api key")) {
+  if (
+    lower.includes("403") ||
+    lower.includes("401") ||
+    lower.includes("api key") ||
+    lower.includes("unauthorized")
+  ) {
     return "GEMINI_API_KEY가 유효하지 않습니다. Google AI Studio에서 키를 확인해 주세요.";
   }
   return "이미지를 생성하지 못했습니다. 잠시 후 다시 시도해 주세요.";
+}
+
+/** @deprecated formatImageGenerateError 사용 */
+export function formatGeminiImageError(error: unknown): string {
+  return formatImageGenerateError(error);
 }

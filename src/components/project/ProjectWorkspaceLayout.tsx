@@ -12,6 +12,8 @@ interface ProjectWorkspaceLayoutProps {
   currentStage: number;
   maxReachedStage: number;
   completedStages: number[];
+  archiveActive?: boolean;
+  archiveEntryCount?: number;
   children: ReactNode;
 }
 
@@ -20,6 +22,8 @@ export function ProjectWorkspaceLayout({
   currentStage,
   maxReachedStage,
   completedStages,
+  archiveActive = false,
+  archiveEntryCount,
   children,
 }: ProjectWorkspaceLayoutProps) {
   const [collapsed, setCollapsed] = useState(false);
@@ -50,6 +54,8 @@ export function ProjectWorkspaceLayout({
           completedStages={completedStages}
           collapsed={hydrated ? collapsed : false}
           onCollapsedChange={onCollapsedChange}
+          archiveActive={archiveActive}
+          archiveEntryCount={archiveEntryCount}
         />
       </div>
 

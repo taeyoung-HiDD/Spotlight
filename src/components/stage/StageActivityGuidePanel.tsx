@@ -1,11 +1,16 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { IconBook2, IconX } from "@tabler/icons-react";
+import { LocalizedText } from "@/components/i18n/LocalizedText";
 import { StageGuideLatentNeedsExample } from "@/components/stage/stage5/StageGuideLatentNeedsExample";
 import { StageGuideUserJourneyExample } from "@/components/stage/stage6/StageGuideUserJourneyExample";
+import { StageGuideHmwExample } from "@/components/stage/stage7/StageGuideHmwExample";
+import { useT } from "@/hooks/useT";
+import { useUiLocale } from "@/hooks/useUiLocale";
 import { getStageActivityGuide } from "@/lib/stages/stageActivityGuides";
-import { STAGE_META } from "@/lib/stages/constants";
+import { SIDEBAR_MACRO_GROUPS } from "@/lib/stages/sidebarNav";
+import type { MessageKey } from "@/lib/i18n/messages";
 import {
   stageBody,
   stageBtnPrimary,
@@ -19,22 +24,44 @@ import {
 interface StageActivityGuidePanelProps {
   stageNumber: number;
   mode: "gate" | "dialog";
+  variant?: "full" | "minimal";
   showDismissOption: boolean;
   onStart: (dontShowAgain: boolean) => void;
   onClose?: () => void;
 }
 
+const MACRO_MESSAGE_KEYS: Record<string, MessageKey> = {
+  empathize: "macro.empathize",
+  analyze: "macro.analyze",
+  ideate: "macro.ideate",
+  prototype: "macro.prototype",
+  business: "macro.business",
+};
+
 export function StageActivityGuidePanel({
   stageNumber,
   mode,
+  variant = "full",
   showDismissOption,
   onStart,
   onClose,
 }: StageActivityGuidePanelProps) {
   const [dontShowAgain, setDontShowAgain] = useState(false);
-  const guide = getStageActivityGuide(stageNumber);
-  const meta = STAGE_META[stageNumber];
+  const locale = useUiLocale();
+  const t = useT();
+  const guide = useMemo(
+    () => getStageActivityGuide(stageNumber, locale),
+    [stageNumber, locale],
+  );
   const isDialog = mode === "dialog";
+  const isMinimal = variant === "minimal";
+
+  const macroGroup = SIDEBAR_MACRO_GROUPS.find((g) =>
+    g.stages.some((s) => s.id === stageNumber),
+  );
+  const macroLabel = macroGroup
+    ? t(MACRO_MESSAGE_KEYS[macroGroup.id] ?? "macro.empathize")
+    : "";
 
   const panel = (
     <section
@@ -48,7 +75,7 @@ export function StageActivityGuidePanel({
         <button
           type="button"
           onClick={onClose}
-          aria-label="가이드 닫기"
+          aria-label={t("guide.closeAria")}
           className="absolute top-4 right-4 rounded-md p-1.5 text-muted transition-colors hover:bg-surface hover:text-foreground"
         >
           <IconX className="size-5" stroke={2} />
@@ -58,11 +85,11 @@ export function StageActivityGuidePanel({
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <span className="inline-flex items-center gap-1.5 rounded-md border border-border-warm bg-cream/60 px-2.5 py-1 text-[13px] font-semibold text-foreground">
           <IconBook2 className="size-4 text-gold" stroke={2} />
-          단계 가이드
+          {t("guide.badge")}
         </span>
-        {meta ? (
+        {macroGroup ? (
           <span className={stageCaption}>
-            {meta.macro} · 단계 {stageNumber}
+            {t("guide.stageMeta", { macro: macroLabel, stage: stageNumber })}
           </span>
         ) : null}
       </div>
@@ -71,12 +98,18 @@ export function StageActivityGuidePanel({
         id={`stage-guide-title-${stageNumber}`}
         className={stageSectionTitle}
       >
-        {guide.headline}
+        <LocalizedText>{guide.headline}</LocalizedText>
       </h2>
-      <p className={`mt-2 mb-5 ${stageBody}`}>{guide.summary}</p>
+      {!isMinimal ? (
+        <p className={`mt-2 mb-5 ${stageBody}`}>
+          <LocalizedText>{guide.summary}</LocalizedText>
+        </p>
+      ) : (
+        <p className={`mt-2 mb-5 ${stageCaption}`}>{t("guide.minimalLead")}</p>
+      )}
 
       <div className="mb-5">
-        <p className={`mb-3 ${stageLabel}`}>이 단계에서 할 일</p>
+        <p className={`mb-3 ${stageLabel}`}>{t("guide.todoHeading")}</p>
         <ol className="space-y-3">
           {guide.activities.map((activity, index) => (
             <li
@@ -91,50 +124,77 @@ export function StageActivityGuidePanel({
               </span>
               <div className="min-w-0">
                 <p className="text-[16px] font-semibold text-foreground break-keep">
-                  {activity.title}
+                  <LocalizedText>{activity.title}</LocalizedText>
                 </p>
-                <p className={`mt-0.5 ${stageCaption}`}>{activity.description}</p>
+                {!isMinimal ? (
+                  <p className={`mt-0.5 ${stageCaption}`}>
+                    <LocalizedText>{activity.description}</LocalizedText>
+                  </p>
+                ) : null}
               </div>
             </li>
           ))}
         </ol>
       </div>
 
-      <div className="mb-5">
-        <p className={`mb-2 ${stageLabel}`}>{guide.example.label}</p>
-        {guide.visualExample?.type === "latent_needs_board" ? (
-          <>
-            <p className={`mb-3 ${stageCaption} break-keep`}>
-              {guide.example.content}
+      {!isMinimal ? (
+        <>
+          <div className="mb-5">
+            <p className={`mb-2 ${stageLabel}`}>
+              <LocalizedText>{guide.example.label}</LocalizedText>
             </p>
-            <StageGuideLatentNeedsExample visual={guide.visualExample} />
-            {guide.visualExample.caption ? (
-              <p className={`mt-3 ${stageCaption} break-keep`}>
-                {guide.visualExample.caption}
-              </p>
-            ) : null}
-          </>
-        ) : guide.visualExample?.type === "user_journey_map" ? (
-          <>
-            <p className={`mb-3 ${stageCaption} break-keep`}>
-              {guide.example.content}
-            </p>
-            <StageGuideUserJourneyExample visual={guide.visualExample} />
-            {guide.visualExample.caption ? (
-              <p className={`mt-3 ${stageCaption} break-keep`}>
-                {guide.visualExample.caption}
-              </p>
-            ) : null}
-          </>
-        ) : (
-          <div className="rounded-xl border border-gold/35 bg-highlight px-4 py-3.5">
-            <p className={`${stageBody} break-keep`}>{guide.example.content}</p>
+            {guide.visualExample?.type === "latent_needs_board" ? (
+              <>
+                <p className={`mb-3 ${stageCaption} break-keep`}>
+                  <LocalizedText>{guide.example.content}</LocalizedText>
+                </p>
+                <StageGuideLatentNeedsExample visual={guide.visualExample} />
+                {guide.visualExample.caption ? (
+                  <p className={`mt-3 ${stageCaption} break-keep`}>
+                    <LocalizedText>{guide.visualExample.caption}</LocalizedText>
+                  </p>
+                ) : null}
+              </>
+            ) : guide.visualExample?.type === "user_journey_map" ? (
+              <>
+                <p className={`mb-3 ${stageCaption} break-keep`}>
+                  <LocalizedText>{guide.example.content}</LocalizedText>
+                </p>
+                <StageGuideUserJourneyExample visual={guide.visualExample} />
+                {guide.visualExample.caption ? (
+                  <p className={`mt-3 ${stageCaption} break-keep`}>
+                    <LocalizedText>{guide.visualExample.caption}</LocalizedText>
+                  </p>
+                ) : null}
+              </>
+            ) : guide.visualExample?.type === "hmw_board" ? (
+              <>
+                <p className={`mb-3 ${stageCaption} break-keep`}>
+                  <LocalizedText>{guide.example.content}</LocalizedText>
+                </p>
+                <StageGuideHmwExample visual={guide.visualExample} />
+                {guide.visualExample.caption ? (
+                  <p className={`mt-3 ${stageCaption} break-keep`}>
+                    <LocalizedText>{guide.visualExample.caption}</LocalizedText>
+                  </p>
+                ) : null}
+              </>
+            ) : (
+              <div className="rounded-xl border border-gold/35 bg-highlight px-4 py-3.5">
+                <p className={`${stageBody} break-keep`}>
+                  <LocalizedText>{guide.example.content}</LocalizedText>
+                </p>
+              </div>
+            )}
           </div>
-        )}
-      </div>
 
-      {guide.tip ? (
-        <p className={`mb-5 ${stageCaption}`}>팁: {guide.tip}</p>
+          {guide.tip ? (
+            <p className={`mb-5 ${stageCaption}`}>
+              {t("guide.tipPrefix")}{" "}
+              <LocalizedText>{guide.tip}</LocalizedText>
+            </p>
+          ) : null}
+        </>
       ) : null}
 
       <div
@@ -151,12 +211,10 @@ export function StageActivityGuidePanel({
               onChange={(e) => setDontShowAgain(e.target.checked)}
               className="size-4 shrink-0 rounded border-border-warm accent-spotlight"
             />
-            <span className={stageCaption}>다음부터 보지 않기</span>
+            <span className={stageCaption}>{t("guide.dontShowAgain")}</span>
           </label>
         ) : (
-          <span className={stageCaption}>
-            가이드는 단계 제목 옆 「가이드 보기」에서 다시 열 수 있어요.
-          </span>
+          <span className={stageCaption}>{t("guide.reopenHint")}</span>
         )}
 
         <div className="flex flex-wrap gap-2">
@@ -166,7 +224,7 @@ export function StageActivityGuidePanel({
               onClick={onClose}
               className={stageBtnSecondary}
             >
-              닫기
+              {t("guide.close")}
             </button>
           ) : null}
           <button
@@ -174,7 +232,7 @@ export function StageActivityGuidePanel({
             onClick={() => onStart(dontShowAgain)}
             className={stageBtnPrimary}
           >
-            {isDialog ? "확인" : "시작하기 →"}
+            {isDialog ? t("guide.confirm") : t("guide.start")}
           </button>
         </div>
       </div>

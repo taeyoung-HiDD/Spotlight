@@ -25,11 +25,7 @@ function formatMediaList(files: ResearchMediaFile[]): string {
 export function buildSynthesisDebriefContext(
   synthesis: ResearchSynthesisData,
 ): string {
-  const lines: string[] = ["[데이터 정리 · 디브리핑 자료 요약]"];
-
-  if (synthesis.themes.length) {
-    lines.push(`테마: ${synthesis.themes.join(" · ")}`);
-  }
+  const lines: string[] = ["[발견 정리하기 · 디브리핑 자료 요약]"];
 
   if (synthesis.teamDebriefNote.trim()) {
     lines.push(`\n팀 디브리핑 메모:\n${synthesis.teamDebriefNote.trim()}`);
@@ -39,6 +35,22 @@ export function buildSynthesisDebriefContext(
     lines.push(
       `\n팀 디브리핑 음성:\n${formatMediaList(synthesis.teamDebriefMediaFiles)}`,
     );
+  }
+
+  const mda = synthesis.multidisciplinaryAnalysis;
+  if (mda?.overview.trim()) {
+    lines.push(`\n다학제적 분석 요약:\n${mda.overview.trim()}`);
+  }
+  if (mda?.bySubject?.length) {
+    for (const s of mda.bySubject) {
+      if (!s.insights.length) continue;
+      lines.push(`\n## 다학제 해설 · ${s.subjectName || s.subjectId}`);
+      for (const insight of s.insights) {
+        lines.push(
+          `· [${insight.expertLabelKo}/${insight.expertLabelEn}] ${insight.analysis}`,
+        );
+      }
+    }
   }
 
   for (const subject of synthesis.subjects) {
@@ -65,8 +77,7 @@ export function buildSynthesisDebriefContext(
       const meta = getSynthesisKindMeta(kind);
       lines.push(`\n[${meta.label}]`);
       for (const n of kindNotes) {
-        const theme = n.theme.trim() ? ` (테마: ${n.theme})` : "";
-        lines.push(`· ${n.text.trim()}${theme}`);
+        lines.push(`· ${n.text.trim()}`);
       }
     }
 
@@ -84,6 +95,16 @@ export function hasSynthesisDebriefSource(
 ): boolean {
   if (synthesis.teamDebriefNote.trim()) return true;
   if (synthesis.teamDebriefMediaFiles.length > 0) return true;
+  if (synthesis.multidisciplinaryAnalysis?.overview?.trim()) return true;
+  if (
+    synthesis.multidisciplinaryAnalysis?.bySubject?.some(
+      (s) =>
+        s.insights.some((i) => i.analysis.trim()) ||
+        Boolean(s.rootReading?.latentRoot?.text),
+    )
+  ) {
+    return true;
+  }
   if (synthesis.notes.some((n) => n.text.trim())) return true;
   return synthesis.subjects.some((s) => s.mediaFiles.length > 0);
 }

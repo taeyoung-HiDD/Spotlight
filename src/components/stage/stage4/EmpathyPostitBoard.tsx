@@ -1,12 +1,16 @@
 "use client";
 
 import { EmpathyQuadrantPostits } from "@/components/stage/stage4/EmpathyQuadrantPostits";
+import { PersonaBioFields } from "@/components/stage/stage4/PersonaBioFields";
 import { PersonaThumbnailField } from "@/components/stage/stage4/PersonaThumbnailField";
+import { VirtualPersonaProfileCard } from "@/components/stage/stage4/VirtualPersonaProfileCard";
+import type { NemotronPersonaProfile } from "@/lib/personas/nemotronPersona";
 import {
   EMPATHY_QUADRANTS,
   type EmpathyQuadrantId,
   type EmpathyStickyItem,
 } from "@/lib/stages/stage2/empathyMap";
+import type { PersonaBio } from "@/lib/stages/stage4/personaBio";
 
 interface EmpathyPostitBoardProps {
   quadrants: Record<EmpathyQuadrantId, EmpathyStickyItem[]>;
@@ -16,8 +20,18 @@ interface EmpathyPostitBoardProps {
   ) => void;
   personaName: string;
   personaContext: string;
+  personaBio: PersonaBio;
+  /** 매칭된 Nemotron 가상 사용자 (있으면 배경 카드 표시) */
+  personaProfile?: NemotronPersonaProfile;
+  onBioChange?: (bio: PersonaBio) => void;
+  onBioAiGenerate?: () => void;
+  bioAiLoading?: boolean;
+  bioEditable?: boolean;
+  /** false면 Bio 입력은 상단 상세에서만 (중복 방지) */
+  showBioFields?: boolean;
   personaThumbnailUrl: string;
   onThumbnailChange: (url: string) => void;
+  mapId: string;
 }
 
 export function EmpathyPostitBoard({
@@ -25,18 +39,47 @@ export function EmpathyPostitBoard({
   onChange,
   personaName,
   personaContext,
+  personaBio,
+  personaProfile,
+  onBioChange,
+  onBioAiGenerate,
+  bioAiLoading = false,
+  bioEditable = true,
+  showBioFields = true,
   personaThumbnailUrl,
   onThumbnailChange,
+  mapId,
 }: EmpathyPostitBoardProps) {
-  const displayName = personaName.trim() || "페르소나";
+  const displayName = personaBio.name.trim() || personaName.trim() || "페르소나";
+  const subtitle = personaContext.trim();
 
   return (
     <div className="empathy-map-board">
-      <h3 className="empathy-map-title break-keep">
-        Empathy Map: {displayName}
+      {showBioFields && onBioChange ? (
+        <PersonaBioFields
+          bio={personaBio}
+          onChange={onBioChange}
+          onAiGenerate={onBioAiGenerate}
+          aiLoading={bioAiLoading}
+          editable={bioEditable}
+          mapId={mapId}
+        />
+      ) : null}
+
+      {showBioFields && personaProfile ? (
+        <VirtualPersonaProfileCard profile={personaProfile} />
+      ) : null}
+
+      <h3
+        className={[
+          "empathy-map-title break-keep",
+          showBioFields ? "mt-5" : "",
+        ].join(" ")}
+      >
+        {displayName}
       </h3>
-      {personaContext.trim() ? (
-        <p className="empathy-map-subtitle break-keep">{personaContext}</p>
+      {subtitle ? (
+        <p className="empathy-map-subtitle break-keep">{subtitle}</p>
       ) : null}
 
       <div className="empathy-map-grid-wrap">
@@ -66,8 +109,8 @@ export function EmpathyPostitBoard({
         <div className="empathy-map-center">
           <PersonaThumbnailField
             variant="center"
-            name={personaName}
-            context={personaContext}
+            name={displayName}
+            context={subtitle}
             thumbnailUrl={personaThumbnailUrl}
             onThumbnailChange={onThumbnailChange}
           />

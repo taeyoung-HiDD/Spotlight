@@ -1,0 +1,103 @@
+import type { Stage5LatentNeedsData } from "@/lib/stages/stage5/latentNeedsTypes";
+import {
+  applyGeneratedHmw,
+  applyHeuristicHmwDrafts,
+  buildHmwGenerationInputs,
+  requestHmwGeneration,
+} from "@/lib/stages/stage7/generateHmwClient";
+import {
+  createHmwQuestionId,
+  type HmwQuestion,
+  type Stage7HmwData,
+} from "@/lib/stages/stage7/hmwTypes";
+
+export function stage5HasLatentNeeds(data: Stage5LatentNeedsData): boolean {
+  return data.postits.some(
+    (p) => p.kind === "latent_need" && p.text.trim().length > 0,
+  );
+}
+
+export function hmwQuestionsChanged(
+  before: Stage7HmwData,
+  after: Stage7HmwData,
+): boolean {
+  if (before.questions.length !== after.questions.length) return true;
+  const idsBefore = before.questions
+    .map((q) => `${q.latentNeedId}:${q.latentNeedText}`)
+    .sort()
+    .join("|");
+  const idsAfter = after.questions
+    .map((q) => `${q.latentNeedId}:${q.latentNeedText}`)
+    .sort()
+    .join("|");
+  return idsBefore !== idsAfter;
+}
+
+/** HMW 본문·니즈 스냅샷 등 저장이 필요한 변경인지 */
+export function hmwDataChanged(
+  before: Stage7HmwData,
+  after: Stage7HmwData,
+): boolean {
+  if (hmwQuestionsChanged(before, after)) return true;
+  const beforeById = new Map(before.questions.map((q) => [q.id, q]));
+  return after.questions.some((q) => {
+    const prev = beforeById.get(q.id);
+    if (!prev) return true;
+    return (
+      prev.hmwText.trim() !== q.hmwText.trim() ||
+      prev.latentNeedText.trim() !== q.latentNeedText.trim()
+    );
+  });
+}
+
+export function mergeStage5IntoHmw(
+  hmw: Stage7HmwData,
+  stage5: Stage5LatentNeedsData,
+): Stage7HmwData {
+  const latentNeeds = stage5.postits.filter(
+    (p) => p.kind === "latent_need" && p.text.trim(),
+  );
+  const existingByNeedId = new Map(
+    hmw.questions.map((q) => [q.latentNeedId, q]),
+  );
+
+  const questions: HmwQuestion[] = latentNeeds.map((need) => {
+    const existing = existingByNeedId.get(need.id);
+    return {
+      id: existing?.id ?? createHmwQuestionId(),
+      latentNeedId: need.id,
+      subjectId: need.subjectId,
+      latentNeedText: need.text.trim(),
+      hmwText: existing?.hmwText ?? "",
+      kevinGenerated: existing?.kevinGenerated,
+    };
+  });
+
+  return {
+    ...hmw,
+    subjects: stage5.subjects,
+    questions,
+    stage5SyncedAt: new Date().toISOString(),
+  };
+}
+
+/**
+ * 7단계 진입 시 5단계 잠재 니즈를 병합하고, 비어 있는 HMW 질문을 자동 생성.
+ * AI 생성 실패 시 휴리스틱 초안으로 폴백.
+ */
+export async function bootstrapHmwOnEntry(
+  hmw: Stage7HmwData,
+  stage5: Stage5LatentNeedsData,
+  projectId: string,
+): Promise<Stage7HmwData> {
+  const merged = mergeStage5IntoHmw(hmw, stage5);
+  const inputs = buildHmwGenerationInputs(merged);
+  if (inputs.length === 0) return merged;
+
+  try {
+    const response = await requestHmwGeneration(projectId, inputs);
+    return applyGeneratedHmw(merged, response.items);
+  } catch {
+    return applyHeuristicHmwDrafts(merged);
+  }
+}

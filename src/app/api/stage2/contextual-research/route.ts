@@ -14,6 +14,7 @@ import {
   CONTEXTUAL_DIMENSIONS,
   type ContextualDimensionId,
 } from "@/lib/stages/stage2/contextualDimensions";
+import { COACH_EMPATHY_MAP_PROMPT_RULE } from "@/lib/coach/sanitizeCoachKorean";
 import { buildDimensionGuidelinePrompt } from "@/lib/stages/stage2/contextualResearchGuidelines";
 
 function isDimensionId(value: string): value is ContextualDimensionId {
@@ -61,7 +62,8 @@ function buildFindingsPrompt(
   const defaultRules = isPeopleContextualDimension(dimensionId)
     ? ""
     : `
-- 섹션: 핵심 발견 (가설) / 참고할 관점 (각 2~4개 불릿, · 로 시작, 모두 평서문)
+- 섹션: 핵심 발견 (가설) / 참고할 관점 (각 2~4개 불릿, · 로 시작)
+- 모든 문장은 존댓말(~습니다/~입니다/~됩니다)로 통일. ~이다/~다/~함 등 평서체 금지
 - 400~700자`;
 
   const guidelineBlock = buildDimensionGuidelinePrompt(dimensionId);
@@ -73,7 +75,8 @@ function buildFindingsPrompt(
 ${guidelineBlock}
 
 규칙:
-- 없는 사실은 단정하지 마세요. 평서문 가설·관찰만 쓰세요.
+- ${COACH_EMPATHY_MAP_PROMPT_RULE}
+- 없는 사실은 단정하지 마세요. 존댓말 가설·관찰만 쓰세요 (~습니다/~입니다 체).
 - 질문형·의문형 문장, 물음표(?), 「현장에서 확인할 질문」 섹션은 절대 넣지 마세요.
 - 말머리: [${dimensionLabel}] 사전 조사 메모 (가설)${defaultRules}
 - 마크다운 제목(#) 없이 plain text

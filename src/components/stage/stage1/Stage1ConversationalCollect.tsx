@@ -1,11 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AnimatedCoachPanel } from "@/components/stage/motion/AnimatedCoachPanel";
-import type { CoachDialogItem } from "@/components/stage/motion/CoachSequentialDialog";
-import { StageContinueGatePanel } from "@/components/stage/StageContinueGatePanel";
-import { Stage1HopesGatePanel } from "@/components/stage/stage1/Stage1HopesGatePanel";
-import { Stage1TeamInvitePanel } from "@/components/stage/stage1/Stage1TeamInvitePanel";
+import { IconArrowRight } from "@tabler/icons-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { LocalizedEditableTextarea } from "@/components/i18n/LocalizedEditableField";
 import { StageRevealGroup } from "@/components/stage/motion/StageReveal";
 import type { CoachInputGuide } from "@/lib/coach/inputGuidance";
 import {
@@ -13,27 +10,26 @@ import {
   saveStage1CollectState,
   type Stage1PersistedState,
 } from "@/lib/artifacts/stage1Collect";
-import { formatCoachDialogBreaks } from "@/lib/coach/formatCoachDialog";
 import {
-  advanceFromTeamInvite,
   advanceStage1Collect,
-  advanceToHopesAndFears,
-  firstProjectNameCoachMessage,
   getCollectInputGuideForStep,
+  normalizeLegacyCollectStep,
   type Stage1CollectedData,
   type Stage1CollectStep,
 } from "@/lib/stages/stage1/collectFlow";
+import { STAGE1_CUSTOMER_PROBLEM_RATIONALE_BRIEF } from "@/lib/stages/stage1/customerProblemRationale";
 import type { UserCoachingLevel } from "@/lib/stages/stage1/levelDiagnostic";
-import { stageCoachComposerShell, stageIntroEnterWork, stageIntroShell } from "@/lib/stages/ui";
-
-const KICKOFF_MESSAGES: CoachDialogItem[] = [
-  {
-    type: "bubble",
-    content: formatCoachDialogBreaks(
-      `이제 프로젝트 이름을 정하고, 팀 여부와 Hopes · Fears를 대화로 받을게요.`,
-    ),
-  },
-];
+import {
+  stageBtnPrimary,
+  stageCaption,
+  stageField,
+  stageInput,
+  stageLabel,
+  stagePanel,
+  stageSectionLead,
+  stageSectionTitle,
+  stageTextarea,
+} from "@/lib/stages/ui";
 
 interface Stage1ConversationalCollectProps {
   projectId: string;
@@ -41,7 +37,7 @@ interface Stage1ConversationalCollectProps {
   initialProjectTitle?: string;
   displayName?: string;
   userLevel?: "beginner" | "expert";
-  /** 팀원 · Hopes부터 합류 */
+  /** 팀원 — 프로젝트 합류 후 사전 조사로 이어짐 */
   isInviteMember?: boolean;
   persistedState?: Stage1PersistedState | null;
   onComplete: (data: Stage1CollectedData) => void;
@@ -60,30 +56,13 @@ function toCollected(
     startingPoint: state.startingPoint,
     projectTitle: state.projectTitle,
     teamWantsCollaboration: state.teamWantsCollaboration,
-    hope: state.hope,
-    fear: state.fear,
+    hope: "",
+    fear: "",
     principleAck: state.principleAck,
   };
 }
 
-function memberEntryStep(state: Stage1PersistedState): Stage1CollectStep {
-  if (state.hope.trim()) return state.fear.trim() ? "principle" : "fears";
-  if (state.fear.trim()) return "principle";
-  if (state.collectStep === "fears" || state.collectStep === "principle") {
-    return state.collectStep;
-  }
-  return "hopes_gate";
-}
-
-function normalizeRestoredCollectStep(
-  saved: Stage1CollectStep,
-  state: Stage1PersistedState,
-): Stage1CollectStep {
-  if (saved === "hopes" && !state.hope.trim()) return "hopes_gate";
-  return saved;
-}
-
-/** 단계 1 · 중앙 코치 대화로 슬롯 수집 */
+/** 단계 1 · 프로젝트 이름 · 고객 문제/아이디어 (작업 패널) */
 export function Stage1ConversationalCollect({
   projectId,
   startingPoint: startingPointProp,
@@ -95,20 +74,8 @@ export function Stage1ConversationalCollect({
   onComplete,
   onProjectTitleChange,
 }: Stage1ConversationalCollectProps) {
-  const sceneKey = `stage-1-collect-${projectId}`;
-
   const initialStep: Stage1CollectStep = isInviteMember
-    ? memberEntryStep(
-        persistedState ?? {
-          startingPoint: startingPointProp,
-          projectTitle: initialProjectTitle,
-          teamWantsCollaboration: null,
-          collectStep: "hopes",
-          hope: "",
-          fear: "",
-          principleAck: false,
-        },
-      )
+    ? "project_name"
     : (persistedState?.collectStep ?? "project_name");
 
   const [step, setStep] = useState<Stage1CollectStep>(initialStep);
@@ -121,63 +88,39 @@ export function Stage1ConversationalCollect({
     projectTitle:
       persistedState?.projectTitle?.trim() || initialProjectTitle.trim(),
     teamWantsCollaboration: persistedState?.teamWantsCollaboration ?? null,
-    hope: persistedState?.hope ?? "",
-    fear: persistedState?.fear ?? "",
+    hope: "",
+    fear: "",
     principleAck: persistedState?.principleAck ?? false,
     displayName,
     userLevel,
   }));
+  const [draft, setDraft] = useState("");
+  const [formError, setFormError] = useState<string | null>(null);
   const [artifactId, setArtifactId] = useState<string | null>(null);
-  const [seededKickoff, setSeededKickoff] = useState(false);
-  const [collectDone, setCollectDone] = useState(false);
-  const [pendingComplete, setPendingComplete] = useState<Stage1CollectedData | null>(
-    null,
-  );
-  const [liveCoachLines, setLiveCoachLines] = useState<CoachDialogItem[]>([]);
+  const [seeded, setSeeded] = useState(false);
+  const completingRef = useRef(false);
+  const [pendingComplete, setPendingComplete] =
+    useState<Stage1CollectedData | null>(null);
+  const onCompleteRef = useRef(onComplete);
+  onCompleteRef.current = onComplete;
 
-  const kickoffWithQuestion = useMemo((): CoachDialogItem[] => {
-    if (isInviteMember) {
-      return [
-        {
-          type: "bubble",
-          content: formatCoachDialogBreaks(
-            [
-              displayName?.trim()
-                ? `${displayName.trim()}님, 프로젝트에 합류하신 걸 환영해요.`
-                : "프로젝트에 합류하신 걸 환영해요.",
-              data.projectTitle.trim()
-                ? `프로젝트 「${data.projectTitle.trim()}」에 합류하신 거예요.`
-                : `문제점은 이미 정해져 있어요: 「${data.startingPoint}」`,
-              "준비되시면 아래 「다음으로 진행하기」로 Hopes·Fears 대화를 시작해요.",
-            ].join("\n\n"),
-          ),
-        },
-      ];
-    }
-    return [
-      ...KICKOFF_MESSAGES,
-      {
-        type: "bubble",
-        variant: "secondary",
-        content: firstProjectNameCoachMessage(
-          data.startingPoint,
-          displayName,
-        ),
-      },
-    ];
-  }, [data.startingPoint, displayName, isInviteMember]);
+  useEffect(() => {
+    if (!pendingComplete) return;
+    onCompleteRef.current(pendingComplete);
+  }, [pendingComplete]);
 
   const persist = useCallback(
-    async (next: Stage1CollectedData, nextStep: Stage1CollectStep) => {
+    async (next: Stage1CollectedData, nextStep: Stage1CollectStep | "done") => {
       const state: Stage1PersistedState = {
         startingPoint: next.startingPoint,
         projectTitle: next.projectTitle,
         teamWantsCollaboration: next.teamWantsCollaboration,
-        collectStep: nextStep,
+        collectStep:
+          nextStep === "done" ? "team_collaboration" : nextStep,
         displayName: next.displayName,
         userLevel: next.userLevel,
-        hope: next.hope,
-        fear: next.fear,
+        hope: "",
+        fear: "",
         principleAck: next.principleAck,
       };
       const id = await saveStage1CollectState(projectId, state, artifactId);
@@ -188,7 +131,7 @@ export function Stage1ConversationalCollect({
 
   useEffect(() => {
     let cancelled = false;
-    (async () => {
+    void (async () => {
       try {
         const { artifactId: aid, state } = await fetchStage1CollectState(projectId);
         if (cancelled) return;
@@ -198,53 +141,67 @@ export function Stage1ConversationalCollect({
           state.projectTitle ||
           state.collectStep !== "starting_point"
         ) {
-          setData((prev) => ({
-            ...prev,
-            ...toCollected(state, displayName, userLevel),
-          }));
-          const restoredStep = normalizeRestoredCollectStep(
+          const collected = toCollected(state, displayName, userLevel);
+          setData((prev) => ({ ...prev, ...collected }));
+          const restoredStep = normalizeLegacyCollectStep(
             state.collectStep,
-            state,
+            collected,
           );
-          setStep(restoredStep);
-          setInputGuide(getCollectInputGuideForStep(restoredStep));
+          const isComplete =
+            state.principleAck ||
+            (collected.startingPoint.trim() && collected.projectTitle.trim());
+          if (isComplete && !completingRef.current) {
+            completingRef.current = true;
+            setPendingComplete({
+              ...collected,
+              principleAck: true,
+              displayName,
+              userLevel,
+            });
+          } else if (!isComplete) {
+            setStep(restoredStep);
+            setInputGuide(getCollectInputGuideForStep(restoredStep));
+            setDraft(
+              restoredStep === "project_name"
+                ? collected.projectTitle
+                : collected.startingPoint,
+            );
+          }
         }
       } catch {
         /* 로컬 상태로 진행 */
       } finally {
-        if (!cancelled) setSeededKickoff(true);
+        if (!cancelled) setSeeded(true);
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [projectId, displayName, userLevel, isInviteMember]);
+  }, [projectId, displayName, userLevel]);
 
   const applyAdvance = useCallback(
     (
       patch: Partial<Stage1CollectedData>,
       nextStep: Stage1CollectStep | "done",
-      coachReply: string,
     ) => {
       if (nextStep === "done") {
-        setCollectDone(true);
-        let mergedForComplete: Stage1CollectedData | null = null;
+        if (completingRef.current) return;
+        completingRef.current = true;
         setData((prev) => {
-          const merged = {
+          const merged: Stage1CollectedData = {
             ...prev,
             ...patch,
+            hope: "",
+            fear: "",
             principleAck: true,
             displayName,
             userLevel,
           };
-          void persist(merged, "principle");
-          mergedForComplete = merged;
+          void persist(merged, "done");
+          queueMicrotask(() => setPendingComplete(merged));
           return merged;
         });
-        if (mergedForComplete) {
-          setPendingComplete(mergedForComplete);
-        }
-        return coachReply;
+        return;
       }
 
       const titleToSync = patch.projectTitle?.trim();
@@ -259,111 +216,136 @@ export function Stage1ConversationalCollect({
       });
       setStep(nextStep);
       setInputGuide(getCollectInputGuideForStep(nextStep));
-
-      return coachReply;
+      setDraft("");
+      setFormError(null);
     },
     [displayName, userLevel, onProjectTitleChange, persist],
   );
 
-  const handleCoachMessage = useCallback(
-    async (message: string): Promise<string> => {
-      if (collectDone) return "";
+  const handleSubmit = useCallback(
+    (event: React.FormEvent) => {
+      event.preventDefault();
 
       const { patch, nextStep, coachReply } = advanceStage1Collect(
         step,
-        message.trim(),
+        draft.trim(),
         {
           startingPoint: data.startingPoint || startingPointProp,
+          projectTitle: data.projectTitle || initialProjectTitle,
           displayName,
         },
       );
 
-      return applyAdvance(patch, nextStep, coachReply);
+      if (nextStep === step && Object.keys(patch).length === 0) {
+        setFormError(coachReply);
+        return;
+      }
+
+      applyAdvance(patch, nextStep);
     },
-    [step, collectDone, applyAdvance, data.startingPoint, startingPointProp, displayName],
+    [
+      applyAdvance,
+      data.projectTitle,
+      data.startingPoint,
+      displayName,
+      draft,
+      initialProjectTitle,
+      startingPointProp,
+      step,
+    ],
   );
 
-  const appendCoachLine = useCallback((coachReply: string) => {
-    if (!coachReply.trim()) return;
-    setLiveCoachLines((lines) => [
-      ...lines,
-      { type: "bubble", content: coachReply },
-    ]);
-  }, []);
+  if (!seeded) return null;
 
-  const handleProceedToHopes = useCallback(() => {
-    const { patch, nextStep, coachReply } = advanceToHopesAndFears();
-    appendCoachLine(coachReply);
-    applyAdvance(patch, nextStep, "");
-  }, [appendCoachLine, applyAdvance]);
-
-  const handleInviteContinue = useCallback(() => {
-    const { patch, nextStep, coachReply } = advanceFromTeamInvite();
-    appendCoachLine(coachReply);
-    applyAdvance(patch, nextStep, "");
-  }, [appendCoachLine, applyAdvance]);
-
-  const handleReviewContinue = useCallback(() => {
-    if (!pendingComplete) return;
-    onComplete(pendingComplete);
-  }, [onComplete, pendingComplete]);
-
-  if (!seededKickoff) return null;
-
-  const showComposer =
-    !collectDone &&
-    step !== "team_invite" &&
-    step !== "hopes_gate" &&
-    step !== "principle";
+  const isProjectNameStep = step === "project_name";
 
   return (
     <StageRevealGroup>
-      <div className={stageIntroShell} data-stage-collect="1">
-        <div className={stageIntroEnterWork}>
-          <AnimatedCoachPanel
-            sceneKey={sceneKey}
-            statusLabel="듣는 중"
-            statusSub={
-              isInviteMember
-                ? "팀 합류 · Hopes · Fears"
-                : "프로젝트 이름 · 팀 · Hopes · Fears"
-            }
-            messages={kickoffWithQuestion}
-            staticCoachLines={liveCoachLines}
-            onCoachMessage={handleCoachMessage}
-            inputGuide={collectDone ? undefined : inputGuide}
-            showComposer={showComposer}
-            composerResetKey={step}
-            footer={
-              collectDone && pendingComplete ? (
-                <div className={stageCoachComposerShell}>
-                  <StageContinueGatePanel
-                    caption="대화로 모은 내용을 바탕으로 왼쪽 검토 화면에서 정리해 볼게요."
-                    onContinue={handleReviewContinue}
-                  />
-                </div>
-              ) : null
-            }
-          />
-          {step === "team_invite" && !collectDone ? (
-            <div className={stageCoachComposerShell}>
-              <Stage1TeamInvitePanel
-                projectId={projectId}
-                onContinue={handleInviteContinue}
-                disabled={collectDone}
+      <section className={stagePanel}>
+        <p className={stageLabel}>
+          {isProjectNameStep ? "프로젝트 이름" : "고객 문제·아이디어"}
+        </p>
+        <h2 className={`mt-1 ${stageSectionTitle}`}>
+          {isProjectNameStep
+            ? "목록에 쓸 프로젝트 이름을 정해 주세요"
+            : "생각하신 고객 문제와 아이디어를 적어 주세요"}
+        </h2>
+        <p className={`mt-2 ${stageSectionLead}`}>
+          {isProjectNameStep
+            ? "팀 초대·프로젝트 목록에서 구분할 짧은 이름이면 충분해요."
+            : data.projectTitle.trim()
+              ? `프로젝트 「${data.projectTitle.trim()}」의 출발점이 될 내용이에요. ${STAGE1_CUSTOMER_PROBLEM_RATIONALE_BRIEF}`
+              : STAGE1_CUSTOMER_PROBLEM_RATIONALE_BRIEF}
+        </p>
+
+        <form onSubmit={handleSubmit} className="mt-8 space-y-4">
+          {isProjectNameStep ? (
+            <label className="block">
+              <span className={`block ${stageLabel}`}>프로젝트 이름</span>
+              <input
+                type="text"
+                value={draft}
+                onChange={(e) => {
+                  setDraft(e.target.value);
+                  setFormError(null);
+                }}
+                placeholder={inputGuide?.placeholder ?? "프로젝트 이름을 입력하세요"}
+                className={`mt-4 block w-full rounded-lg border border-border-warm px-3.5 py-2.5 ${stageField} ${stageInput}`}
+                autoFocus
               />
+            </label>
+          ) : (
+            <label className="block">
+              <span className={`block ${stageLabel}`}>고객 문제 · 아이디어</span>
+              <LocalizedEditableTextarea
+                value={draft}
+                onValueChange={(next) => {
+                  setDraft(next);
+                  setFormError(null);
+                }}
+                placeholder={
+                  inputGuide?.placeholder ??
+                  "사용자 문제, 떠오른 아이디어를 모두 적어 주세요…"
+                }
+                rows={6}
+                className={`mt-4 block w-full rounded-lg border border-border-warm px-3.5 py-2.5 ${stageField} ${stageTextarea}`}
+                autoFocus
+              />
+            </label>
+          )}
+
+          {inputGuide?.hint ? (
+            <p className={stageCaption}>{inputGuide.hint}</p>
+          ) : null}
+
+          {inputGuide?.examples?.length ? (
+            <div className="rounded-lg border border-border-warm bg-cream/40 px-3 py-2.5">
+              <p className={`mb-1.5 ${stageCaption}`}>
+                {inputGuide.title ?? "예시"}
+              </p>
+              <ul className={`space-y-1 ${stageCaption}`}>
+                {inputGuide.examples.slice(0, 3).map((example) => (
+                  <li key={example} className="break-keep">
+                    · {example}
+                  </li>
+                ))}
+              </ul>
             </div>
           ) : null}
-          {step === "hopes_gate" && !collectDone ? (
-            <div className={stageCoachComposerShell}>
-              <Stage1HopesGatePanel
-                onContinue={handleProceedToHopes}
-                disabled={collectDone}
-              />
-            </div>
+
+          {formError ? (
+            <p className="text-[14px] text-destructive break-keep">{formError}</p>
           ) : null}
-        </div>
-      </div>
+
+          <button
+            type="submit"
+            className={`${stageBtnPrimary} inline-flex items-center justify-center gap-1.5`}
+          >
+            {isProjectNameStep ? "다음 · 문제·아이디어" : "다음"}
+            <IconArrowRight className="size-4" stroke={2} aria-hidden />
+          </button>
+        </form>
+      </section>
     </StageRevealGroup>
   );
 }

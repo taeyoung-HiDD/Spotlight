@@ -1,4 +1,25 @@
 import type { Stage5SubjectRef } from "@/lib/stages/stage5/latentNeedsTypes";
+import {
+  allStepItemIds,
+  emptyJourneyZoneItems,
+  JOURNEY_AI_ZONES,
+  JOURNEY_STEP_ZONES,
+  normalizeStepAiTexts,
+  parseGeneratedAiEntries,
+  resolveStepAiEntries,
+  resolveStepZoneItems,
+  stepHasAssignedContent,
+  type JourneyAiZone,
+  type JourneyStepZone,
+} from "@/lib/stages/stage6/journeyStepZones";
+
+export type { JourneyAiZone, JourneyStepZone };
+export {
+  JOURNEY_AI_ZONES,
+  JOURNEY_STEP_ZONES,
+  parseGeneratedAiEntries,
+  resolveStepAiEntries,
+};
 
 export type JourneyPersonaRef = Stage5SubjectRef;
 
@@ -16,7 +37,11 @@ export type JourneyMapStep = {
   id: string;
   label: string;
   order: number;
-  itemIds: string[];
+  zoneItems: Record<JourneyStepZone, string[]>;
+  /** 터치포인트·Pain point 직접 입력·AI 항목 (여러 개) */
+  aiTexts: Partial<Record<JourneyAiZone, string[]>>;
+  /** @deprecated zoneItems로 마이그레이션 */
+  itemIds?: string[];
 };
 
 export type PersonaJourneyMap = {
@@ -45,7 +70,10 @@ type LegacyUserJourneyMapData = {
   syncedFromStage5At?: string;
 };
 
-export const DEFAULT_JOURNEY_STEPS: Omit<JourneyMapStep, "id" | "itemIds">[] = [
+export const DEFAULT_JOURNEY_STEPS: Omit<
+  JourneyMapStep,
+  "id" | "zoneItems" | "aiTexts"
+>[] = [
   { label: "문제 인지", order: 0 },
   { label: "정보 탐색", order: 1 },
   { label: "선택·결정", order: 2 },
@@ -74,7 +102,8 @@ export function createJourneyStep(
     id: newId("jstep"),
     label,
     order,
-    itemIds: [],
+    zoneItems: emptyJourneyZoneItems(),
+    aiTexts: {},
   };
 }
 
@@ -96,22 +125,32 @@ export function defaultUserJourneyMap(): UserJourneyMapData {
   };
 }
 
-function normalizeSteps(raw: unknown, fallback: JourneyMapStep[]): JourneyMapStep[] {
+function normalizeSteps(
+  raw: unknown,
+  fallback: JourneyMapStep[],
+  itemsById: Record<string, JourneyMapItem>,
+): JourneyMapStep[] {
   if (!Array.isArray(raw)) return fallback;
   const steps = raw
     .map((step, index) => {
       if (!step || typeof step !== "object") return null;
       const s = step as Partial<JourneyMapStep>;
-      return {
+      const partial: JourneyMapStep = {
         id: typeof s.id === "string" ? s.id : newId("jstep"),
         label:
           typeof s.label === "string" && s.label.trim()
             ? s.label.trim()
             : `단계 ${index + 1}`,
         order: typeof s.order === "number" ? s.order : index,
+        zoneItems: s.zoneItems ?? emptyJourneyZoneItems(),
+        aiTexts: normalizeStepAiTexts(s.aiTexts),
         itemIds: Array.isArray(s.itemIds)
           ? s.itemIds.filter((id): id is string => typeof id === "string")
-          : [],
+          : undefined,
+      };
+      return {
+        ...partial,
+        zoneItems: resolveStepZoneItems(partial, itemsById),
       } satisfies JourneyMapStep;
     })
     .filter((s): s is JourneyMapStep => s !== null)
@@ -122,12 +161,13 @@ function normalizeSteps(raw: unknown, fallback: JourneyMapStep[]): JourneyMapSte
 function normalizePersonaMap(
   raw: Partial<PersonaJourneyMap> | null | undefined,
   subjectId: string,
+  itemsById: Record<string, JourneyMapItem>,
 ): PersonaJourneyMap {
   const base = defaultPersonaJourney(subjectId);
   if (!raw || typeof raw !== "object") return base;
   return {
     subjectId,
-    steps: normalizeSteps(raw.steps, base.steps),
+    steps: normalizeSteps(raw.steps, base.steps, itemsById),
     poolItemIds: Array.isArray(raw.poolItemIds)
       ? raw.poolItemIds.filter((id): id is string => typeof id === "string")
       : [],
@@ -140,14 +180,14 @@ function migrateLegacyFlatMap(
   raw: LegacyUserJourneyMapData,
 ): UserJourneyMapData {
   const base = defaultPersonaJourney(LEGACY_PERSONA_KEY);
-  const steps = normalizeSteps(raw.steps, base.steps);
-  const poolItemIds = Array.isArray(raw.poolItemIds)
-    ? raw.poolItemIds.filter((id): id is string => typeof id === "string")
-    : [];
   const itemsById =
     raw.itemsById && typeof raw.itemsById === "object"
       ? (raw.itemsById as Record<string, JourneyMapItem>)
       : {};
+  const steps = normalizeSteps(raw.steps, base.steps, itemsById);
+  const poolItemIds = Array.isArray(raw.poolItemIds)
+    ? raw.poolItemIds.filter((id): id is string => typeof id === "string")
+    : [];
 
   return {
     subjects: [],
@@ -180,14 +220,24 @@ function splitLegacyPersonaIntoSubjects(
   const personas: Record<string, PersonaJourneyMap> = {};
 
   for (const subject of subjects) {
-    const steps = legacy.steps.map((step, index) => ({
-      ...createJourneyStep(step.label, index),
-      itemIds: step.itemIds.filter(
-        (id) => itemsById[id]?.subjectId === subject.id,
-      ),
-    }));
+    const steps = legacy.steps.map((step, index) => {
+      const resolved = resolveStepZoneItems(step, itemsById);
+      const zoneItems = emptyJourneyZoneItems();
+      for (const zone of JOURNEY_STEP_ZONES) {
+        zoneItems[zone] = resolved[zone].filter(
+          (id) => itemsById[id]?.subjectId === subject.id,
+        );
+      }
+      return {
+        ...createJourneyStep(step.label, index),
+        zoneItems,
+        aiTexts: normalizeStepAiTexts(step.aiTexts),
+      };
+    });
 
-    const assigned = new Set(steps.flatMap((s) => s.itemIds));
+    const assigned = new Set(
+      steps.flatMap((s) => allStepItemIds(s, itemsById)),
+    );
     const poolItemIds = [
       ...legacy.poolItemIds.filter(
         (id) =>
@@ -251,6 +301,7 @@ export function normalizeUserJourneyMap(
       personas[key] = normalizePersonaMap(
         value as Partial<PersonaJourneyMap>,
         key,
+        itemsById,
       );
     }
   }
@@ -329,6 +380,26 @@ export function ensureSubjectsAndPersonas(
   };
 }
 
+/** 이전 단계 없이 페르소나를 직접 추가해 여정 지도 작업을 시작 */
+export function addManualJourneyPersona(
+  data: UserJourneyMapData,
+  name?: string,
+): UserJourneyMapData {
+  const subject: JourneyPersonaRef = {
+    id: newId("persona"),
+    name: name?.trim() || "페르소나",
+    context: "",
+    thumbnailUrl: "",
+    researchMethodId: "",
+  };
+  const next: UserJourneyMapData = {
+    ...data,
+    subjects: [...data.subjects, subject],
+    activeSubjectId: subject.id,
+  };
+  return ensureSubjectsAndPersonas(next, next.subjects);
+}
+
 export function getActivePersonaMap(
   data: UserJourneyMapData,
 ): PersonaJourneyMap | null {
@@ -371,6 +442,15 @@ export function journeyItemById(
   return data.itemsById[id];
 }
 
+export function journeyItemsForSubject(
+  data: UserJourneyMapData,
+  subjectId: string,
+): JourneyMapItem[] {
+  return Object.values(data.itemsById).filter(
+    (item) => item.subjectId === subjectId && item.text.trim(),
+  );
+}
+
 export type JourneyStepInsightCounts = {
   quotes: number;
   observations: number;
@@ -405,11 +485,22 @@ export function poolItems(
     .filter((item): item is JourneyMapItem => Boolean(item?.text.trim()));
 }
 
+export function journeyItemsForZone(
+  data: UserJourneyMapData,
+  step: JourneyMapStep,
+  zone: JourneyStepZone,
+): JourneyMapItem[] {
+  return resolveStepZoneItems(step, data.itemsById)[zone]
+    .map((id) => data.itemsById[id])
+    .filter((item): item is JourneyMapItem => Boolean(item?.text.trim()));
+}
+
 export function hasJourneyContent(data: UserJourneyMapData): boolean {
   return Object.values(data.personas).some(
     (persona) =>
-      persona.steps.some((s) => s.itemIds.length > 0) ||
-      persona.poolItemIds.length > 0,
+      persona.steps.some((s) =>
+        stepHasAssignedContent(s, data.itemsById),
+      ) || persona.poolItemIds.length > 0,
   );
 }
 
@@ -418,19 +509,21 @@ export function assignItemToStep(
   subjectId: string,
   itemId: string,
   stepId: string,
+  zone: JourneyStepZone,
 ): UserJourneyMapData {
   const persona = data.personas[subjectId];
   if (!persona) return data;
 
   const steps = persona.steps.map((step) => {
-    const without = step.itemIds.filter((id) => id !== itemId);
-    if (step.id !== stepId) {
-      return { ...step, itemIds: without };
+    const zoneItems = resolveStepZoneItems(step, data.itemsById);
+    for (const z of JOURNEY_STEP_ZONES) {
+      zoneItems[z] = zoneItems[z].filter((id) => id !== itemId);
     }
-    return {
-      ...step,
-      itemIds: without.includes(itemId) ? without : [...without, itemId],
-    };
+    if (step.id === stepId) {
+      const ids = zoneItems[zone];
+      zoneItems[zone] = ids.includes(itemId) ? ids : [...ids, itemId];
+    }
+    return { ...step, zoneItems };
   });
   const poolItemIds = persona.poolItemIds.filter((id) => id !== itemId);
   return updatePersonaInData(data, subjectId, { ...persona, steps, poolItemIds });
@@ -444,14 +537,128 @@ export function returnItemToPool(
   const persona = data.personas[subjectId];
   if (!persona) return data;
 
-  const steps = persona.steps.map((step) => ({
-    ...step,
-    itemIds: step.itemIds.filter((id) => id !== itemId),
-  }));
+  const steps = persona.steps.map((step) => {
+    const zoneItems = resolveStepZoneItems(step, data.itemsById);
+    for (const z of JOURNEY_STEP_ZONES) {
+      zoneItems[z] = zoneItems[z].filter((id) => id !== itemId);
+    }
+    return { ...step, zoneItems };
+  });
   const poolItemIds = persona.poolItemIds.includes(itemId)
     ? persona.poolItemIds
     : [...persona.poolItemIds, itemId];
   return updatePersonaInData(data, subjectId, { ...persona, steps, poolItemIds });
+}
+
+export function updateStepAiText(
+  data: UserJourneyMapData,
+  subjectId: string,
+  stepId: string,
+  zone: JourneyAiZone,
+  text: string,
+): UserJourneyMapData {
+  return setStepAiEntries(
+    data,
+    subjectId,
+    stepId,
+    zone,
+    parseGeneratedAiEntries(text),
+  );
+}
+
+function setStepAiEntries(
+  data: UserJourneyMapData,
+  subjectId: string,
+  stepId: string,
+  zone: JourneyAiZone,
+  entries: string[],
+): UserJourneyMapData {
+  const persona = data.personas[subjectId];
+  if (!persona) return data;
+  return updatePersonaInData(data, subjectId, {
+    ...persona,
+    steps: persona.steps.map((step) =>
+      step.id === stepId
+        ? {
+            ...step,
+            aiTexts: {
+              ...step.aiTexts,
+              [zone]: entries,
+            },
+          }
+        : step,
+    ),
+  });
+}
+
+export function addStepAiEntry(
+  data: UserJourneyMapData,
+  subjectId: string,
+  stepId: string,
+  zone: JourneyAiZone,
+  text = "",
+): UserJourneyMapData {
+  const persona = data.personas[subjectId];
+  const step = persona?.steps.find((s) => s.id === stepId);
+  if (!persona || !step) return data;
+  return setStepAiEntries(data, subjectId, stepId, zone, [
+    ...resolveStepAiEntries(step, zone),
+    text,
+  ]);
+}
+
+export function updateStepAiEntry(
+  data: UserJourneyMapData,
+  subjectId: string,
+  stepId: string,
+  zone: JourneyAiZone,
+  index: number,
+  text: string,
+): UserJourneyMapData {
+  const persona = data.personas[subjectId];
+  const step = persona?.steps.find((s) => s.id === stepId);
+  if (!persona || !step) return data;
+  const entries = [...resolveStepAiEntries(step, zone)];
+  if (index < 0 || index >= entries.length) return data;
+  entries[index] = text;
+  return setStepAiEntries(data, subjectId, stepId, zone, entries);
+}
+
+export function removeStepAiEntry(
+  data: UserJourneyMapData,
+  subjectId: string,
+  stepId: string,
+  zone: JourneyAiZone,
+  index: number,
+): UserJourneyMapData {
+  const persona = data.personas[subjectId];
+  const step = persona?.steps.find((s) => s.id === stepId);
+  if (!persona || !step) return data;
+  return setStepAiEntries(
+    data,
+    subjectId,
+    stepId,
+    zone,
+    resolveStepAiEntries(step, zone).filter((_, i) => i !== index),
+  );
+}
+
+export function appendStepAiEntries(
+  data: UserJourneyMapData,
+  subjectId: string,
+  stepId: string,
+  zone: JourneyAiZone,
+  texts: string[],
+): UserJourneyMapData {
+  const persona = data.personas[subjectId];
+  const step = persona?.steps.find((s) => s.id === stepId);
+  if (!persona || !step) return data;
+  const incoming = texts.map((t) => t.trim()).filter(Boolean);
+  if (incoming.length === 0) return data;
+  return setStepAiEntries(data, subjectId, stepId, zone, [
+    ...resolveStepAiEntries(step, zone),
+    ...incoming,
+  ]);
 }
 
 export function updateStepLabel(
@@ -495,7 +702,7 @@ export function removeJourneyStep(
   if (!removed) return data;
 
   const poolItemIds = [...persona.poolItemIds];
-  for (const id of removed.itemIds) {
+  for (const id of allStepItemIds(removed, data.itemsById)) {
     if (!poolItemIds.includes(id)) poolItemIds.push(id);
   }
 

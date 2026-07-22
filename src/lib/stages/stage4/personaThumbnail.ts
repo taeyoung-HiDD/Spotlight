@@ -1,4 +1,5 @@
 import { isAllowedPersonaImageUrl } from "@/lib/coach/stage2PersonaSync";
+import { appendImageNoTextConstraint } from "@/lib/ai/prompts/imageNoTextConstraint";
 
 /** 압축 후 artifact JSON 저장 상한 (data URL 문자 수) */
 export const MAX_STORED_PERSONA_THUMBNAIL_CHARS = 150_000;
@@ -48,7 +49,7 @@ export function buildPersonaCartoonImagePrompt(
 ): string {
   const personaName = name.trim() || "unnamed persona";
   const personaContext = context.trim() || "everyday user";
-  return `
+  const body = `
 Create a single square portrait illustration for a UX empathy map persona card.
 
 Style (strict):
@@ -57,11 +58,14 @@ Style (strict):
 - Clean editorial cartoon, not photorealistic, not 3D, not anime
 - Head-and-shoulders bust, friendly neutral expression
 - No text, no logos, no watermarks, no borders
+- Leave name label area empty — portrait only
 
 Persona:
 - Name hint: ${personaName}
 - Context: ${personaContext.slice(0, 500)}
 `.trim();
+
+  return appendImageNoTextConstraint(body);
 }
 
 /** 저장·표시용 — 압축된 data URL 또는 https URL */

@@ -5,7 +5,13 @@ export default function LoginPage() {
   return (
     <div className="flex min-h-full items-center justify-center bg-cream px-4 py-10 sm:py-14">
       <h1 className="sr-only">로그인 · 회원가입</h1>
-      <Suspense fallback={null}>
+      <Suspense
+        fallback={
+          <p className="text-sm text-muted" role="status">
+            로그인 화면을 준비하는 중…
+          </p>
+        }
+      >
         <LoginSignupForm />
       </Suspense>
     </div>

@@ -3,6 +3,10 @@
 import { IconSparkles } from "@tabler/icons-react";
 import { useCallback, useState, type ReactNode } from "react";
 import {
+  LocalizedEditableInput,
+  LocalizedEditableTextarea,
+} from "@/components/i18n/LocalizedEditableField";
+import {
   requestSlotBackfill,
   requestStoryboardImage,
 } from "@/lib/ai/client/stageAiClient";
@@ -12,6 +16,8 @@ import {
   type ConceptSheetData,
   type StoryboardCut,
 } from "@/lib/stages/stage9/conceptSheetTypes";
+import { buildStoryboardOverlay } from "@/lib/stages/stage9/storyboardOverlay";
+import { StoryboardCard } from "@/components/stage/stage9/StoryboardCard";
 import {
   stageBtnPrimary,
   stageBtnSecondary,
@@ -92,7 +98,7 @@ export function ConceptSheetWorkPanel({
       try {
         const slot = BACKFILL_SLOTS[key];
         const result = await requestSlotBackfill({
-          stageId: 9,
+          stageId: 10,
           stageTitle: "컨셉 정리하기",
           slotKey: slot.slotKey,
           slotLabel: slot.slotLabel,
@@ -218,10 +224,12 @@ export function ConceptSheetWorkPanel({
             backfilling={backfilling === "conceptName"}
             showBackfill={!data.conceptName.trim()}
           >
-            <input
+            <LocalizedEditableInput
               className={`w-full rounded-lg border border-border-warm px-3 py-2.5 ${stageField} ${stageInput}`}
               value={data.conceptName}
-              onChange={(e) => onChange({ ...data, conceptName: e.target.value })}
+              onValueChange={(conceptName) =>
+                onChange({ ...data, conceptName })
+              }
               placeholder="예: 안심 매대"
             />
           </FieldBlock>
@@ -232,10 +240,10 @@ export function ConceptSheetWorkPanel({
             backfilling={backfilling === "oneLiner"}
             showBackfill={!data.oneLiner.trim()}
           >
-            <textarea
+            <LocalizedEditableTextarea
               className={`min-h-[72px] w-full resize-y rounded-lg border border-border-warm px-3 py-2.5 ${stageField} ${stageTextarea}`}
               value={data.oneLiner}
-              onChange={(e) => onChange({ ...data, oneLiner: e.target.value })}
+              onValueChange={(oneLiner) => onChange({ ...data, oneLiner })}
               placeholder="누구에게 무엇을 해주는지 한 문장으로"
             />
           </FieldBlock>
@@ -254,16 +262,16 @@ export function ConceptSheetWorkPanel({
                     backfilling={backfilling === key}
                     showBackfill={!feature.trim()}
                   >
-                    <input
+                    <LocalizedEditableInput
                       className={`w-full rounded-lg border border-border-warm px-3 py-2.5 ${stageField} ${stageInput}`}
                       value={feature}
-                      onChange={(e) => {
+                      onValueChange={(next) => {
                         const features = [...data.features] as [
                           string,
                           string,
                           string,
                         ];
-                        features[i] = e.target.value;
+                        features[i] = next;
                         onChange({ ...data, features });
                       }}
                       placeholder={`핵심 기능 ${i + 1}`}
@@ -281,11 +289,11 @@ export function ConceptSheetWorkPanel({
             backfilling={backfilling === "trueNeed"}
             showBackfill={!data.trueNeed.trim()}
           >
-            <textarea
+            <LocalizedEditableTextarea
               className={`min-h-[72px] w-full resize-y rounded-lg border border-spotlight/40 bg-[#FFFDF4] px-3 py-2.5 ${stageTextarea} text-foreground`}
               value={data.trueNeed}
-              onChange={(e) => onChange({ ...data, trueNeed: e.target.value })}
-              placeholder="5단계 잠재 니즈에서 자동 연결됩니다"
+              onValueChange={(trueNeed) => onChange({ ...data, trueNeed })}
+              placeholder="6단계 잠재 니즈에서 자동 연결됩니다"
             />
             {data.trueNeedQuote ? (
               <p className={`mt-2 border-l-2 border-spotlight pl-2 italic ${stageWorkMeta}`}>
@@ -305,7 +313,7 @@ export function ConceptSheetWorkPanel({
               <HypothesisBadge />
             </div>
             <p className={`mt-1 ${stageWorkMeta}`}>
-              차콜선 + 흰 배경 + 노랑 강조 · Gemini 이미지 생성
+              차콜선 + 흰 배경 + 노랑 강조 · AI 배경 + 한글 오버레이
             </p>
           </div>
           <button
@@ -330,33 +338,21 @@ export function ConceptSheetWorkPanel({
                   컷 {cut.index}
                   {isFinale ? " · 체험 도착점" : ""}
                 </p>
-                <textarea
+                <LocalizedEditableTextarea
                   className={`mb-2 min-h-[64px] w-full resize-y rounded-lg border border-border-warm px-2.5 py-2 ${stageField} ${stageTextarea} text-[15px]`}
                   value={cut.caption}
-                  onChange={(e) => updateCutCaption(cut.index, e.target.value)}
+                  onValueChange={(caption) =>
+                    updateCutCaption(cut.index, caption)
+                  }
                   placeholder={`${cut.index}번 장면 설명`}
                 />
-                <div
-                  className={[
-                    "relative overflow-hidden rounded-lg border border-border-warm bg-cream",
-                    isFinale ? "aspect-[2/1]" : "aspect-square",
-                  ].join(" ")}
-                >
-                  {cut.imageUrl ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={cut.imageUrl}
-                      alt={`스토리보드 컷 ${cut.index}`}
-                      className="h-full w-full object-cover"
-                    />
-                  ) : (
-                    <div className="flex h-full items-center justify-center px-3 text-center text-[13px] text-muted">
-                      {generatingCut === cut.index
-                        ? "생성 중…"
-                        : "이미지 없음"}
-                    </div>
-                  )}
-                </div>
+                <StoryboardCard
+                  cutIndex={cut.index}
+                  isFinale={isFinale}
+                  imageUrl={cut.imageUrl}
+                  overlay={buildStoryboardOverlay(cut, data)}
+                  generating={generatingCut === cut.index}
+                />
                 <button
                   type="button"
                   className={`${stageBtnSecondary} mt-2 w-full text-[13px]`}

@@ -1,5 +1,5 @@
 "use client";
-
+import { useUiLocale } from "@/hooks/useUiLocale";
 import { useRouter } from "next/navigation";
 import { WorkspaceBackButton } from "@/components/navigation/WorkspaceBackButton";
 import { WorkspaceForwardButton } from "@/components/navigation/WorkspaceForwardButton";
@@ -179,7 +179,8 @@ export function Stage2EmpathyMap({ projectId }: Stage2EmpathyMapProps) {
     save: saveArtifact,
   });
 
-  const stage2PurposeCopy = useMemo(() => getStagePurposeCopy(2), []);
+  const locale = useUiLocale();
+  const stage2PurposeCopy = useMemo(() => getStagePurposeCopy(2, locale), [locale]);
 
   const introMessages = useMemo(
     (): CoachDialogItem[] => buildContextualDiscoveryIntroMessages(startingPoint),

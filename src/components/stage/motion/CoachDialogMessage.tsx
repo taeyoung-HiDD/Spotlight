@@ -3,6 +3,7 @@
 import { useEffect, useMemo, type ReactNode } from "react";
 import { CoachBubble } from "@/components/stage/CoachPanel";
 import { CoachRevealText } from "@/components/stage/motion/CoachRevealText";
+import { useLocalizedContent } from "@/hooks/useLocalizedContent";
 import { formatCoachDialogBreaks } from "@/lib/coach/formatCoachDialog";
 import { flattenCoachRevealSource } from "@/lib/motion/coachRevealSource";
 import { MOTION, sleep } from "@/lib/motion/timings";
@@ -33,18 +34,35 @@ function DialogBody({
   onComplete?: () => void;
   onProgress?: () => void;
 }) {
+  const sourceText = typeof item.content === "string" ? item.content : "";
+  const { text: localizedContent, translating: contentTranslating } =
+    useLocalizedContent(sourceText);
+  const labelSource = item.type === "highlight" ? item.label : "";
+  const { text: localizedLabel, translating: labelTranslating } =
+    useLocalizedContent(labelSource);
+  const translating =
+    (typeof item.content === "string" && contentTranslating) ||
+    (item.type === "highlight" && labelTranslating);
+
+  const displayContent: ReactNode =
+    typeof item.content === "string" ? localizedContent : item.content;
+
   const staticContent =
     mode === "static" && typeof item.content === "string"
-      ? formatCoachDialogBreaks(item.content)
-      : item.content;
+      ? formatCoachDialogBreaks(localizedContent)
+      : displayContent;
 
   const revealPlain = useMemo(
-    () => flattenCoachRevealSource(item.content),
-    [item.content],
+    () =>
+      typeof item.content === "string"
+        ? flattenCoachRevealSource(localizedContent)
+        : flattenCoachRevealSource(item.content),
+    [item.content, localizedContent],
   );
 
   useEffect(() => {
     if (mode !== "stream") return;
+    if (translating) return;
     if (!revealPlain) {
       let cancelled = false;
       void sleep(MOTION.coachPauseAfterMs).then(() => {
@@ -54,12 +72,14 @@ function DialogBody({
         cancelled = true;
       };
     }
-  }, [mode, revealPlain, onComplete]);
+  }, [mode, revealPlain, onComplete, translating]);
 
   if (item.type === "bubble") {
     const body =
       mode === "static" ? (
         staticContent
+      ) : translating ? (
+        localizedContent
       ) : revealPlain ? (
         <CoachRevealText
           text={revealPlain}
@@ -67,7 +87,7 @@ function DialogBody({
           onProgress={onProgress}
         />
       ) : (
-        item.content
+        displayContent
       );
 
     return <CoachBubble variant={item.variant}>{body}</CoachBubble>;
@@ -76,6 +96,8 @@ function DialogBody({
   const body =
     mode === "static" ? (
       staticContent
+    ) : translating ? (
+      localizedContent
     ) : revealPlain ? (
       <CoachRevealText
         text={revealPlain}
@@ -83,12 +105,12 @@ function DialogBody({
         onProgress={onProgress}
       />
     ) : (
-      item.content
+      displayContent
     );
 
   return (
     <div className={stageCoachHighlightBlock}>
-      <div className={stageCoachHighlightLabel}>{item.label}</div>
+      <div className={stageCoachHighlightLabel}>{localizedLabel}</div>
       <div className={stageCoachHighlightBody}>{body}</div>
     </div>
   );

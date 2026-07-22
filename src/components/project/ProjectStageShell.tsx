@@ -13,10 +13,15 @@ import {
 } from "@/components/project/ProjectWorkspaceContext";
 import { ProjectWorkspaceLayout } from "@/components/project/ProjectWorkspaceLayout";
 import { StageRevealItem } from "@/components/stage/motion/StageReveal";
+import { LocalizedText } from "@/components/i18n/LocalizedText";
+import { useT } from "@/hooks/useT";
+import { useUiLocale } from "@/hooks/useUiLocale";
+import { archiveStageNavLabel } from "@/lib/artifacts/archiveArtifactLabels";
 import { useWorkspaceScrollOnEnter } from "@/lib/motion/pageEnterScroll";
 import { STAGE_META } from "@/lib/stages/constants";
 import type { UserProjectListItem } from "@/lib/projects/fetchUserProjects";
-import { getSidebarStage } from "@/lib/stages/sidebarNav";
+import type { MessageKey } from "@/lib/i18n/messages";
+import { SIDEBAR_MACRO_GROUPS } from "@/lib/stages/sidebarNav";
 import {
   stageBadge,
   stageBtnSecondary,
@@ -28,6 +33,7 @@ import {
 import { Suspense, useEffect, useMemo, useState, type ReactNode } from "react";
 import { RecordWorkspaceVisit } from "@/components/navigation/RecordWorkspaceVisit";
 import { writeClientMaxStage } from "@/lib/navigation/projectMaxStage";
+import { isStageActivityGuideEnabled } from "@/lib/stages/stageGuideDismissal";
 import {
   completedStagesUpTo,
   resolveMaxReachedStage,
@@ -44,60 +50,84 @@ interface ProjectStageShellProps {
   children: ReactNode;
 }
 
-const STAGE_SUBTITLES: Partial<Record<number, string>> = {
+const STAGE_SUBTITLES_KO: Partial<Record<number, string>> = {
   1: " · 코치 첫 환영과 문제점·Hopes & Fears를 정리하는 자리예요.",
   2: " · 문제점 맥락을 사전 조사하고, 단계 3 To-know로 넘길 항목을 정리하는 단계예요.",
   3: " · 사용자 조사 전에 To-know list(질문 목록)를 작성·검토하는 단계예요.",
   5: " · 표면 아래 더 깊은 자리로 함께 내려가봐요. 디자인씽킹 코칭의 정수예요.",
 };
 
+const STAGE_SUBTITLES_EN: Partial<Record<number, string>> = {
+  1: " · Welcome with Kevin and shape the problem (and Hopes & Fears).",
+  2: " · Desk-research the problem context and prepare items for Stage 3 To-know.",
+  3: " · Before field research, draft and review the To-know question list.",
+  5: " · Go deeper below the surface—this is the heart of design-thinking coaching.",
+};
+
+const MACRO_MESSAGE_KEYS: Record<string, MessageKey> = {
+  empathize: "macro.empathize",
+  analyze: "macro.analyze",
+  ideate: "macro.ideate",
+  prototype: "macro.prototype",
+  business: "macro.business",
+};
+
 function ProjectStageShellHeader({ stageNum }: { stageNum: number }) {
   const { guideReady, isBlocking, openGuide } = useStageGuide();
-  const meta = STAGE_META[stageNum] ?? {
-    label: `단계 ${stageNum}`,
-    title: "작업",
-    macro: "",
-  };
-  const sidebarStage = getSidebarStage(stageNum);
+  const locale = useUiLocale();
+  const t = useT();
+  const title = archiveStageNavLabel(stageNum, locale);
+  const macroGroup = SIDEBAR_MACRO_GROUPS.find((g) =>
+    g.stages.some((s) => s.id === stageNum),
+  );
+  const macroLabel = macroGroup
+    ? t(MACRO_MESSAGE_KEYS[macroGroup.id] ?? "macro.empathize")
+    : (STAGE_META[stageNum]?.macro ?? "");
+  const subtitle =
+    (locale === "en" ? STAGE_SUBTITLES_EN : STAGE_SUBTITLES_KO)[stageNum] ?? "";
 
   return (
     <StageRevealItem index={0}>
       <div
         className={[
           "relative mb-4 rounded-2xl px-6 py-5 lg:px-7 lg:py-6",
-          stageNum === 5
+          stageNum === 6
             ? "border-[1.5px] border-spotlight bg-panel"
             : "border border-border-warm bg-panel",
         ].join(" ")}
       >
-        {stageNum === 5 ? (
+        {stageNum === 6 ? (
           <span className="absolute -top-2.5 left-6 rounded bg-spotlight px-2.5 py-0.5 text-[12.5px] font-semibold tracking-wide text-charcoal">
-            정수 자리
+            {t("guide.essenceBadge")}
           </span>
         ) : null}
         <div className="mb-1.5 flex flex-wrap items-center gap-2">
-          <span className={stageEyebrow}>{meta.macro}</span>
-          <span className={stageBadge}>단계 {stageNum}</span>
+          <span className={stageEyebrow}>{macroLabel}</span>
+          <span className={stageBadge}>
+            {t("stage.prefix")} {stageNum}
+          </span>
         </div>
         <div className="flex flex-wrap items-start justify-between gap-3">
           <h1 className={stagePageTitle}>
-            {sidebarStage?.navLabel ?? meta.title}
-            {stageNum === 5 ? " · 니즈 분석하기" : ""}
+            {title}
+            {stageNum === 6 ? t("guide.stage5TitleSuffix") : ""}
           </h1>
-          {guideReady && !isBlocking ? (
+          {guideReady &&
+          !isBlocking &&
+          isStageActivityGuideEnabled(stageNum) ? (
             <button
               type="button"
               onClick={openGuide}
               className={`${stageBtnSecondary} inline-flex shrink-0 items-center gap-1.5 text-[14px]`}
             >
               <IconBook2 className="size-4" stroke={2} aria-hidden />
-              가이드 보기
+              {t("guide.view")}
             </button>
           ) : null}
         </div>
         <p className={stagePageLead}>
-          {meta.label}
-          {STAGE_SUBTITLES[stageNum] ?? null}
+          {title}
+          {subtitle ? <LocalizedText>{subtitle}</LocalizedText> : null}
         </p>
       </div>
     </StageRevealItem>

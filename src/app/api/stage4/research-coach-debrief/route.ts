@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { resolveGeminiTextModels } from "@/lib/ai/env";
 import { COACH_SYSTEM_INSTRUCTION } from "@/lib/coach/systemInstruction";
 import { fetchProjectAccess } from "@/lib/projects/projectAccess";
 import { buildSynthesisDebriefContext } from "@/lib/stages/stage4/buildSynthesisDebriefContext";
@@ -132,16 +133,14 @@ ${contextText}`,
   }
 
   const models = [
-    process.env.GEMINI_MODEL?.trim() || "gemini-2.5-flash",
-    "gemini-2.0-flash",
+    ...resolveGeminiTextModels(),
+    ...resolveGeminiAudioModels(),
   ].filter((m, i, arr) => Boolean(m) && arr.indexOf(m) === i);
 
   try {
     const result = await geminiGenerateWithParts({
       apiKey,
-      models: [...models, ...resolveGeminiAudioModels()].filter(
-        (m, i, arr) => arr.indexOf(m) === i,
-      ),
+      models,
       parts,
       temperature: 0.35,
     });

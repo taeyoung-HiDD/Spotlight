@@ -1,5 +1,6 @@
 "use client";
 
+import { useUiLocale } from "@/hooks/useUiLocale";
 import { useRouter } from "next/navigation";
 import { useMemo } from "react";
 import { StageContainer } from "@/components/layout/StageContainer";
@@ -34,7 +35,8 @@ export function StageDiscoveryShell({
 }: StageDiscoveryShellProps) {
   const router = useRouter();
   const config = getStageConfig(stageNumber);
-  const purposeCopy = getStagePurposeCopy(stageNumber);
+  const locale = useUiLocale();
+  const purposeCopy = getStagePurposeCopy(stageNumber, locale);
   const meta = STAGE_META[stageNumber];
   const sceneKey = `stage-${stageNumber}-shell-${projectId}`;
 

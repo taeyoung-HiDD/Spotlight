@@ -1,11 +1,35 @@
 import { fetchStage1CollectState } from "@/lib/artifacts/stage1Collect";
-import { fetchStage2EmpathyMap } from "@/lib/artifacts/stage2EmpathyMap";
+import { fetchStage2PrePmf } from "@/lib/artifacts/stage2PrePmf";
+import {
+  buildPrePmfSummaryText,
+  extractCompetitorLabels,
+  prePmfNextActivityUnknowns,
+  prePmfPersonDisplayLabels,
+} from "@/lib/stages/stage2/prePmfOverview";
+import type { ContextualDimensionAnswers } from "@/lib/stages/stage2/contextualDimensions";
 import { resolveStage1StartingPoint } from "@/lib/stages/stage1/resolveStartingPoint";
 import {
-  buildCremaToKnowTable,
+  buildToKnowTable,
   inferResearchMethodsFromTable,
-  type CremaToKnowBuildContext,
-} from "@/lib/stages/fieldResearch/cremaToKnowV5";
+  type ToKnowBuildContext,
+} from "@/lib/stages/fieldResearch/toKnowCatalogV5";
+import {
+  buildDefaultToKnowCoreQuestion,
+  mergeToKnowTableWithSeed,
+  remapToKnowInfoCategories,
+  resolveResearchSubjects,
+  sanitizeToKnowCoreQuestion,
+  sanitizeToKnowTableRows,
+} from "@/lib/stages/fieldResearch/toKnowGuideCategories";
+import {
+  bootstrapEmpathyMapsFromTargetUsers,
+  normalizeStage3EmpathyMaps,
+  resolveStage3PrepWorkflowPhase,
+} from "@/lib/stages/fieldResearch/stage3EmpathyMap";
+import {
+  normalizeStage3ResearchPrep,
+} from "@/lib/stages/fieldResearch/stage3ResearchPrep";
+import { isToKnowDiscoveryActive } from "@/lib/stages/fieldResearch/stage3ToKnowPrepFlow";
 import type {
   FieldResearchData,
   ResearchMethodPlan,
@@ -22,41 +46,55 @@ const METHOD_LABELS: Record<string, string> = {
   other: "기타",
 };
 
-export async function loadCremaToKnowBuildContext(
+export async function loadToKnowBuildContext(
   projectId: string,
-): Promise<CremaToKnowBuildContext> {
+): Promise<ToKnowBuildContext> {
   const [startingPoint, s1, s2] = await Promise.all([
     resolveStage1StartingPoint(projectId),
     fetchStage1CollectState(projectId),
-    fetchStage2EmpathyMap(projectId),
+    fetchStage2PrePmf(projectId),
   ]);
 
   const problem =
     startingPoint.trim() || s1.state.startingPoint?.trim() || "";
 
+  const pre = s2.data;
+  const contextualAnswers: ContextualDimensionAnswers = {
+    primary_users: prePmfPersonDisplayLabels(pre.targetUsers, "타겟"),
+    stakeholders: prePmfPersonDisplayLabels(pre.stakeholders, "이해관계자"),
+    competitors: extractCompetitorLabels(pre),
+    products_services: pre.similarServices.items.map((it) => it.name),
+  };
+
   return {
     startingPoint: problem,
-    personaName: s2.data.personaName.trim(),
-    personaSituation:
-      s2.data.personaSituationRaw.trim() || s2.data.personaContext.trim(),
-    contextualAnswers: s2.data.contextualPrep.answers,
-    contextualInsights: s2.data.contextualInsights,
-    unknowns: s2.data.toKnowUnknowns,
-    dimensionResearch: s2.data.contextualDimensionResearch,
-    selectedDimensions: s2.data.contextualPrep.selectedDimensions,
+    targetUsers: pre.targetUsers,
+    personaName: prePmfPersonDisplayLabels(pre.targetUsers, "타겟")[0] ?? "",
+    personaSituation: pre.problemStatement.trim() || problem,
+    contextualAnswers,
+    contextualInsights: buildPrePmfSummaryText(pre),
+    unknowns: prePmfNextActivityUnknowns(pre.nextSteps),
+    dimensionResearch: {},
+    selectedDimensions: [
+      "primary_users",
+      "stakeholders",
+      "competitors",
+      "products_services",
+    ],
   };
 }
 
-function prepFromContext(ctx: CremaToKnowBuildContext): ToKnowPrepState {
-  const primary = ctx.contextualAnswers.primary_users?.[0]?.trim() ?? "";
+function prepFromContext(ctx: ToKnowBuildContext): ToKnowPrepState {
+  const subjects = resolveResearchSubjects(ctx);
+  const targetLine = subjects.length
+    ? subjects.join(", ")
+    : ctx.personaName?.trim() ||
+      ctx.personaSituation?.trim().slice(0, 40) ||
+      "";
   return {
     phase: "refining",
     step: "done",
-    targetPerson:
-      ctx.personaName?.trim() ||
-      primary ||
-      ctx.personaSituation?.trim().slice(0, 40) ||
-      "",
+    targetPerson: targetLine,
     situation:
       ctx.personaSituation?.trim() ||
       formatSituationFromAnswers(ctx) ||
@@ -71,12 +109,16 @@ function prepFromContext(ctx: CremaToKnowBuildContext): ToKnowPrepState {
   };
 }
 
+function hasPrePmfResearchSubjects(ctx: ToKnowBuildContext): boolean {
+  return resolveResearchSubjects(ctx).length > 0;
+}
+
 function formatAnswerList(items: string[] | undefined): string {
   if (!items?.length) return "";
   return items.join(", ");
 }
 
-function formatSituationFromAnswers(ctx: CremaToKnowBuildContext): string {
+function formatSituationFromAnswers(ctx: ToKnowBuildContext): string {
   const parts = [
     ctx.contextualAnswers.situation,
     ctx.contextualAnswers.environment,
@@ -93,28 +135,89 @@ function methodsFromTable(
   return ids.map((id) => ({
     id,
     label: METHOD_LABELS[id] ?? id,
-    rationale: "CREMA v5 To-know 초안에서 사용된 방법",
+    rationale: "To-know 초안에서 사용된 방법",
   }));
 }
 
-/** 3단계 최초 진입 — 1·2단계 기반 CREMA v5 To-know 초안 */
-export function bootstrapFieldResearchFromPriorStages(
-  ctx: CremaToKnowBuildContext,
+/** 3단계 진입 — 1·2단계 맥락·사전 조사 기반 To-know 초안 병합 */
+export function hydrateFieldResearchFromPriorStages(
+  ctx: ToKnowBuildContext,
   base: FieldResearchData,
 ): FieldResearchData {
-  const toKnowTable = buildCremaToKnowTable(ctx);
+  const subjects = resolveResearchSubjects(ctx);
+  const target = subjects[0] ?? ctx.personaName?.trim() ?? "목표 사용자";
+  const seeded = buildToKnowTable(ctx);
+  const merged = base.toKnowTable.length
+    ? mergeToKnowTableWithSeed(base.toKnowTable, seeded)
+    : seeded;
+  const remapped = remapToKnowInfoCategories(merged, subjects);
+  const toKnowTable = sanitizeToKnowTableRows(
+    remapped,
+    ctx.startingPoint,
+    target,
+  );
+  const toKnowCoreQuestion =
+    sanitizeToKnowCoreQuestion(
+      base.toKnowCoreQuestion,
+      ctx.startingPoint,
+    ) || buildDefaultToKnowCoreQuestion(ctx.startingPoint);
+
+  const skipDiscovery =
+    hasPrePmfResearchSubjects(ctx) || base.toKnowTable.length > 0;
+
+  const empathyMaps = bootstrapEmpathyMapsFromTargetUsers(
+    ctx.targetUsers ?? [],
+    normalizeStage3EmpathyMaps(base.empathyMaps),
+  );
+  const prepWorkflowPhase = resolveStage3PrepWorkflowPhase(
+    base.prepWorkflowPhase,
+  );
+
+  const researchPrep = normalizeStage3ResearchPrep(base.researchPrep);
+
   return {
     ...base,
-    toKnowPrep: prepFromContext(ctx),
+    prepWorkflowPhase,
+    researchPrep,
+    empathyMaps,
+    toKnowPrep:
+      skipDiscovery || !isToKnowDiscoveryActive(base.toKnowPrep)
+        ? prepFromContext(ctx)
+        : base.toKnowPrep,
+    toKnowCoreQuestion,
     toKnowTable,
     researchMethods: methodsFromTable(toKnowTable),
   };
 }
 
+/** @deprecated hydrateFieldResearchFromPriorStages 사용 */
+export function bootstrapFieldResearchFromPriorStages(
+  ctx: ToKnowBuildContext,
+  base: FieldResearchData,
+): FieldResearchData {
+  return hydrateFieldResearchFromPriorStages(ctx, base);
+}
+
+export async function hydrateFieldResearchForProject(
+  projectId: string,
+  data: FieldResearchData,
+): Promise<FieldResearchData> {
+  const ctx = await loadToKnowBuildContext(projectId);
+  return hydrateFieldResearchFromPriorStages(ctx, data);
+}
+
+/** @deprecated hydrateFieldResearchForProject 사용 */
 export async function bootstrapFieldResearchForProject(
   projectId: string,
   base: FieldResearchData,
 ): Promise<FieldResearchData> {
-  const ctx = await loadCremaToKnowBuildContext(projectId);
-  return bootstrapFieldResearchFromPriorStages(ctx, base);
+  return hydrateFieldResearchForProject(projectId, base);
+}
+
+/** @deprecated hydrateFieldResearchForProject에 포함 */
+export async function hydrateToKnowCoreQuestion(
+  projectId: string,
+  data: FieldResearchData,
+): Promise<FieldResearchData> {
+  return hydrateFieldResearchForProject(projectId, data);
 }

@@ -1,6 +1,7 @@
 import type { FieldResearchData } from "@/lib/stages/fieldResearch/types";
 import type { IcebergModelData } from "@/lib/stages/iceberg/types";
 import { CONTEXTUAL_DIMENSIONS } from "@/lib/stages/stage2/contextualDimensions";
+import { STAGE2_EMPATHY_MAP_DEFLECT_HINT } from "@/lib/coach/empathyMapCoachRules";
 import type { EmpathyMapData } from "@/lib/stages/stage2/empathyMap";
 
 type Stage1Snapshot = {
@@ -8,8 +9,6 @@ type Stage1Snapshot = {
   userLevel?: "beginner" | "expert";
   projectTitle?: string;
   startingPoint: string;
-  hope: string;
-  fear: string;
   principleAck: boolean;
 };
 
@@ -29,16 +28,16 @@ export function summarizeStage1Artifact(s: Stage1Snapshot): string {
   if (s.userLevel) {
     lines.push(
       s.userLevel === "expert"
-        ? "코칭 맞춤: 핵심 점검 톤, 예시는 요청 시, 모든 단계 권장"
-        : "코칭 맞춤: 차근차근 단계별 안내, 예시 충분히 제공, 모든 단계 권장",
+        ? "가이드 방식: 할 일 중심 — 할 일 위주, 코치는 짧게, 단계 가이드 생략"
+        : "가이드 방식: 단계별 안내 — 의미·방법·예시 충분, 단계 가이드 표시",
     );
   }
   if (s.projectTitle?.trim()) {
     lines.push(`프로젝트 이름: ${clip(s.projectTitle)}`);
   }
-  if (s.startingPoint.trim()) lines.push(`문제점: ${clip(s.startingPoint)}`);
-  if (s.hope.trim()) lines.push(`Hopes: ${clip(s.hope)}`);
-  if (s.fear.trim()) lines.push(`Fears: ${clip(s.fear)}`);
+  if (s.startingPoint.trim()) {
+    lines.push(`1단계 입력(문제·아이디어): ${clip(s.startingPoint)}`);
+  }
   lines.push(`원칙 동의: ${s.principleAck ? "완료" : "미완료"}`);
   return lines.join("\n");
 }
@@ -92,12 +91,27 @@ export function buildStage2ChatArtifactSummary(
     "[코치 행동]",
     "- 이 단계는 공감맵·페르소나 이름 수집이 아니라, 문제 맥락 사전 조사와 To-know 미확인 항목 정리에 집중하세요.",
     "- 고객·페르소나 이름을 새로 묻거나 공감맵 네 칸을 채우라고 안내하지 마세요.",
+    STAGE2_EMPATHY_MAP_DEFLECT_HINT,
   );
   return lines.join("\n");
 }
 
 export function summarizeStage3Artifact(data: FieldResearchData): string {
   const lines: string[] = [];
+  if (data.researchPrep?.recommendationsGenerated) {
+    const prep = data.researchPrep;
+    lines.push(
+      `조사 계획: ${prep.selectedParticipantCount}명 · 현장 인터뷰`,
+    );
+    if (prep.segments.length) {
+      lines.push(
+        `- 세그먼트: ${prep.segments.map((s) => `${s.label} ${s.selectedCount}명`).join(" · ")}`,
+      );
+    }
+  }
+  lines.push(
+    `준비 단계: ${data.prepWorkflowPhase === "research_prep" ? "조사 계획" : "To-know"}`,
+  );
   if (data.toKnowTable?.length) {
     const filled = data.toKnowTable.filter((r) => r.small.trim());
     lines.push(`To-know(Table): ${filled.length}/${data.toKnowTable.length} 작성`);

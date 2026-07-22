@@ -1,5 +1,6 @@
 "use client";
 
+import { useUiLocale } from "@/hooks/useUiLocale";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatedCoachPanel } from "@/components/stage/motion/AnimatedCoachPanel";
 import type { CoachDialogItem } from "@/components/stage/motion/CoachSequentialDialog";
@@ -40,13 +41,13 @@ const REFINE_COACH_TAIL: CoachDialogItem[] = [
   },
 ];
 
-const STAGE5_DISCOVERY_DIRECTIVE = `5단계 진짜 필요 찾기(맥락 수집 중):
+const STAGE5_DISCOVERY_DIRECTIVE = `6단계 진짜 필요 찾기(맥락 수집 중):
 - 한 턴에 질문은 하나만. 세 층 용어를 먼저 나열하지 않는다.
 - explicit(말한 니즈) → tacit(행동 패턴) → latent(깊은 동기 가설) 순으로 듣는다.
 - 사용자 답을 짧게 요약만 하고 다음 질문으로 넘긴다. 표·초안은 시스템이 채운다.
 - 1단계 문제점·4단계 공감맵(Says/행동함 등)이 있으면 그걸 맥락으로 참고한다.`;
 
-const STAGE5_REFINE_DIRECTIVE = `5단계 진짜 필요 찾기 다듬기:
+const STAGE5_REFINE_DIRECTIVE = `6단계 진짜 필요 찾기 다듬기:
 - 왼쪽에 초안이 있다. 각 층 문장 편집을 돕는다.
 - 결론보다 가설·검증 포인트를 짧게 제안한다.`;
 
@@ -77,7 +78,8 @@ export function IcebergCoachPanel({
   variant,
 }: IcebergCoachPanelProps) {
   const stageConfig = getStageConfig(5);
-  const purposeCopy = getStagePurposeCopy(5);
+  const locale = useUiLocale();
+  const purposeCopy = getStagePurposeCopy(5, locale);
   const discoveryActive =
     variant === "work" && isIcebergDiscoveryActive(data.prep);
 
@@ -150,8 +152,8 @@ export function IcebergCoachPanel({
         placeholder: "한 가지씩 답해 주세요…",
       };
     }
-    return getStageWorkInputGuide(5);
-  }, [discoveryActive, baseline, baselineReady]);
+    return getStageWorkInputGuide(5, locale);
+  }, [discoveryActive, baseline, baselineReady, locale]);
 
   const chatContext = useMemo(() => {
     const lines = [summarizeStage5Artifact(data)];
@@ -184,7 +186,7 @@ export function IcebergCoachPanel({
     }
     return {
       projectId,
-      stageId: 5,
+      stageId: 6,
       stageTitle: stageChatTitle(5),
       artifactSummary: lines.join("\n\n"),
       stageBehaviorNote: discoveryActive

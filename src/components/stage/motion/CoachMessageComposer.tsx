@@ -3,8 +3,12 @@
 import { IconSend } from "@tabler/icons-react";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from "react";
 import { CoachInputGuidePanel } from "@/components/stage/motion/CoachInputGuide";
-import { COACH_MESSAGE_PLACEHOLDER } from "@/lib/coach/constants";
+import {
+  COACH_MESSAGE_PLACEHOLDER,
+  COACH_MESSAGE_PLACEHOLDER_EN,
+} from "@/lib/coach/constants";
 import type { CoachInputGuide } from "@/lib/coach/inputGuidance";
+import { useUiLocale } from "@/hooks/useUiLocale";
 import { parseAnswerTokens } from "@/lib/stages/stage2/contextualAnswers";
 import {
   stageCoachComposerHint,
@@ -41,12 +45,15 @@ interface CoachMessageComposerProps {
 
 export function CoachMessageComposer({
   onSend,
-  placeholder = COACH_MESSAGE_PLACEHOLDER,
+  placeholder,
   disabled = false,
   inputGuide,
   showGuide = true,
   onLayoutChange,
 }: CoachMessageComposerProps) {
+  const locale = useUiLocale();
+  const defaultPlaceholder =
+    locale === "en" ? COACH_MESSAGE_PLACEHOLDER_EN : COACH_MESSAGE_PLACEHOLDER;
   const [draft, setDraft] = useState("");
   const [isComposing, setIsComposing] = useState(false);
 
@@ -100,7 +107,8 @@ export function CoachMessageComposer({
     );
   }, [disabled]);
 
-  const resolvedPlaceholder = inputGuide?.placeholder ?? placeholder;
+  const resolvedPlaceholder =
+    inputGuide?.placeholder ?? placeholder ?? defaultPlaceholder;
   const hasExampleChips = Boolean(inputGuide?.examples?.length);
   const canSubmit = draftTokens.length > 0;
   const guideVisible = Boolean(inputGuide && showGuide && hasExampleChips);

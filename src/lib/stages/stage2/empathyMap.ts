@@ -49,7 +49,7 @@ export const EMPATHY_QUADRANTS: EmpathyQuadrantDef[] = [
     labelEn: "SAYS",
     labelKo: "말함",
     description:
-      "사람이 바깥으로 꺼낸 말이에요. 인용처럼 짧게 적어도 돼요.",
+      "인터뷰·현장에서 실제로 들은 말이에요. 포부(「~하고 싶다」)가 아니라 입 밖으로 한 인용을 짧게 적어요.",
     accentClass: "border-teal-400/35 bg-teal-950/20",
     coachSuggestions: [
       "더 큰 게 좋을까?",
@@ -61,7 +61,8 @@ export const EMPATHY_QUADRANTS: EmpathyQuadrantDef[] = [
     id: "thinks",
     labelEn: "THINKS",
     labelKo: "생각함",
-    description: "겉으로 안 드러나는 생각·걱정·기대예요.",
+    description:
+      "겉으로 안 드러나는 속마음·걱정·기대예요. 말함에 넣기 애매한 포부·의문은 여기에 둬요.",
     accentClass: "border-cyan-400/35 bg-cyan-950/25",
     coachSuggestions: [
       "내가 헷갈리면 다들 어떻게 볼까",
@@ -85,12 +86,13 @@ export const EMPATHY_QUADRANTS: EmpathyQuadrantDef[] = [
     id: "feels",
     labelEn: "FEELS",
     labelKo: "느낌",
-    description: "이 상황에서의 감정 한 단어나 짧은 표현.",
+    description:
+      "이 상황에서 느끼는 감정을 짧은 문장으로 적어요. 한두 단어만 써도 되지만, 왜 그런지 맥락이 드러나게 써 주세요.",
     accentClass: "border-green-400/35 bg-green-950/15",
     coachSuggestions: [
-      "조바심 난다",
-      "설렘 반 불안 반",
-      "누구 믿어야 할지 모르겠다",
+      "뭘 선택해야 할지 몰라서 마음이 조급해요.",
+      "설렘도 있지만 혹시 실패할까 봐 걱정돼요.",
+      "누구한테 물어봐야 할지 막막해요.",
     ],
   },
 ];
@@ -119,7 +121,7 @@ export const EMPATHY_QUADRANT_HINTS: Record<
     says: "사용자가 말한 내용",
     thinks: "사용자가 생각하는 내용",
     does: "사용자의 행동",
-    feels: "사용자가 느끼는 감정",
+    feels: "사용자가 느끼는 감정 (문장)",
   },
   en: {
     says: "What a user says",
@@ -138,13 +140,13 @@ export const EMPATHY_QUADRANT_POSTIT_EXAMPLES: Record<
     says: "더 큰 게 좋을까?",
     thinks: "뭘 놓치고 있는 거 아닐까",
     does: "사이트에서 스펙 비교표를 본다",
-    feels: "조바심 난다",
+    feels: "이 선택을 잘못하면 큰일 날 것 같아서 불안해요.",
   },
   en: {
     says: "What size should I get?",
     thinks: "What if I'm missing something?",
     does: "Compares specs on the website",
-    feels: "Feeling anxious",
+    feels: "I'm worried I might make the wrong choice.",
   },
 };
 

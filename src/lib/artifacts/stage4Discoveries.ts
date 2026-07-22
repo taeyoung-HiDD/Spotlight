@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/client";
 import { ensureAuthSession } from "@/lib/supabase/ensureSession";
 import { quadrantHasContent } from "@/lib/stages/stage4/empathySticky";
 import { normalizeResearchSynthesis } from "@/lib/stages/stage4/researchSynthesisTypes";
+import { ensureSubjectEmpathyLinks } from "@/lib/stages/stage4/syncSubjectEmpathy";
 import {
   defaultStage4Data,
   normalizeStage4Data,
@@ -117,7 +118,10 @@ function fromSlots(slots: ArtifactSlots): Stage4DiscoveriesData {
       (synthesisSlot as { note?: unknown }).note ?? "",
     );
   }
-  return normalized;
+  return ensureSubjectEmpathyLinks({
+    ...normalized,
+    workflowPhase: "research_synthesis",
+  });
 }
 
 export async function fetchStage4Discoveries(projectId: string): Promise<{

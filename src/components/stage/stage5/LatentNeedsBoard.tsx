@@ -1,13 +1,20 @@
 "use client";
 
+import { IconPlus } from "@tabler/icons-react";
 import { useEffect, useMemo, useState } from "react";
-import { SourceLatentPairCard } from "@/components/stage/stage5/SourceLatentPairCard";
+import {
+  LatentNeedPostitCard,
+  SourceLatentPairCard,
+} from "@/components/stage/stage5/SourceLatentPairCard";
 import { SubjectInitialBadge } from "@/components/stage/stage5/SubjectInitialBadge";
+import { useArchiveView } from "@/lib/archive/archiveViewContext";
+import { postitSortKey } from "@/lib/stages/stage4/postitLayout";
 import { buildSourceLatentPairs } from "@/lib/stages/stage5/groupSourceLatentPairs";
 import {
   createStage5BoardPostit,
   type Stage5BoardPostitKind,
   type Stage5LatentNeedsData,
+  type Stage5SubjectRef,
 } from "@/lib/stages/stage5/latentNeedsTypes";
 import {
   formatConductedAtLabel,
@@ -15,12 +22,26 @@ import {
 } from "@/lib/stages/stage4/researchSynthesisSubject";
 import type { ResearchMethodId } from "@/lib/stages/fieldResearch/types";
 import { subjectDisplayLabel } from "@/lib/stages/stage5/subjectInitials";
-import { stageCaption, stageLabel } from "@/lib/stages/ui";
+import {
+  stageBtnPrimary,
+  stageCaption,
+  stageLabel,
+} from "@/lib/stages/ui";
+import { isStage5SourcePostitKind } from "@/lib/stages/stage5/bootstrapLatentNeedsFromStage4";
 
 type SubjectFilter = "all" | string;
+/** 조사 결과 탭 — 한 종류씩만 보여 스크롤을 줄입니다 */
+type KindTab = Stage5BoardPostitKind;
+
+const KIND_TABS: KindTab[] = [
+  "quote",
+  "observation",
+  "finding",
+  "latent_need",
+];
 
 const KIND_META: Record<
-  Stage5BoardPostitKind,
+  KindTab,
   { label: string; legendClass: string; colorHint: string }
 > = {
   quote: {
@@ -51,6 +72,7 @@ const KIND_META: Record<
 interface LatentNeedsBoardProps {
   data: Stage5LatentNeedsData;
   onChange: (data: Stage5LatentNeedsData) => void;
+  onGenerate?: () => void;
   generating?: boolean;
 }
 
@@ -58,18 +80,74 @@ function subjectIndexMap(subjects: Stage5LatentNeedsData["subjects"]) {
   return new Map(subjects.map((s, i) => [s.id, i]));
 }
 
+function countForKind(
+  pairs: ReturnType<typeof buildSourceLatentPairs>,
+  postits: Stage5LatentNeedsData["postits"],
+  kind: KindTab,
+  subjectFilter: SubjectFilter,
+): number {
+  if (kind === "latent_need") {
+    return postits.filter(
+      (p) =>
+        p.kind === "latent_need" &&
+        (subjectFilter === "all" || p.subjectId === subjectFilter),
+    ).length;
+  }
+  return pairs.filter(
+    (pair) =>
+      pair.source.kind === kind &&
+      (subjectFilter === "all" || pair.subjectId === subjectFilter),
+  ).length;
+}
+
 export function LatentNeedsBoard({
   data,
   onChange,
+  onGenerate,
   generating = false,
 }: LatentNeedsBoardProps) {
+  const archiveView = useArchiveView();
   const [subjectFilter, setSubjectFilter] = useState<SubjectFilter>("all");
+  const [kindTab, setKindTab] = useState<KindTab>("quote");
   const indexBySubject = subjectIndexMap(data.subjects);
   const pairs = useMemo(() => buildSourceLatentPairs(data), [data]);
-  const filteredPairs = useMemo(() => {
+
+  const sourceNoteCount = useMemo(
+    () =>
+      data.postits.filter(
+        (p) => isStage5SourcePostitKind(p.kind) && p.text.trim(),
+      ).length,
+    [data.postits],
+  );
+
+  const subjectFilteredPairs = useMemo(() => {
     if (subjectFilter === "all") return pairs;
     return pairs.filter((pair) => pair.subjectId === subjectFilter);
   }, [pairs, subjectFilter]);
+
+  const filteredPairs = useMemo(() => {
+    if (kindTab === "latent_need") return [];
+    return subjectFilteredPairs.filter((pair) => pair.source.kind === kindTab);
+  }, [subjectFilteredPairs, kindTab]);
+
+  const filteredLatents = useMemo(() => {
+    if (kindTab !== "latent_need") return [];
+    let latents = data.postits.filter((p) => p.kind === "latent_need");
+    if (subjectFilter !== "all") {
+      latents = latents.filter((p) => p.subjectId === subjectFilter);
+    }
+    return [...latents].sort(
+      (a, b) => postitSortKey(a.id) - postitSortKey(b.id),
+    );
+  }, [data.postits, kindTab, subjectFilter]);
+
+  const kindCounts = useMemo(() => {
+    const counts = {} as Record<KindTab, number>;
+    for (const kind of KIND_TABS) {
+      counts[kind] = countForKind(pairs, data.postits, kind, subjectFilter);
+    }
+    return counts;
+  }, [pairs, data.postits, subjectFilter]);
 
   useEffect(() => {
     if (
@@ -79,6 +157,38 @@ export function LatentNeedsBoard({
       setSubjectFilter("all");
     }
   }, [data.subjects, subjectFilter]);
+
+  /** 조사 대상 필터가 바뀌었을 때만 — 비어 있는 탭이면 내용 있는 첫 탭으로 */
+  useEffect(() => {
+    if (kindCounts[kindTab] > 0) return;
+    const next = KIND_TABS.find((kind) => kindCounts[kind] > 0);
+    if (next) setKindTab(next);
+    // kindTab은 의도적으로 의존성에서 제외 — 사용자가 빈 탭을 고른 뒤 추가할 수 있게
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- subjectFilter 변경 시에만
+  }, [subjectFilter, kindCounts]);
+
+  const resolveSubjectForAdd = (): {
+    subjects: Stage5SubjectRef[];
+    subjectId: string;
+  } => {
+    if (subjectFilter !== "all") {
+      return { subjects: data.subjects, subjectId: subjectFilter };
+    }
+    if (data.subjects.length > 0) {
+      return {
+        subjects: data.subjects,
+        subjectId: data.subjects[0]!.id,
+      };
+    }
+    const manual: Stage5SubjectRef = {
+      id: "manual-subject",
+      name: "직접 입력",
+      context: "",
+      thumbnailUrl: "",
+      researchMethodId: "",
+    };
+    return { subjects: [manual], subjectId: manual.id };
+  };
 
   const updatePostit = (id: string, text: string) => {
     onChange({
@@ -93,6 +203,45 @@ export function LatentNeedsBoard({
     onChange({
       ...data,
       postits: data.postits.filter((p) => p.id !== id),
+    });
+  };
+
+  /** 조사 포스트잇 삭제 — 이 소스만 가리키던 잠재 니즈도 함께 제거 */
+  const removeSourcePostit = (id: string) => {
+    onChange({
+      ...data,
+      postits: data.postits
+        .filter((p) => {
+          if (p.id === id) return false;
+          if (p.kind !== "latent_need") return true;
+          const links = p.linkedSourceIds ?? [];
+          if (links.length === 1 && links[0] === id) return false;
+          return true;
+        })
+        .map((p) => {
+          if (p.kind !== "latent_need" || !p.linkedSourceIds?.includes(id)) {
+            return p;
+          }
+          return {
+            ...p,
+            linkedSourceIds: p.linkedSourceIds.filter((lid) => lid !== id),
+          };
+        }),
+    });
+  };
+
+  const addSourcePostit = (kind: Stage5BoardPostitKind) => {
+    const { subjects, subjectId } = resolveSubjectForAdd();
+    onChange({
+      ...data,
+      subjects,
+      postits: [
+        ...data.postits,
+        createStage5BoardPostit(subjectId, kind, {
+          readonly: false,
+          kevinGenerated: false,
+        }),
+      ],
     });
   };
 
@@ -115,29 +264,89 @@ export function LatentNeedsBoard({
   const hasContent =
     data.postits.some((p) => p.text.trim()) || pairs.length > 0;
 
+  const showKindEmpty =
+    hasContent &&
+    !generating &&
+    kindTab === "latent_need" &&
+    filteredLatents.length === 0;
+
+  const showSourceKindEmpty =
+    hasContent &&
+    !generating &&
+    kindTab !== "latent_need" &&
+    filteredPairs.length === 0;
+
+  const addButtonLabel =
+    kindTab === "latent_need"
+      ? "잠재 니즈 추가"
+      : `${KIND_META[kindTab].label} 추가`;
+
   return (
     <div className="latent-needs-board space-y-4">
-      <div className="flex flex-wrap items-center gap-2">
-        {(Object.keys(KIND_META) as Stage5BoardPostitKind[]).map((kind) => {
-          const meta = KIND_META[kind];
-          return (
-            <span
-              key={kind}
-              className={[
-                "inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-[13px] font-medium",
-                meta.legendClass,
-              ].join(" ")}
+      <div
+        className="rounded-lg border border-border-warm/70 bg-cream/30 px-3 py-2.5"
+        role="tablist"
+        aria-label="조사 결과 탭"
+      >
+        <div className="mb-2.5 flex flex-wrap items-center justify-between gap-2">
+          <p className={stageLabel}>조사 결과</p>
+          {!archiveView && onGenerate ? (
+            <button
+              type="button"
+              onClick={onGenerate}
+              disabled={generating || sourceNoteCount === 0}
+              className={stageBtnPrimary}
             >
-              <span className="font-semibold">{meta.label}</span>
-              <span className="latent-needs-board__legend-muted">
-                · {meta.colorHint}
-              </span>
-            </span>
-          );
-        })}
-        <span className={stageCaption}>
-          · 조사 포스트잇 아래 미리보기를 눌러 잠재 니즈를 펼칠 수 있어요
-        </span>
+              {generating
+                ? "Kevin이 잠재 니즈 도출 중…"
+                : "AI로 잠재 니즈 도출하기"}
+            </button>
+          ) : null}
+        </div>
+        <div className="flex flex-wrap items-center gap-1.5">
+          {KIND_TABS.map((kind) => {
+            const meta = KIND_META[kind];
+            const selected = kindTab === kind;
+            const count = kindCounts[kind];
+            return (
+              <button
+                key={kind}
+                type="button"
+                role="tab"
+                aria-selected={selected}
+                onClick={() => setKindTab(kind)}
+                className={[
+                  "inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-[15px] font-semibold transition-colors break-keep",
+                  selected
+                    ? "border-spotlight bg-spotlight text-on-spotlight"
+                    : meta.legendClass,
+                ].join(" ")}
+              >
+                <span>{meta.label}</span>
+                <span
+                  className={[
+                    "rounded px-1 py-px text-[12px] font-medium tabular-nums",
+                    selected
+                      ? "bg-on-spotlight/15 text-on-spotlight"
+                      : "bg-panel/80 text-muted",
+                  ].join(" ")}
+                >
+                  {count}
+                </span>
+                {!selected ? (
+                  <span className="latent-needs-board__legend-muted text-[13px] font-medium">
+                    · {meta.colorHint}
+                  </span>
+                ) : null}
+              </button>
+            );
+          })}
+        </div>
+        <p className={`mt-2 ${stageCaption}`}>
+          탭을 눌러 언급·관찰·발견·잠재 니즈를 나눠 보세요. 「AI로 잠재 니즈
+          도출하기」를 누르면 각 조사 포스트잇 아래에 잠재 니즈 초안이
+          붙어요. 직접 추가·수정·삭제도 할 수 있어요.
+        </p>
       </div>
 
       {data.subjects.length > 0 ? (
@@ -165,13 +374,18 @@ export function LatentNeedsBoard({
             {data.subjects.map((subject, idx) => {
               const selected = subjectFilter === subject.id;
               const methodLabel = subject.researchMethodId
-                ? researchMethodLabel(subject.researchMethodId as ResearchMethodId)
+                ? researchMethodLabel(
+                    subject.researchMethodId as ResearchMethodId,
+                  )
                 : "";
               const conductedLabel = subject.conductedAt
                 ? formatConductedAtLabel(subject.conductedAt)
                 : "";
               const meta = [methodLabel, conductedLabel]
-                .filter((part) => part && part !== "방법 미정" && part !== "일시 미정")
+                .filter(
+                  (part) =>
+                    part && part !== "방법 미정" && part !== "일시 미정",
+                )
                 .join(" · ");
               return (
                 <button
@@ -224,7 +438,11 @@ export function LatentNeedsBoard({
         </p>
       ) : null}
 
-      <div className="flex flex-wrap items-start gap-4">
+      <div
+        className="flex flex-wrap items-start gap-4"
+        role="tabpanel"
+        aria-label={KIND_META[kindTab].label}
+      >
         {!hasContent && !generating ? (
           <p
             className={`w-full rounded-md border border-dashed border-border-warm bg-cream/40 px-3 py-8 text-center ${stageCaption}`}
@@ -232,45 +450,99 @@ export function LatentNeedsBoard({
             4단계 발견 정리하기에서 조사 대상·언급·관찰·발견이 있으면 여기 한
             보드에 모여요.
             <br />
-            Kevin이 잠재 니즈 초안을 함께 채워 드립니다.
+            아래에서 직접 추가하거나, Kevin이 잠재 니즈 초안을 채워 드릴 수
+            있어요.
           </p>
         ) : null}
 
-        {hasContent &&
-        !generating &&
-        filteredPairs.length === 0 &&
-        subjectFilter !== "all" ? (
+        {showKindEmpty ? (
           <p
             className={`w-full rounded-md border border-dashed border-border-warm bg-cream/40 px-3 py-8 text-center ${stageCaption}`}
           >
-            선택한 조사 대상의 언급·관찰이 아직 없어요.
+            {subjectFilter !== "all"
+              ? "선택한 조사 대상의 잠재 니즈가 아직 없어요."
+              : "잠재 니즈가 아직 없어요."}
             <br />
-            다른 조사 대상을 선택하거나 4단계에서 내용을 추가해 보세요.
+            「잠재 니즈 추가」로 직접 적거나, 언급·관찰 탭에서 포스트잇 아래
+            미리보기로 추가해 보세요.
           </p>
         ) : null}
 
-        {filteredPairs.map((pair) => {
-          const subjectIdx = indexBySubject.get(pair.subjectId) ?? 0;
-          const subject =
-            data.subjects.find((s) => s.id === pair.subjectId) ?? {
-              id: pair.subjectId,
-              name: "",
-              context: "",
-              thumbnailUrl: "",
-            };
+        {showSourceKindEmpty ? (
+          <p
+            className={`w-full rounded-md border border-dashed border-border-warm bg-cream/40 px-3 py-8 text-center ${stageCaption}`}
+          >
+            {subjectFilter !== "all"
+              ? `선택한 조사 대상의 ${KIND_META[kindTab].label}이 아직 없어요.`
+              : `${KIND_META[kindTab].label}이 아직 없어요.`}
+            <br />
+            「{KIND_META[kindTab].label} 추가」로 직접 적거나, 다른 탭·4단계
+            내용을 확인해 보세요.
+          </p>
+        ) : null}
 
-          return (
-            <SourceLatentPairCard
-              key={pair.id}
-              pair={pair}
-              subject={subject}
-              subjectIndex={subjectIdx}
-              onUpdateLatent={updatePostit}
-              onRemoveLatent={removePostit}
-              onAddLatent={addLatentForSource}
-            />
-          );
-        })}
+        {kindTab === "latent_need"
+          ? filteredLatents.map((latent) => {
+              const subjectIdx = indexBySubject.get(latent.subjectId) ?? 0;
+              const subject =
+                data.subjects.find((s) => s.id === latent.subjectId) ?? {
+                  id: latent.subjectId,
+                  name: "",
+                  context: "",
+                  thumbnailUrl: "",
+                };
+
+              return (
+                <LatentNeedPostitCard
+                  key={latent.id}
+                  postit={latent}
+                  subject={subject}
+                  subjectIndex={subjectIdx}
+                  onUpdate={(text) => updatePostit(latent.id, text)}
+                  onRemove={() => removePostit(latent.id)}
+                />
+              );
+            })
+          : null}
+
+        {kindTab !== "latent_need"
+          ? filteredPairs.map((pair) => {
+              const subjectIdx = indexBySubject.get(pair.subjectId) ?? 0;
+              const subject =
+                data.subjects.find((s) => s.id === pair.subjectId) ?? {
+                  id: pair.subjectId,
+                  name: "",
+                  context: "",
+                  thumbnailUrl: "",
+                };
+
+              return (
+                <SourceLatentPairCard
+                  key={pair.id}
+                  pair={pair}
+                  subject={subject}
+                  subjectIndex={subjectIdx}
+                  onUpdateSource={updatePostit}
+                  onRemoveSource={removeSourcePostit}
+                  onUpdateLatent={updatePostit}
+                  onRemoveLatent={removePostit}
+                  onAddLatent={addLatentForSource}
+                />
+              );
+            })
+          : null}
+
+        {!archiveView && !generating ? (
+          <button
+            type="button"
+            onClick={() => addSourcePostit(kindTab)}
+            aria-label={addButtonLabel}
+            className="inline-flex h-[10.125rem] w-[clamp(7.8rem,100%,10.125rem)] shrink-0 flex-col items-center justify-center gap-1.5 rounded-lg border border-dashed border-border-warm bg-cream/40 text-[14px] font-semibold text-foreground transition-colors hover:border-spotlight hover:bg-highlight"
+          >
+            <IconPlus className="size-5" stroke={2} aria-hidden />
+            {addButtonLabel}
+          </button>
+        ) : null}
       </div>
     </div>
   );

@@ -1,5 +1,6 @@
 "use client";
 
+import { useUiLocale } from "@/hooks/useUiLocale";
 import { LatentNeedsBoard } from "@/components/stage/stage5/LatentNeedsBoard";
 import { getStagePurposeCopy } from "@/lib/stages/discovery/stagePurposeCopy";
 import type { Stage5LatentNeedsData } from "@/lib/stages/stage5/latentNeedsTypes";
@@ -13,6 +14,7 @@ import { TermChip } from "@/components/stage/TermChip";
 interface LatentNeedsWorkPanelProps {
   data: Stage5LatentNeedsData;
   onChange: (data: Stage5LatentNeedsData) => void;
+  onGenerate: () => void;
   generating: boolean;
   saving: boolean;
   saveError: string | null;
@@ -22,12 +24,14 @@ interface LatentNeedsWorkPanelProps {
 export function LatentNeedsWorkPanel({
   data,
   onChange,
+  onGenerate,
   generating,
   saving,
   saveError,
   lastSavedAt,
 }: LatentNeedsWorkPanelProps) {
-  const purposeCopy = getStagePurposeCopy(5);
+  const locale = useUiLocale();
+  const purposeCopy = getStagePurposeCopy(5, locale);
 
   return (
     <section className={stagePanel}>
@@ -44,6 +48,7 @@ export function LatentNeedsWorkPanel({
       <LatentNeedsBoard
         data={data}
         onChange={onChange}
+        onGenerate={onGenerate}
         generating={generating}
       />
 

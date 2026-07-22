@@ -1,19 +1,19 @@
 import {
-  buildCremaToKnowTable,
-  CREMA_TO_KNOW_BIGS,
-  defaultMethodForCremaBig,
-  getCremaToKnowBigHint,
-  getCremaToKnowBigLabel,
-  type CremaToKnowBuildContext,
-} from "@/lib/stages/fieldResearch/cremaToKnowV5";
+  buildToKnowTable,
+  TO_KNOW_V5_BIGS,
+  defaultMethodForToKnowV5Big,
+  getToKnowV5BigHint,
+  getToKnowV5BigLabel,
+  type ToKnowBuildContext,
+} from "@/lib/stages/fieldResearch/toKnowCatalogV5";
 import type {
   ResearchMethodId,
   ToKnowBigCategoryId,
   ToKnowRow,
 } from "@/lib/stages/fieldResearch/types";
 
-/** To-know 표 자동 시드 입력 (CREMA v5 + 2단계 맥락) */
-export type ToKnowSeedContext = CremaToKnowBuildContext & {
+/** To-know 표 자동 시드 입력 (2단계 맥락 + v5 분류) */
+export type ToKnowSeedContext = ToKnowBuildContext & {
   discovery?: {
     targetPerson: string;
     situation: string;
@@ -22,13 +22,13 @@ export type ToKnowSeedContext = CremaToKnowBuildContext & {
   };
 };
 
-/** CREMA v5 대분류 (crema_to_know_list_v5.xlsx) */
+/** To-know v5 대분류 */
 export const TO_KNOW_PRIMARY_BIGS: ToKnowBigCategoryId[] = [
-  ...CREMA_TO_KNOW_BIGS,
+  ...TO_KNOW_V5_BIGS,
 ];
 
 export function buildAdaptedToKnowTable(ctx: ToKnowSeedContext): ToKnowRow[] {
-  return buildCremaToKnowTable(ctx);
+  return buildToKnowTable(ctx);
 }
 
 const BIG_LABELS: Partial<Record<ToKnowBigCategoryId, string>> = {
@@ -44,32 +44,32 @@ const BIG_LABELS: Partial<Record<ToKnowBigCategoryId, string>> = {
 };
 
 const BIG_HINTS: Partial<Record<ToKnowBigCategoryId, string>> = {
-  company: "레거시 · CREMA 대2 회사로 이전 권장",
-  customer: "레거시 · CREMA 대1 대상으로 이전 권장",
-  competitor: "레거시 · CREMA 대5로 이전 권장",
-  new_comer: "레거시 · CREMA 대5로 이전 권장",
-  supplier: "레거시 · CREMA 대4로 이전 권장",
+  company: "레거시 · 대분류 「회사」로 이전 권장",
+  customer: "레거시 · 대분류 「대상」으로 이전 권장",
+  competitor: "레거시 · 대분류 「경쟁사·서비스」로 이전 권장",
+  new_comer: "레거시 · 대분류 「경쟁사·서비스」로 이전 권장",
+  supplier: "레거시 · 대분류 「정책·인프라」로 이전 권장",
 };
 
 export function getToKnowBigCategoryLabel(
   big: ToKnowBigCategoryId,
   _ctx?: ToKnowSeedContext,
 ): string {
-  const crema = getCremaToKnowBigLabel(big);
-  if (crema !== big) return crema;
+  const v5 = getToKnowV5BigLabel(big);
+  if (v5 !== big) return v5;
   return BIG_LABELS[big] ?? big;
 }
 
 export function getToKnowBigCategoryHint(big: ToKnowBigCategoryId): string {
-  const crema = getCremaToKnowBigHint(big);
-  if (crema) return crema;
+  const v5 = getToKnowV5BigHint(big);
+  if (v5) return v5;
   return BIG_HINTS[big] ?? "";
 }
 
 export function defaultMethodForToKnowBig(
   big: ToKnowBigCategoryId,
 ): ResearchMethodId | "" {
-  const crema = defaultMethodForCremaBig(big);
-  if (crema) return crema;
+  const v5 = defaultMethodForToKnowV5Big(big);
+  if (v5) return v5;
   return "desk_research";
 }

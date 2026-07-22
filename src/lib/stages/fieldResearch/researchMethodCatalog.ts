@@ -52,6 +52,52 @@ export const RESEARCH_METHOD_CATALOG: ResearchMethodCatalogEntry[] = [
   },
 ];
 
+/**
+ * Design Thinking 공감(Empathize) 단계 현장 리서치 방법.
+ * 설문·데스크리서치·FGD 등은 제외 — 사용자 조사 준비(CORE 1) 추천에만 사용.
+ */
+export const DT_FIELD_RESEARCH_METHOD_IDS = [
+  "home_visit_in_depth",
+  "shadowing",
+  "be_the_customer",
+] as const satisfies readonly ResearchMethodId[];
+
+const DT_FIELD_METHOD_SET = new Set<ResearchMethodId>(
+  DT_FIELD_RESEARCH_METHOD_IDS,
+);
+
+export function isDtFieldResearchMethod(id: ResearchMethodId): boolean {
+  return DT_FIELD_METHOD_SET.has(id);
+}
+
+export function filterDtFieldResearchMethods(
+  ids: ResearchMethodId[],
+): ResearchMethodId[] {
+  return ids.filter((id) => DT_FIELD_METHOD_SET.has(id));
+}
+
+export function getDtFieldResearchCatalog(): ResearchMethodCatalogEntry[] {
+  return RESEARCH_METHOD_CATALOG.filter((m) => DT_FIELD_METHOD_SET.has(m.id));
+}
+
+/** 발견 정리하기(4단계) 조사 대상 — 선택 불가 리서치 방법 */
+const STAGE4_RESEARCH_SYNTHESIS_EXCLUDED = new Set<ResearchMethodId>([
+  "desk_research",
+  "survey",
+  "be_the_customer",
+]);
+
+export function isStage4ResearchSynthesisMethod(id: ResearchMethodId): boolean {
+  return !STAGE4_RESEARCH_SYNTHESIS_EXCLUDED.has(id);
+}
+
+/** 발견 정리하기 — 조사 대상 리서치 방법 드롭다운 옵션 */
+export function getStage4ResearchSynthesisCatalog(): ResearchMethodCatalogEntry[] {
+  return RESEARCH_METHOD_CATALOG.filter((m) =>
+    isStage4ResearchSynthesisMethod(m.id),
+  );
+}
+
 const BY_ID = new Map(
   RESEARCH_METHOD_CATALOG.map((entry) => [entry.id, entry]),
 );

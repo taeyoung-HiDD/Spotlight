@@ -1,5 +1,6 @@
 "use client";
 
+import { useUiLocale } from "@/hooks/useUiLocale";
 import { useMemo } from "react";
 import { AnimatedCoachPanel } from "@/components/stage/motion/AnimatedCoachPanel";
 import type { CoachDialogItem } from "@/components/stage/motion/CoachSequentialDialog";
@@ -7,6 +8,7 @@ import { getStageConfig } from "@/config/stageConfig";
 import { getStagePurposeCopy } from "@/lib/stages/discovery/stagePurposeCopy";
 import { formatCoachDialogBreaks } from "@/lib/coach/formatCoachDialog";
 import { getStageWorkInputGuide } from "@/lib/coach/inputGuidance";
+import { allStepItemIds } from "@/lib/stages/stage6/journeyStepZones";
 import type { UserJourneyMapData } from "@/lib/stages/stage6/userJourneyTypes";
 
 function summarizeJourney(data: UserJourneyMapData): string {
@@ -15,7 +17,7 @@ function summarizeJourney(data: UserJourneyMapData): string {
       const persona = data.personas[subject.id];
       if (!persona) return "";
       const assigned = persona.steps.reduce(
-        (sum, step) => sum + step.itemIds.length,
+        (sum, step) => sum + allStepItemIds(step, data.itemsById).length,
         0,
       );
       const pool = persona.poolItemIds.length;
@@ -37,8 +39,9 @@ export function UserJourneyCoachPanel({
   data,
   variant,
 }: UserJourneyCoachPanelProps) {
-  const stageConfig = getStageConfig(6);
-  const purpose = getStagePurposeCopy(6);
+  const stageConfig = getStageConfig(5);
+  const locale = useUiLocale();
+  const purpose = getStagePurposeCopy(5, locale);
 
   const introMessages = useMemo((): CoachDialogItem[] => {
     return [
@@ -50,7 +53,7 @@ export function UserJourneyCoachPanel({
       {
         type: "bubble",
         content: formatCoachDialogBreaks(
-          "페르소나 탭을 바꿔 가며 각 조사 대상의 여정을 그려 보세요. 4·5단계 자료를 단계마다 배치하면, 어느 구간에 니즈가 몰려 있는지 보입니다.",
+          "페르소나 탭을 바꿔 가며 각 조사 대상의 여정을 확인해 보세요. 4단계 언급·관찰이 들어오면 단계에 초안으로 올라가 있어요. 어색한 칸만 드래그로 옮겨 보세요.",
         ),
       },
     ];
@@ -59,11 +62,11 @@ export function UserJourneyCoachPanel({
   const chatContext = useMemo(
     () => ({
       projectId,
-      stageId: 6,
+      stageId: 5,
       stageTitle: "사용자 여정 지도 그리기",
       artifactSummary: summarizeJourney(data),
       stageBehaviorNote:
-        "6단계 User Journey Map: 페르소나별로 조사·니즈를 행동 단계에 배치해 니즈가 몰린 구간을 확인합니다.",
+        "5단계 User Journey Map: 페르소나별로 언급·관찰이 여정 단계에 초안 배치됩니다. 잠재 니즈는 다음 단계에서 다룹니다. 사용자는 위치를 다듬으며 인사이트가 몰린 구간을 확인합니다.",
     }),
     [projectId, data],
   );
@@ -87,7 +90,7 @@ export function UserJourneyCoachPanel({
       statusSub="사용자 여정 지도 그리기"
       messages={introMessages}
       chatContext={chatContext}
-      inputGuide={getStageWorkInputGuide(6)}
+      inputGuide={getStageWorkInputGuide(6, locale)}
       showComposer
     />
   );

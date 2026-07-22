@@ -8,6 +8,7 @@ import {
 } from "react";
 import { StageTwoColumnLayout } from "@/components/stage/StageTwoColumnLayout";
 import { StageRevealGroup } from "@/components/stage/motion/StageReveal";
+import { useArchiveView } from "@/lib/archive/archiveViewContext";
 import {
   getInitialInteractionMode,
   getStageConfig,
@@ -49,6 +50,7 @@ export function StageContainer({
   onEnterWork,
 }: StageContainerProps) {
   const config = getStageConfig(stageNumber);
+  const archiveView = useArchiveView();
   const [interactionMode, setInteractionMode] = useState<InteractionMode>(() =>
     getInitialInteractionMode(stageNumber),
   );
@@ -65,6 +67,16 @@ export function StageContainer({
   }, [onEnterWork]);
 
   useWorkspaceScrollOnEnter(`${stageNumber}-${interactionMode}`);
+
+  if (archiveView) {
+    return (
+      <StageRevealGroup>
+        <div key="archive-work" className="coach-page-enter">
+          {work}
+        </div>
+      </StageRevealGroup>
+    );
+  }
 
   if (!config.isConversationalInput || interactionMode === "work") {
     return (

@@ -5,15 +5,18 @@ import { useCallback, useEffect, useState } from "react";
 import { StageContainer } from "@/components/layout/StageContainer";
 import { WorkspaceBackButton } from "@/components/navigation/WorkspaceBackButton";
 import { WorkspaceForwardButton } from "@/components/navigation/WorkspaceForwardButton";
+import { useOptionalProjectWorkspace } from "@/components/project/ProjectWorkspaceContext";
 import { UserJourneyCoachPanel } from "@/components/stage/stage6/UserJourneyCoachPanel";
 import { UserJourneyWorkPanel } from "@/components/stage/stage6/UserJourneyWorkPanel";
 import { fetchStage4Discoveries } from "@/lib/artifacts/stage4Discoveries";
-import { fetchStage5LatentNeeds } from "@/lib/artifacts/stage5LatentNeeds";
 import {
   fetchStage6UserJourney,
   saveStage6UserJourney,
 } from "@/lib/artifacts/stage6UserJourney";
-import { mergePriorStagesIntoJourney } from "@/lib/stages/stage6/bootstrapJourneyFromPriorStages";
+import {
+  bootstrapJourneyOnEntry,
+  journeyPlacementChanged,
+} from "@/lib/stages/stage6/bootstrapJourneyFromPriorStages";
 import {
   defaultUserJourneyMap,
   type UserJourneyMapData,
@@ -39,6 +42,7 @@ function formatSavedTime(iso: string) {
 
 export function Stage6UserJourney({ projectId }: Stage6UserJourneyProps) {
   const router = useRouter();
+  const workspace = useOptionalProjectWorkspace();
   const [data, setData] = useState<UserJourneyMapData>(defaultUserJourneyMap());
   const [artifactId, setArtifactId] = useState<string | null>(null);
   const [allSlots, setAllSlots] = useState<ArtifactSlots>({});
@@ -51,20 +55,29 @@ export function Stage6UserJourney({ projectId }: Stage6UserJourneyProps) {
     let cancelled = false;
     void (async () => {
       try {
-        const [journey, s4, s5] = await Promise.all([
+        const [journey, s4] = await Promise.all([
           fetchStage6UserJourney(projectId),
           fetchStage4Discoveries(projectId),
-          fetchStage5LatentNeeds(projectId),
         ]);
         if (cancelled) return;
-        const merged = mergePriorStagesIntoJourney(
-          journey.data,
-          s4.data,
-          s5.data,
-        );
-        setData(merged);
+
+        const bootstrapped = bootstrapJourneyOnEntry(journey.data, s4.data);
+        setData(bootstrapped);
         setArtifactId(journey.artifactId);
         setAllSlots(journey.allSlots);
+
+        if (journeyPlacementChanged(journey.data, bootstrapped)) {
+          const result = await saveStage6UserJourney({
+            projectId,
+            artifactId: journey.artifactId,
+            data: bootstrapped,
+            existingSlots: journey.allSlots,
+          });
+          if (!cancelled) {
+            setArtifactId(result.artifactId);
+            setLastSavedAt(formatSavedTime(new Date().toISOString()));
+          }
+        }
       } catch (e) {
         if (!cancelled) {
           setSaveError(
@@ -125,8 +138,8 @@ export function Stage6UserJourney({ projectId }: Stage6UserJourneyProps) {
 
   return (
     <StageContainer
-      stageNumber={6}
-      sceneKey={`stage-6-journey-${projectId}`}
+      stageNumber={5}
+      sceneKey={`stage-5-journey-${projectId}`}
       introCoach={
         <UserJourneyCoachPanel
           projectId={projectId}
@@ -144,27 +157,29 @@ export function Stage6UserJourney({ projectId }: Stage6UserJourneyProps) {
       work={
         <>
           <UserJourneyWorkPanel
+            projectId={projectId}
             data={data}
             onChange={handleChange}
             saving={saving}
             saveError={saveError}
             lastSavedAt={lastSavedAt}
+            projectTitle={workspace?.projectTitle}
           />
           <div
-            className={`${stagePanel} mt-4 flex flex-wrap items-center justify-between gap-3`}
+            className={`${stagePanel} stage-workspace-nav mt-4 flex flex-wrap items-center justify-between gap-3`}
           >
             <p className={stageCaption}>
-              조사·니즈 배치를 마친 뒤 아이디어 만들기로 넘어가 보세요.
+              초안 배치를 다듬은 뒤 진짜 필요 찾기로 넘어가 보세요.
             </p>
             <div className="flex flex-wrap gap-2.5">
               <WorkspaceBackButton
                 projectId={projectId}
-                fallbackStageId={5}
+                fallbackStageId={4}
               />
               <WorkspaceForwardButton
-                stageId={7}
+                stageId={6}
                 onClick={() =>
-                  router.push(`/project/${projectId}/stage/7`)
+                  router.push(`/project/${projectId}/stage/6`)
                 }
               />
             </div>

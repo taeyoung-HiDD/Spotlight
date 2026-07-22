@@ -1,7 +1,9 @@
 "use client";
 
 import { IconDeviceMobile, IconSparkles, IconWorld } from "@tabler/icons-react";
-import { useCallback, useState, type ReactNode } from "react";
+import { useCallback, useMemo, useState, type ReactNode } from "react";
+import { PrototypeView } from "@/components/stage/stage10/PrototypeView";
+import type { ImageOverlayText } from "@/lib/stages/imageOverlayTypes";
 import { requestPrototypeHtml } from "@/lib/ai/client/stageAiClient";
 import type { ConceptSheetData } from "@/lib/stages/stage9/conceptSheetTypes";
 import type { PrototypeData, PrototypePlatform } from "@/lib/stages/stage10/prototypeTypes";
@@ -44,6 +46,20 @@ export function PrototypeWorkPanel({
 }: PrototypeWorkPanelProps) {
   const [generating, setGenerating] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
+
+  const prototypeOverlay = useMemo<ImageOverlayText>(
+    () => ({
+      title: concept.conceptName.trim() || undefined,
+      description: concept.oneLiner.trim() || undefined,
+      buttonLabel: concept.features.find((f) => f.trim())?.trim(),
+    }),
+    [concept.conceptName, concept.oneLiner, concept.features],
+  );
+
+  const heroBackgroundUrl = useMemo(
+    () => concept.storyboardCuts.find((c) => c.imageUrl)?.imageUrl,
+    [concept.storyboardCuts],
+  );
 
   const setPlatform = (platform: PrototypePlatform) => {
     onChange({ ...data, platform });
@@ -136,21 +152,12 @@ export function PrototypeWorkPanel({
           </p>
         )}
 
-        <div className="overflow-hidden rounded-xl border border-border-warm bg-cream">
-          {data.html.trim() ? (
-            <iframe
-              title="시제품 미리보기"
-              srcDoc={data.html}
-              sandbox=""
-              className="min-h-[520px] w-full bg-white"
-            />
-          ) : (
-            <div className="flex min-h-[320px] items-center justify-center px-6 text-center text-[15px] text-muted">
-              플랫폼을 고른 뒤 「AI 시제품 생성」을 누르면 여기에 미리보기가
-              나타납니다.
-            </div>
-          )}
-        </div>
+        <PrototypeView
+          platform={data.platform}
+          backgroundImageUrl={heroBackgroundUrl}
+          overlay={prototypeOverlay}
+          html={data.html}
+        />
 
         {data.html.trim() ? (
           <button

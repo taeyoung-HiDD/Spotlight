@@ -1,5 +1,6 @@
 import {
   getResearchMethodEntry,
+  isStage4ResearchSynthesisMethod,
   RESEARCH_METHOD_CATALOG,
 } from "@/lib/stages/fieldResearch/researchMethodCatalog";
 import type { ResearchMethodId } from "@/lib/stages/fieldResearch/types";
@@ -104,9 +105,12 @@ export function normalizeResearchSubject(
 ): ResearchSubject {
   const rawMethodId =
     typeof raw.researchMethodId === "string" ? raw.researchMethodId : "";
-  const researchMethodId: ResearchMethodId | "" = rawMethodId
+  let researchMethodId: ResearchMethodId | "" = rawMethodId
     ? (rawMethodId as ResearchMethodId)
     : guessMethodIdFromText(raw.researchMethod ?? "");
+  if (researchMethodId && !isStage4ResearchSynthesisMethod(researchMethodId)) {
+    researchMethodId = "";
+  }
 
   const name = raw.name || "";
   const context = raw.context || "";

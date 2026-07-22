@@ -1,8 +1,11 @@
 import { NextResponse } from "next/server";
-import { formatGeminiImageError } from "@/lib/ai/errors";
-import { resolveGeminiApiKey } from "@/lib/ai/env";
+import { formatImageGenerateError } from "@/lib/ai/errors";
 import { buildStoryboardImagePrompt } from "@/lib/ai/prompts/storyboardImage";
-import { geminiGenerateImage } from "@/lib/ai/providers/geminiImage";
+import {
+  generateImageDetailed,
+  resolveImageCredentialsError,
+  resolveImageProvider,
+} from "@/lib/ai/providers/imageGenerate";
 import { fetchProjectAccess } from "@/lib/projects/projectAccess";
 
 export async function POST(request: Request) {
@@ -39,10 +42,9 @@ export async function POST(request: Request) {
     );
   }
 
-  const apiKey = resolveGeminiApiKey();
-  if (!apiKey) {
+  if (!resolveImageProvider()) {
     return NextResponse.json(
-      { error: "GEMINI_API_KEY가 설정되어 있지 않습니다." },
+      { error: resolveImageCredentialsError() },
       { status: 503 },
     );
   }
@@ -65,25 +67,22 @@ export async function POST(request: Request) {
   });
 
   try {
-    const generated = await geminiGenerateImage(apiKey, prompt);
-    if (!generated) {
-      return NextResponse.json(
-        { error: "스토리보드 이미지를 생성하지 못했습니다." },
-        { status: 502 },
-      );
+    const generated = await generateImageDetailed(prompt);
+    if (!generated.ok) {
+      return NextResponse.json({ error: generated.error }, { status: 502 });
     }
 
     return NextResponse.json({
       imageUrl: generated.dataUrl,
       cutIndex,
       confidence: "hypothesis" as const,
-      source: "gemini",
+      source: generated.source,
       model: generated.model,
     });
   } catch (error) {
-    console.error("[api/stage8/storyboard-image] Gemini error:", error);
+    console.error("[api/stage8/storyboard-image] image error:", error);
     return NextResponse.json(
-      { error: formatGeminiImageError(error) },
+      { error: formatImageGenerateError(error) },
       { status: 502 },
     );
   }

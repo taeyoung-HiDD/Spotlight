@@ -15,7 +15,7 @@ import type {
   SlotState,
 } from "@/types/database";
 
-const STAGE_ID = 5;
+const STAGE_ID = 6;
 
 function nowIso() {
   return new Date().toISOString();

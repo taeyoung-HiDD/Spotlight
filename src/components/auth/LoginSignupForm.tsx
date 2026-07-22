@@ -33,7 +33,10 @@ export function LoginSignupForm() {
     const authError = searchParams.get("error");
     const authMessage = searchParams.get("message");
     if (authError === "auth" && authMessage) {
-      setError(formatAuthError(decodeURIComponent(authMessage), "signin"));
+      // useSearchParams().get()은 이미 한 번 디코딩됨.
+      // decodeURIComponent를 다시 치면 메시지에 '%'가 있을 때 URIError로
+      // 로그인 화면 전체가 하얀 화면이 됩니다.
+      setError(formatAuthError(authMessage, "signin"));
     }
     if (searchParams.get("verified") === "1") {
       setInfo("이메일 인증이 완료됐어요. 로그인해 주세요.");

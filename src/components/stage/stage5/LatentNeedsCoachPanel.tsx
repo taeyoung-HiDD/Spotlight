@@ -1,5 +1,6 @@
 "use client";
 
+import { useUiLocale } from "@/hooks/useUiLocale";
 import { useEffect, useMemo, useState } from "react";
 import { AnimatedCoachPanel } from "@/components/stage/motion/AnimatedCoachPanel";
 import type { CoachDialogItem } from "@/components/stage/motion/CoachSequentialDialog";
@@ -8,14 +9,15 @@ import { stageChatTitle } from "@/lib/coach/chatClient";
 import { formatCoachDialogBreaks } from "@/lib/coach/formatCoachDialog";
 import { getStageWorkInputGuide } from "@/lib/coach/inputGuidance";
 import { getStageConfig } from "@/config/stageConfig";
+import type { UiLocale } from "@/lib/i18n/uiLocale";
 import { getStagePurposeCopy } from "@/lib/stages/discovery/stagePurposeCopy";
 import type { Stage5LatentNeedsData } from "@/lib/stages/stage5/latentNeedsTypes";
 import { subjectDisplayLabel } from "@/lib/stages/stage5/subjectInitials";
 
-const STAGE5_NEEDS_DIRECTIVE = `5단계 진짜 필요 찾기:
+const STAGE6_NEEDS_DIRECTIVE = `6단계 진짜 필요 찾기:
 - 4단계 언급·관찰을 바탕으로 잠재 니즈를 정리하는 단계입니다.
 - 결론처럼 말하지 않고, 검증 포인트를 짧게 제안합니다.
-- 조사 대상 필터(전체·개별)로 보고 싶은 사람의 언급·관찰·잠재 니즈만 볼 수 있습니다.`;
+- 조사 결과 탭(언급·관찰·발견·잠재 니즈)과 조사 대상 필터로 보고 싶은 항목·사람만 골라 볼 수 있습니다.`;
 
 function clip(s: string, max: number): string {
   const t = s.trim();
@@ -26,8 +28,9 @@ function clip(s: string, max: number): string {
 function buildIntroMessages(
   data: Stage5LatentNeedsData,
   subjectCountFromStage4: number,
+  locale: UiLocale,
 ): CoachDialogItem[] {
-  const purpose = getStagePurposeCopy(5);
+  const purpose = getStagePurposeCopy(6, locale);
   const messages: CoachDialogItem[] = [
     {
       type: "highlight",
@@ -126,7 +129,8 @@ export function LatentNeedsCoachPanel({
   data,
   variant,
 }: LatentNeedsCoachPanelProps) {
-  const stageConfig = getStageConfig(5);
+  const locale = useUiLocale();
+  const stageConfig = getStageConfig(6);
   const [stage4SubjectCount, setStage4SubjectCount] = useState(0);
   const [contextReady, setContextReady] = useState(false);
 
@@ -155,16 +159,16 @@ export function LatentNeedsCoachPanel({
     if (!contextReady) {
       return [{ type: "bubble", content: "프로젝트 맥락을 불러오는 중이에요…" }];
     }
-    return buildIntroMessages(data, stage4SubjectCount);
-  }, [contextReady, data, stage4SubjectCount]);
+    return buildIntroMessages(data, stage4SubjectCount, locale);
+  }, [contextReady, data, stage4SubjectCount, locale]);
 
   const chatContext = useMemo(
     () => ({
       projectId,
-      stageId: 5,
-      stageTitle: stageChatTitle(5),
+      stageId: 6,
+      stageTitle: stageChatTitle(6),
       artifactSummary: summarizeBoard(data),
-      stageBehaviorNote: STAGE5_NEEDS_DIRECTIVE,
+      stageBehaviorNote: STAGE6_NEEDS_DIRECTIVE,
     }),
     [projectId, data],
   );
@@ -188,7 +192,7 @@ export function LatentNeedsCoachPanel({
       statusSub="니즈 분석하기"
       messages={introMessages}
       chatContext={chatContext}
-      inputGuide={getStageWorkInputGuide(5)}
+      inputGuide={getStageWorkInputGuide(5, locale)}
       showComposer
     />
   );

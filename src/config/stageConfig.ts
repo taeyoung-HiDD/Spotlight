@@ -25,7 +25,7 @@ export type StageConfigEntry = {
   stageNumber: number;
   /** true: 인트로(중앙 코치) → work(좌우 분할) / false: 진입 즉시 work */
   isConversationalInput: boolean;
-  /** true: 인트로 후 대화로 슬롯 수집 → 검토 분할 (단계 1) */
+  /** true: 인트로 후 대화로 슬롯 수집 (단계 1) */
   hasConversationalCollection?: boolean;
   introStatusLabel?: string;
   introStatusSub?: string;
@@ -37,7 +37,7 @@ export type StageConfigEntry = {
 
 export type InteractionMode = "intro" | "work";
 
-const CONVERSATIONAL_STAGES = new Set([1, 5, 10, 11]);
+const CONVERSATIONAL_STAGES = new Set([1, 6, 10, 11]);
 
 function metaLabel(stageNumber: number): string {
   return STAGE_META[stageNumber]?.label ?? `단계 ${stageNumber}`;
@@ -107,7 +107,7 @@ const STAGE_1_INTRO: StageIntroMessage[] = [
     variant: "secondary",
     parts: [
       {
-        text: "먼저 이름과 짧은 질문으로 코칭을 맞춘 뒤, 문제점·Hopes·Fears를 이야기해요.",
+        text: "먼저 이름과 짧은 질문으로 코칭을 맞춘 뒤, 문제점과 프로젝트 이름을 정리해요.",
       },
     ],
   },
@@ -158,7 +158,7 @@ const STAGE_11_INTRO: StageIntroMessage[] = [
 function buildStageConfigs(): Record<number, StageConfigEntry> {
   const configs: Record<number, StageConfigEntry> = {};
 
-  for (let n = 1; n <= 14; n++) {
+  for (let n = 1; n <= 16; n++) {
     const isConversationalInput = CONVERSATIONAL_STAGES.has(n);
     const entry: StageConfigEntry = {
       stageNumber: n,
@@ -175,10 +175,10 @@ function buildStageConfigs(): Record<number, StageConfigEntry> {
       entry.introStatusLabel = "환영";
       entry.introStatusSub = "방금 도착한 아이디어";
       entry.workStatusLabel = "듣는 중";
-      entry.workStatusSub = "Hopes & Fears";
+      entry.workStatusSub = "문제점 정리";
     } else if (n === 2) {
       entry.workStatusLabel = "듣는 중";
-      entry.workStatusSub = "맥락 이해하기";
+      entry.workStatusSub = "사전 조사하기";
     } else if (n === 3) {
       entry.workStatusLabel = "듣는 중";
       entry.workStatusSub = "사용자 조사 준비";
@@ -186,30 +186,33 @@ function buildStageConfigs(): Record<number, StageConfigEntry> {
       entry.workStatusLabel = "듣는 중";
       entry.workStatusSub = "발견 정리";
     } else if (n === 5) {
+      entry.workStatusLabel = "듣는 중";
+      entry.workStatusSub = "사용자 여정 지도";
+    } else if (n === 6) {
       entry.introStatusLabel = "함께 짚어보는 중";
       entry.introStatusSub = "니즈 분석하기";
       entry.workStatusLabel = "함께 짚어보는 중";
-      entry.workStatusSub = "세 층 · 작업";
-    } else if (n === 6) {
-      entry.workStatusLabel = "듣는 중";
-      entry.workStatusSub = "아이디어";
+      entry.workStatusSub = "니즈 분석하기";
     } else if (n === 7) {
-      entry.workStatusLabel = "듣는 중";
-      entry.workStatusSub = "우선순위";
+      entry.workStatusLabel = "짚어주는 중";
+      entry.workStatusSub = "HMW 질문 만들기";
     } else if (n === 8) {
+      entry.workStatusLabel = "함께 펼치는 중";
+      entry.workStatusSub = "아이디어 펼치기";
+    } else if (n === 9) {
       entry.workStatusLabel = "듣는 중";
       entry.workStatusSub = "우선순위";
-    } else if (n === 9) {
-      entry.workStatusLabel = "제안 중";
-      entry.workStatusSub = "컨셉 · 스토리보드";
     } else if (n === 10) {
       entry.workStatusLabel = "제안 중";
-      entry.workStatusSub = "시제품";
+      entry.workStatusSub = "컨셉 · 스토리보드";
     } else if (n === 11) {
+      entry.workStatusLabel = "제안 중";
+      entry.workStatusSub = "시제품";
+    } else if (n === 12) {
       entry.introMessages = STAGE_10_INTRO;
       entry.introStatusLabel = "짚어주는 중";
       entry.introStatusSub = "검증 결과";
-    } else if (n === 12) {
+    } else if (n === 13) {
       entry.introMessages = STAGE_11_INTRO;
       entry.introStatusLabel = "제안 중";
       entry.introStatusSub = "5대 렌즈";

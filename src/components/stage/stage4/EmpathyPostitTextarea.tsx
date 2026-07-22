@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useLayoutEffect, useRef } from "react";
+import { useLocalizedContent } from "@/hooks/useLocalizedContent";
+import { useLocalizedEditable } from "@/hooks/useLocalizedEditable";
 import { fitEmpathyPostitTextarea } from "@/lib/stages/stage4/empathyPostitFitText";
 
 interface EmpathyPostitTextareaProps {
@@ -20,6 +22,8 @@ export function EmpathyPostitTextarea({
   compact = false,
 }: EmpathyPostitTextareaProps) {
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const editable = useLocalizedEditable(value, onChange);
+  const { text: localizedPlaceholder } = useLocalizedContent(placeholder);
 
   const refit = useCallback(() => {
     const el = textareaRef.current;
@@ -28,7 +32,7 @@ export function EmpathyPostitTextarea({
 
   useLayoutEffect(() => {
     refit();
-  }, [value, refit]);
+  }, [editable.value, refit]);
 
   useLayoutEffect(() => {
     const el = textareaRef.current;
@@ -49,9 +53,12 @@ export function EmpathyPostitTextarea({
         onMountRef?.(el);
         if (el) fitEmpathyPostitTextarea(el, compact);
       }}
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      placeholder={placeholder}
+      value={editable.value}
+      onChange={(e) => editable.onChange(e.target.value)}
+      onFocus={editable.onFocus}
+      onBlur={editable.onBlur}
+      placeholder={localizedPlaceholder}
+      data-translating={editable.translating ? "true" : undefined}
       className="empathy-postit-text break-keep"
     />
   );

@@ -5,7 +5,17 @@ import {
   DEFAULT_TO_KNOW_PREP,
 } from "@/lib/stages/fieldResearch/defaults";
 import { resolveToKnowPrepFromLoad } from "@/lib/stages/fieldResearch/stage3ToKnowPrepFlow";
-import { migrateToKnowTable } from "@/lib/stages/fieldResearch/toKnowMigrate";
+import {
+  normalizeStage3EmpathyMaps,
+  resolveStage3PrepWorkflowPhase,
+} from "@/lib/stages/fieldResearch/stage3EmpathyMap";
+import {
+  normalizeStage3ResearchPrep,
+} from "@/lib/stages/fieldResearch/stage3ResearchPrep";
+import {
+  finalizeToKnowData,
+  migrateToKnowTable,
+} from "@/lib/stages/fieldResearch/toKnowMigrate";
 import type { FieldResearchData } from "@/lib/stages/fieldResearch/types";
 import type {
   ArtifactRow,
@@ -44,12 +54,16 @@ export function fieldResearchToSlots(data: FieldResearchData): ArtifactSlots {
   return {
     prep: makeSlot(
       {
+        prepWorkflowPhase: data.prepWorkflowPhase,
+        researchPrep: data.researchPrep,
+        empathyMaps: data.empathyMaps,
         toKnowTable: data.toKnowTable,
         // 레거시 호환(읽기 전용): 이전 버전이 이 키를 기대할 수 있어 함께 저장
         toKnowList: Array.isArray(data.toKnowTable)
           ? data.toKnowTable.map((r) => r.small).filter(Boolean)
           : [],
         toKnowPrep: data.toKnowPrep,
+        toKnowCoreQuestion: data.toKnowCoreQuestion,
         researchMethods: data.researchMethods,
         researchProtocol: data.researchProtocol,
         prepConfirmed: data.prepConfirmed,
@@ -82,6 +96,10 @@ function parseFieldResearch(slots: ArtifactSlots): FieldResearchData {
   const sessionsSlot = slots.sessions?.content;
 
   let toKnowPrep = { ...DEFAULT_TO_KNOW_PREP };
+  let prepWorkflowPhase = DEFAULT_FIELD_RESEARCH.prepWorkflowPhase;
+  let researchPrep = { ...DEFAULT_FIELD_RESEARCH.researchPrep };
+  let empathyMaps = [...DEFAULT_FIELD_RESEARCH.empathyMaps];
+  let toKnowCoreQuestion = DEFAULT_FIELD_RESEARCH.toKnowCoreQuestion;
   let toKnowTable = [...DEFAULT_FIELD_RESEARCH.toKnowTable];
   let researchMethods = [...DEFAULT_FIELD_RESEARCH.researchMethods];
   let researchProtocol = DEFAULT_FIELD_RESEARCH.researchProtocol;
@@ -94,10 +112,22 @@ function parseFieldResearch(slots: ArtifactSlots): FieldResearchData {
 
   if (prep && typeof prep === "object") {
     const p = prep as Record<string, unknown>;
+    if (Array.isArray(p.empathyMaps)) {
+      empathyMaps = normalizeStage3EmpathyMaps(p.empathyMaps);
+    }
+    if (p.researchPrep) {
+      researchPrep = normalizeStage3ResearchPrep(p.researchPrep);
+    }
+    if (typeof p.toKnowCoreQuestion === "string") {
+      toKnowCoreQuestion = p.toKnowCoreQuestion.trim();
+    }
     if (Array.isArray(p.toKnowTable)) {
-      toKnowTable = migrateToKnowTable(
+      const finalized = finalizeToKnowData(
         p.toKnowTable as FieldResearchData["toKnowTable"],
+        toKnowCoreQuestion,
       );
+      toKnowCoreQuestion = finalized.toKnowCoreQuestion;
+      toKnowTable = finalized.toKnowTable;
     } else if (Array.isArray(p.toKnowList)) {
       // 레거시 마이그레이션: 문자열 리스트 → 테이블(임시로 니즈 카테고리에 모아둠)
       const list = p.toKnowList as unknown[];
@@ -112,7 +142,9 @@ function parseFieldResearch(slots: ArtifactSlots): FieldResearchData {
           method: "",
           note: "",
         })) as FieldResearchData["toKnowTable"];
-      toKnowTable = migrateToKnowTable(toKnowTable);
+      const finalized = finalizeToKnowData(toKnowTable, toKnowCoreQuestion);
+      toKnowCoreQuestion = finalized.toKnowCoreQuestion;
+      toKnowTable = finalized.toKnowTable;
     }
     toKnowPrep = resolveToKnowPrepFromLoad(p.toKnowPrep, toKnowTable);
     if (Array.isArray(p.researchMethods)) {
@@ -124,6 +156,7 @@ function parseFieldResearch(slots: ArtifactSlots): FieldResearchData {
     if (typeof p.prepConfirmed === "boolean") {
       prepConfirmed = p.prepConfirmed;
     }
+    prepWorkflowPhase = resolveStage3PrepWorkflowPhase(p.prepWorkflowPhase);
   }
 
   if (recruitment && typeof recruitment === "object") {
@@ -150,7 +183,11 @@ function parseFieldResearch(slots: ArtifactSlots): FieldResearchData {
   }
 
   return {
+    prepWorkflowPhase,
+    researchPrep,
+    empathyMaps,
     toKnowPrep,
+    toKnowCoreQuestion,
     toKnowTable,
     researchMethods,
     researchProtocol,

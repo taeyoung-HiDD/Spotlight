@@ -1,3 +1,5 @@
+import { sanitizeCoachKoreanText } from "@/lib/coach/sanitizeCoachKorean";
+
 const QUESTION_SECTION_HEADERS =
   /^(?:현장에서\s*)?(?:확인할\s*)?질문|현장에서\s*확인|조사\s*질문|검증\s*질문/u;
 
@@ -39,6 +41,76 @@ function isQuestionSectionHeader(line: string): boolean {
   return QUESTION_SECTION_HEADERS.test(t);
 }
 
+const FORMAL_POLITE_ENDING =
+  /(?:습니다|입니다|됩니다|있습니다|없습니다|드립니다|합니다|니까요)[.!?]?$/u;
+
+const SKIP_TONE_LINE =
+  /^(?:※|\[|문제점|가이드:)/u;
+
+/** 불릿·본문 말끝을 존댓말(~습니다/~입니다)로 통일 */
+function normalizeBulletTone(line: string): string {
+  const bulletMatch = line.match(/^(\s*[·•\-*]\s*)(.*)$/);
+  const prefix = bulletMatch?.[1] ?? "";
+  let text = (bulletMatch?.[2] ?? line).trim();
+  if (!text || SKIP_TONE_LINE.test(text)) return line;
+
+  if (FORMAL_POLITE_ENDING.test(text)) return line;
+
+  const nounFragment =
+    /(?:패턴|행태|세그먼트|역할|경향|주체|접점|창구|제약|후보|관점|메모|확인)\.$/u;
+  if (nounFragment.test(text)) {
+    text = text.replace(/\.$/, "입니다.");
+  } else {
+    const replacements: [RegExp, string][] = [
+      [/좋아요[.]?$/, "좋습니다."],
+      [/예요[.]?$/, "입니다."],
+      [/이에요[.]?$/, "입니다."],
+      [/해요[.]?$/, "합니다."],
+      [/돼요[.]?$/, "됩니다."],
+      [/([가-힣])이다[.]?$/, "$1입니다."],
+      [/([가-힣])였다[.]?$/, "$1였습니다."],
+      [/([가-힣])었다[.]?$/, "$1었습니다."],
+      [/([가-힣]{2,})한다[.]?$/, "$1합니다."],
+      [/([가-힣]{2,})된다[.]?$/, "$1됩니다."],
+      [/([가-힣]{2,})간다[.]?$/, "$1갑니다."],
+      [/([가-힣]{2,})온다[.]?$/, "$1옵니다."],
+      [/([가-힣]{2,})있다[.]?$/, "$1있습니다."],
+      [/([가-힣]{2,})없다[.]?$/, "$1없습니다."],
+      [/([가-힣]{2,})함[.]?$/, "$1합니다."],
+      [/([가-힣]{2,})임[.]?$/, "$1입니다."],
+      [/([가-힣]{2,})됨[.]?$/, "$1됩니다."],
+      [/([가-힣]{2,})보임[.]?$/, "$1보입니다."],
+    ];
+
+    for (const [pattern, replacement] of replacements) {
+      if (pattern.test(text)) {
+        text = text.replace(pattern, replacement);
+        break;
+      }
+    }
+  }
+
+  const originalBody = (bulletMatch?.[2] ?? line).trim();
+  if (text === originalBody) return line;
+  return `${prefix}${text}`;
+}
+
+function normalizeContextualFindingsTone(findings: string): string {
+  return findings
+    .split("\n")
+    .map((line) => {
+      const trimmed = line.trim();
+      if (!trimmed || isSectionHeaderLine(trimmed) || SKIP_TONE_LINE.test(trimmed)) {
+        return line;
+      }
+      if (/^[·•\-*]/.test(trimmed) || trimmed.includes(":") || trimmed.includes("：")) {
+        return normalizeBulletTone(line);
+      }
+      return line;
+    })
+    .join("\n");
+}
+
 /** 사전 조사 본문에서 질문 섹션·의문형 줄 제거 */
 export function sanitizeContextualFindings(findings: string): string {
   const lines = findings.split("\n");
@@ -75,10 +147,12 @@ export function sanitizeContextualFindings(findings: string): string {
     out.push(line);
   }
 
-  return out
+  const cleaned = out
     .join("\n")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
+
+  return sanitizeCoachKoreanText(normalizeContextualFindingsTone(cleaned));
 }
 
 /** 캔버스·불릿 표시용 항목 필터 */

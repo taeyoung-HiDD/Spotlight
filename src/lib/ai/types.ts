@@ -7,7 +7,9 @@ export type AiTask =
   | "prototype_html"
   | "storyboard_image"
   | "research_debrief"
-  | "research_audio";
+  | "research_audio"
+  | "pre_pmf_overview"
+  | "pre_pmf_followup";
 
 export type GroqRole = "system" | "user" | "assistant";
 

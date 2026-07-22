@@ -10,7 +10,10 @@ import {
   type ReactNode,
 } from "react";
 import { StageActivityGuidePanel } from "@/components/stage/StageActivityGuidePanel";
+import { useProjectWorkspace } from "@/components/project/ProjectWorkspaceContext";
+import { isTaskFocusedProjectState } from "@/lib/stages/stage1/guidanceStyle";
 import {
+  isStageActivityGuideEnabled,
   isStageGuideDismissed,
   setStageGuideDismissed,
 } from "@/lib/stages/stageGuideDismissal";
@@ -45,18 +48,39 @@ export function StageGuideProvider({
   stageNumber,
   children,
 }: StageGuideProviderProps) {
+  const { coachingLevel, guidanceStyle, coachingLevelReady } =
+    useProjectWorkspace();
+  const taskFocused = isTaskFocusedProjectState({
+    guidanceStyle,
+    userLevel: coachingLevel,
+  });
   const [guideReady, setGuideReady] = useState(false);
   const [isDismissed, setIsDismissed] = useState(false);
   const [isBlocking, setIsBlocking] = useState(false);
   const [manualOpen, setManualOpen] = useState(false);
 
   useEffect(() => {
+    if (!coachingLevelReady) {
+      setGuideReady(false);
+      setIsBlocking(false);
+      setManualOpen(false);
+      return;
+    }
+
+    if (!isStageActivityGuideEnabled(stageNumber)) {
+      setIsDismissed(true);
+      setIsBlocking(false);
+      setManualOpen(false);
+      setGuideReady(true);
+      return;
+    }
+
     const dismissed = isStageGuideDismissed(stageNumber);
     setIsDismissed(dismissed);
-    setIsBlocking(!dismissed);
+    setIsBlocking(!taskFocused && !dismissed);
     setManualOpen(false);
     setGuideReady(true);
-  }, [stageNumber]);
+  }, [stageNumber, taskFocused, coachingLevelReady]);
 
   const openGuide = useCallback(() => setManualOpen(true), []);
   const closeGuide = useCallback(() => setManualOpen(false), []);
@@ -118,11 +142,22 @@ export function StageGuideBody({ children }: StageGuideBodyProps) {
     closeGuide,
     completeGuide,
   } = useStageGuide();
+  const { coachingLevel, guidanceStyle, coachingLevelReady } =
+    useProjectWorkspace();
+  const guideVariant = coachingLevel === "expert" ? "minimal" : "full";
+  const taskFocused = isTaskFocusedProjectState({
+    guidanceStyle,
+    userLevel: coachingLevel,
+  });
 
-  const showGate = guideReady && isBlocking;
-  const showDialog = guideReady && manualOpen && !isBlocking;
+  const guideEnabled = isStageActivityGuideEnabled(stageNumber);
+  const showGate = guideReady && guideEnabled && isBlocking;
+  const showDialog = guideReady && guideEnabled && manualOpen && !isBlocking;
 
   if (!guideReady) {
+    if (coachingLevelReady && taskFocused) {
+      return <>{children}</>;
+    }
     return null;
   }
 
@@ -132,6 +167,7 @@ export function StageGuideBody({ children }: StageGuideBodyProps) {
         <StageActivityGuidePanel
           stageNumber={stageNumber}
           mode="gate"
+          variant={guideVariant}
           showDismissOption={!isDismissed}
           onStart={completeGuide}
         />
@@ -141,6 +177,7 @@ export function StageGuideBody({ children }: StageGuideBodyProps) {
         <StageActivityGuidePanel
           stageNumber={stageNumber}
           mode="dialog"
+          variant={guideVariant}
           showDismissOption={!isDismissed}
           onStart={completeGuide}
           onClose={closeGuide}
