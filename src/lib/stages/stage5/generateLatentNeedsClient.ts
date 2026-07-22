@@ -48,17 +48,18 @@ export function buildSourceInputsFromBoard(
     data.subjects.map((s) => [s.id, s.name.trim()] as const),
   );
 
-  return data.postits
-    .filter(
-      (p) => isStage5SourcePostitKind(p.kind) && p.text.trim().length > 0,
-    )
-    .map((p) => ({
-      sourceId: p.id,
-      subjectId: p.subjectId,
-      subjectName: nameById.get(p.subjectId) ?? "",
-      kind: p.kind,
-      text: p.text.trim(),
-    }));
+  return data.postits.flatMap((p) => {
+    if (!isStage5SourcePostitKind(p.kind) || !p.text.trim()) return [];
+    return [
+      {
+        sourceId: p.id,
+        subjectId: p.subjectId,
+        subjectName: nameById.get(p.subjectId) ?? "",
+        kind: p.kind,
+        text: p.text.trim(),
+      },
+    ];
+  });
 }
 
 /**
