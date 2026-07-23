@@ -7,11 +7,13 @@ import { WorkspaceBackButton } from "@/components/navigation/WorkspaceBackButton
 import { WorkspaceForwardButton } from "@/components/navigation/WorkspaceForwardButton";
 import { LatentNeedsCoachPanel } from "@/components/stage/stage5/LatentNeedsCoachPanel";
 import { LatentNeedsWorkPanel } from "@/components/stage/stage5/LatentNeedsWorkPanel";
+import { withBootstrappedJourneyNeeds } from "@/components/stage/stage5/LatentNeedsJourneyBoard";
 import { fetchStage4Discoveries } from "@/lib/artifacts/stage4Discoveries";
 import {
   fetchStage5LatentNeeds,
   saveStage5LatentNeeds,
 } from "@/lib/artifacts/stage5LatentNeeds";
+import { fetchStage6UserJourney } from "@/lib/artifacts/stage6UserJourney";
 import { touchProjectPhase } from "@/lib/artifacts/stage5Iceberg";
 import {
   isStage5SourcePostitKind,
@@ -27,6 +29,11 @@ import {
   defaultStage5LatentNeeds,
   type Stage5LatentNeedsData,
 } from "@/lib/stages/stage5/latentNeedsTypes";
+import { setNeedsWorkflowPhase } from "@/lib/stages/stage5/latentNeedsGroups";
+import {
+  defaultUserJourneyMap,
+  type UserJourneyMapData,
+} from "@/lib/stages/stage6/userJourneyTypes";
 import type { ArtifactSlots } from "@/types/database";
 import { stageCaption, stagePanel } from "@/lib/stages/ui";
 import { useDebouncedPersist } from "@/hooks/useDebouncedPersist";
@@ -57,6 +64,9 @@ export function Stage5Iceberg({ projectId }: Stage5IcebergProps) {
   const [data, setData] = useState<Stage5LatentNeedsData>(
     defaultStage5LatentNeeds(),
   );
+  const [journey, setJourney] = useState<UserJourneyMapData>(
+    defaultUserJourneyMap(),
+  );
   const [artifactId, setArtifactId] = useState<string | null>(null);
   const [allSlots, setAllSlots] = useState<ArtifactSlots>({});
   const [loading, setLoading] = useState(true);
@@ -71,21 +81,26 @@ export function Stage5Iceberg({ projectId }: Stage5IcebergProps) {
     bootstrapRef.current = false;
     (async () => {
       try {
-        const [needsResult, stage4] = await Promise.all([
+        const [needsResult, stage4, journeyResult] = await Promise.all([
           fetchStage5LatentNeeds(projectId),
           fetchStage4Discoveries(projectId),
+          fetchStage6UserJourney(projectId),
         ]);
         if (cancelled) return;
 
         let next = needsResult.data;
         const stage4Data = stage4.data;
         const shouldSyncStage4 = stage4HasResearchContent(stage4Data);
+        const journeyData = journeyResult.data;
 
         if (shouldSyncStage4) {
           next = mergeStage4DiscoveriesIntoLatentNeeds(next, stage4Data);
         }
 
+        next = withBootstrappedJourneyNeeds(next, journeyData);
+
         setData(next);
+        setJourney(journeyData);
         setArtifactId(needsResult.artifactId);
         setAllSlots(needsResult.allSlots);
 
@@ -117,7 +132,10 @@ export function Stage5Iceberg({ projectId }: Stage5IcebergProps) {
               inputs,
             );
             if (!cancelled) {
-              const withNeeds = applyGeneratedLatentNeeds(next, result);
+              const withNeeds = withBootstrappedJourneyNeeds(
+                applyGeneratedLatentNeeds(next, result),
+                journeyData,
+              );
               setData(withNeeds);
               const { artifactId: id } = await saveStage5LatentNeeds({
                 projectId,
@@ -191,6 +209,10 @@ export function Stage5Iceberg({ projectId }: Stage5IcebergProps) {
     setData(next);
   }, []);
 
+  const handleJourneyChange = useCallback((next: UserJourneyMapData) => {
+    setJourney(next);
+  }, []);
+
   const handleGenerateLatentNeeds = useCallback(async () => {
     const inputs = buildSourceInputsFromBoard(data);
     if (inputs.length === 0) {
@@ -202,7 +224,10 @@ export function Stage5Iceberg({ projectId }: Stage5IcebergProps) {
     setSaveError(null);
     try {
       const result = await requestLatentNeedsGeneration(projectId, inputs);
-      const withNeeds = applyGeneratedLatentNeeds(data, result);
+      const withNeeds = withBootstrappedJourneyNeeds(
+        applyGeneratedLatentNeeds(data, result),
+        journey,
+      );
       setData(withNeeds);
       const { artifactId: id } = await saveStage5LatentNeeds({
         projectId,
@@ -219,7 +244,7 @@ export function Stage5Iceberg({ projectId }: Stage5IcebergProps) {
     } finally {
       setGenerating(false);
     }
-  }, [allSlots, artifactId, data, projectId]);
+  }, [allSlots, artifactId, data, journey, projectId]);
 
   if (loading) {
     return (
@@ -252,6 +277,9 @@ export function Stage5Iceberg({ projectId }: Stage5IcebergProps) {
       work={
         <>
           <LatentNeedsWorkPanel
+            projectId={projectId}
+            journey={journey}
+            onJourneyChange={handleJourneyChange}
             data={data}
             onChange={handleDataChange}
             onGenerate={handleGenerateLatentNeeds}
@@ -264,19 +292,36 @@ export function Stage5Iceberg({ projectId }: Stage5IcebergProps) {
             className={`${stagePanel} stage-workspace-nav mt-4 flex flex-wrap items-center justify-between gap-3`}
           >
             <p className={stageCaption}>
-              잠재 니즈를 다듬은 뒤 HMW 질문 만들기로 넘어가 보세요.
+              {data.workflowPhase === "needs_categorization"
+                ? "그룹으로 정리한 뒤 HMW 질문 만들기로 넘어가 보세요."
+                : "잠재 니즈를 배치한 뒤, 니즈 분류하기로 묶어 보세요."}
             </p>
             <div className="flex flex-wrap gap-2.5">
               <WorkspaceBackButton
                 projectId={projectId}
                 fallbackStageId={5}
               />
-              <WorkspaceForwardButton
-                stageId={7}
-                onClick={() =>
-                  router.push(`/project/${projectId}/stage/7`)
-                }
-              />
+              {data.workflowPhase === "needs_categorization" ? (
+                <WorkspaceForwardButton
+                  stageId={7}
+                  onClick={() =>
+                    router.push(`/project/${projectId}/stage/7`)
+                  }
+                />
+              ) : (
+                <WorkspaceForwardButton
+                  pageName="니즈 분류하기"
+                  onClick={() =>
+                    handleDataChange(
+                      setNeedsWorkflowPhase(
+                        data,
+                        "needs_categorization",
+                        journey,
+                      ),
+                    )
+                  }
+                />
+              )}
             </div>
           </div>
         </>

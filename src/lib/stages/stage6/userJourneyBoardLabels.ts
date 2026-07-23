@@ -11,6 +11,8 @@ export const JOURNEY_BOARD_ROW_LABELS = {
   feelingHint: "감정의 폭",
   pain_point: "Pain point",
   pain_pointHint: "불편 · 장애",
+  needs: "잠재 니즈",
+  needsHint: "Latent need",
 } as const;
 
 export type JourneyBoardContentRow = Exclude<
@@ -21,6 +23,7 @@ export type JourneyBoardContentRow = Exclude<
   | "touchpointHint"
   | "feelingHint"
   | "pain_pointHint"
+  | "needsHint"
 >;
 
 export const JOURNEY_BOARD_CONTENT_ROWS: JourneyStepZone[] = [
@@ -29,6 +32,15 @@ export const JOURNEY_BOARD_CONTENT_ROWS: JourneyStepZone[] = [
   "pain_point",
   "feeling",
 ];
+
+/** 진짜 필요찾기 — 여정 지도 + 감정 아래 잠재 니즈 행 */
+export const JOURNEY_BOARD_NEEDS_ROWS = [
+  "behavior",
+  "touchpoint",
+  "pain_point",
+  "feeling",
+  "needs",
+] as const;
 
 export const JOURNEY_BOARD_PLACEHOLDERS = {
   stepName: "예: 문제 인지",
@@ -50,6 +62,8 @@ export const JOURNEY_BOARD_PLACEHOLDERS = {
   feelingCurveEmpty: "Pain point를 채우면 감정의 폭이 여기에 그려져요",
   pain_pointDrop: "Pain point 근거 카드를 끌어다 놓기",
   pain_pointDropActive: "여기에 놓기",
+  needsDrop: "잠재 니즈 카드를 끌어다 놓기",
+  needsDropActive: "여기에 놓기",
   poolAll: "배치 전 조사 카드",
   poolAllEmpty: "언급·관찰 카드가 여기 모여요",
   poolBehavior: "배치 전 언급·관찰",

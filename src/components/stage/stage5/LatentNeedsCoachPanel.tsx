@@ -173,12 +173,17 @@ export function LatentNeedsCoachPanel({
     [projectId, data],
   );
 
+  const phaseSub =
+    data.workflowPhase === "needs_categorization"
+      ? "니즈 분류하기"
+      : "니즈 분석하기";
+
   if (variant === "intro") {
     return (
       <AnimatedCoachPanel
         sceneKey={`stage-5-needs-${projectId}-intro-${contextReady ? "ready" : "load"}`}
         statusLabel={stageConfig.introStatusLabel ?? "함께 짚어보는 중"}
-        statusSub={stageConfig.introStatusSub ?? "니즈 분석하기"}
+        statusSub={stageConfig.introStatusSub ?? phaseSub}
         messages={introMessages}
         showComposer={false}
       />
@@ -187,9 +192,9 @@ export function LatentNeedsCoachPanel({
 
   return (
     <AnimatedCoachPanel
-      sceneKey={`stage-5-needs-work-${projectId}`}
+      sceneKey={`stage-5-needs-work-${projectId}-${phaseSub}`}
       statusLabel="함께 짚어보는 중"
-      statusSub="니즈 분석하기"
+      statusSub={phaseSub}
       messages={introMessages}
       chatContext={chatContext}
       inputGuide={getStageWorkInputGuide(5, locale)}

@@ -9,6 +9,10 @@ import {
   LocalizedEditableTextarea,
 } from "@/components/i18n/LocalizedEditableField";
 import { JourneyEmotionCurve } from "@/components/stage/stage6/JourneyEmotionCurve";
+import {
+  ExpandableJourneyPostit,
+  useJourneyPostitExpansion,
+} from "@/components/stage/shared/ExpandableJourneyPostit";
 import { SubjectInitialBadge } from "@/components/stage/stage5/SubjectInitialBadge";
 import { subjectDisplayLabel } from "@/lib/stages/stage5/subjectInitials";
 import {
@@ -257,6 +261,7 @@ function JourneyItemChip({
   isDragging = false,
   placementLabel,
   compact = false,
+  large = false,
 }: {
   item: JourneyMapItem;
   index?: number;
@@ -268,6 +273,8 @@ function JourneyItemChip({
   placementLabel?: string;
   /** 여정 칸 3열 그리드용 — 더 조밀한 타이포 */
   compact?: boolean;
+  /** 클릭 확대용 큰 타이포 */
+  large?: boolean;
 }) {
   const meta = KIND_CHIP[item.kind];
   return (
@@ -277,9 +284,11 @@ function JourneyItemChip({
       onDragEnd={onDragEnd}
       className={[
         "group relative min-w-0 overflow-hidden rounded-md border font-semibold leading-snug break-keep [overflow-wrap:anywhere]",
-        compact
-          ? "px-1 py-0.5 text-[10px]"
-          : "w-full px-1.5 py-1 text-[11px]",
+        large
+          ? "px-3 py-2.5 text-[15px] leading-relaxed"
+          : compact
+            ? "px-1 py-0.5 text-[10px]"
+            : "w-full px-1.5 py-1 text-[11px]",
         meta.className,
         draggable ? "cursor-grab active:cursor-grabbing" : "",
         isDragging ? "opacity-45" : "",
@@ -287,9 +296,23 @@ function JourneyItemChip({
     >
       <div className="mb-0.5 flex flex-wrap items-center gap-1">
         {typeof index === "number" ? (
-          <span className="text-[9px] font-bold opacity-60">{index + 1}.</span>
+          <span
+            className={[
+              "font-bold opacity-60",
+              large ? "text-[12px]" : "text-[9px]",
+            ].join(" ")}
+          >
+            {index + 1}.
+          </span>
         ) : null}
-        <span className="text-[9px] font-bold opacity-70">{meta.label}</span>
+        <span
+          className={[
+            "font-bold opacity-70",
+            large ? "text-[12px]" : "text-[9px]",
+          ].join(" ")}
+        >
+          {meta.label}
+        </span>
         {placementLabel ? (
           <span className="rounded bg-white/55 px-1 py-px text-[9px] font-medium text-[#1c1a16]/75">
             {placementLabel}
@@ -300,7 +323,11 @@ function JourneyItemChip({
       {onRemove ? (
         <button
           type="button"
-          onClick={onRemove}
+          data-no-expand
+          onClick={(e) => {
+            e.stopPropagation();
+            onRemove();
+          }}
           className="absolute top-0.5 right-0.5 rounded px-0.5 text-[10px] opacity-0 transition-opacity group-hover:opacity-100 hover:bg-white/50"
           aria-label="단계에서 제거"
         >
@@ -320,6 +347,8 @@ function JourneyStepZoneCell({
   draggingItemId,
   aiGenerating,
   cellClassName,
+  expandedPostitId,
+  onExpandedChange,
   onDrop,
   onDragOver,
   onDragLeave,
@@ -340,6 +369,8 @@ function JourneyStepZoneCell({
   draggingItemId: string | null;
   aiGenerating?: boolean;
   cellClassName?: string;
+  expandedPostitId: string | null;
+  onExpandedChange: (postitId: string | null) => void;
   onDrop: (e: React.DragEvent) => void;
   onDragOver: (e: React.DragEvent) => void;
   onDragLeave: () => void;
@@ -357,6 +388,7 @@ function JourneyStepZoneCell({
   const hasItems = items.length > 0;
   const entries = aiEntries ?? [];
   const hasAiEntries = entries.length > 0;
+  const expandBehavior = zone === "behavior";
 
   return (
     <div
@@ -372,19 +404,40 @@ function JourneyStepZoneCell({
     >
       {hasItems ? (
         <div className="user-journey-board__zone-items">
-          {items.map((item, itemIndex) => (
-            <JourneyItemChip
-              key={item.id}
-              item={item}
-              index={itemIndex}
-              draggable
-              compact
-              isDragging={draggingItemId === item.id}
-              onDragStart={onDragStart(item.id)}
-              onDragEnd={onDragEnd}
-              onRemove={() => onRemove(item.id)}
-            />
-          ))}
+          {items.map((item, itemIndex) => {
+            const chip = (
+              <JourneyItemChip
+                item={item}
+                index={itemIndex}
+                draggable
+                compact
+                isDragging={draggingItemId === item.id}
+                onDragStart={onDragStart(item.id)}
+                onDragEnd={onDragEnd}
+                onRemove={() => onRemove(item.id)}
+              />
+            );
+            const expandedChip = (
+              <JourneyItemChip
+                item={item}
+                index={itemIndex}
+                large
+                isDragging={false}
+              />
+            );
+            if (!expandBehavior) return <div key={item.id}>{chip}</div>;
+            return (
+              <ExpandableJourneyPostit
+                key={item.id}
+                postitId={item.id}
+                expandedPostitId={expandedPostitId}
+                onExpandedChange={onExpandedChange}
+                expandedChildren={expandedChip}
+              >
+                {chip}
+              </ExpandableJourneyPostit>
+            );
+          })}
         </div>
       ) : !showAi || (!hasAiEntries && !aiGenerating) ? (
         <p className="user-journey-board__zone-placeholder px-1 py-3 text-center break-keep [overflow-wrap:anywhere]">
@@ -487,6 +540,7 @@ export function UserJourneyBoard({
   );
 
   const [aiGeneratingKey, setAiGeneratingKey] = useState<string | null>(null);
+  const { expandedPostitId, onExpandedChange } = useJourneyPostitExpansion();
 
   const poolKindCounts = useMemo(() => {
     const counts = { quote: 0, observation: 0 };
@@ -864,6 +918,8 @@ export function UserJourneyBoard({
                       draggingItemId={draggingItemId}
                       aiGenerating={aiGeneratingKey === `${step.id}-${zone}`}
                       cellClassName={stepColumnCellClass(zone, stepIndex)}
+                      expandedPostitId={expandedPostitId}
+                      onExpandedChange={onExpandedChange}
                       onDrop={handleDropOnStep(step.id, zone)}
                       onDragOver={allowDrop(`${step.id}-${zone}`)}
                       onDragLeave={() =>
