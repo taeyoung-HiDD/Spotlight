@@ -158,7 +158,6 @@ export function IdeaGridHmwSetupPanel({
           <HmwQuestionSquareField
             value={hmwText}
             onChange={setHmwText}
-            kevinGenerated={existing?.kevinGenerated}
           />
           <button
             type="button"

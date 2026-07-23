@@ -63,7 +63,7 @@ const STAGE_PURPOSE_KO: Partial<Record<number, StagePurposeCopy>> = {
   7: {
     label: "HMW 질문을 만드는 이유",
     purpose:
-      "6단계에서 정리한 잠재 니즈를 ‘어떻게 하면 …하기 위해 …할 수 있을까?’ 형태의 열린 질문으로 바꿔, 아이디어를 펼치기 전에 탐색할 방향을 잡는 단계예요.",
+      "6단계에서 정리한 잠재 니즈를 조사 대상·니즈 그룹별로 보며 ‘어떻게 하면 …하기 위해 …할 수 있을까?’ 형태의 열린 질문으로 바꿔, 아이디어를 펼치기 전에 탐색할 방향을 잡는 단계예요. Kevin이 사전 HMW 질문 초안을 채워 두었으니, 읽고 다듬어 보세요.",
     workCaption: "HMW 질문 만들기",
     placeholderLines: [
       "왼쪽에 잠재 니즈가 보이면,",
@@ -166,7 +166,7 @@ const STAGE_PURPOSE_EN: Partial<Record<number, StagePurposeCopy>> = {
   7: {
     label: "Why write How Might We questions",
     purpose:
-      "Turn Stage 6 latent needs into open ‘How might we … in order to …?’ questions so ideation has a clear exploration direction.",
+      "Turn Stage 6 latent needs into open ‘How might we … in order to …?’ questions so ideation has a clear exploration direction. Kevin has drafted preliminary HMW questions—read and refine them.",
     workCaption: "How Might We questions",
     placeholderLines: [
       "When latent needs appear on the left,",

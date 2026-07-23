@@ -37,7 +37,7 @@ export function HmwCoachPanel({ projectId, data, variant }: HmwCoachPanelProps) 
       {
         type: "bubble",
         content: formatCoachDialogBreaks(
-          "6단계에서 정리한 잠재 니즈를 하나씩 HMW 질문으로 바꿔 보세요. 아직 답이나 솔루션이 아니라, ‘어떻게 하면 …하기 위해 …할 수 있을까?’처럼 목적과 구체 상태를 함께 담은 열린 질문이면 충분해요.",
+          "6단계에서 정리한 잠재 니즈를 하나씩 HMW 질문으로 바꿔 보세요. Kevin이 사전 HMW 질문 초안을 채워 두었어요. 아직 답이나 솔루션이 아니라, ‘어떻게 하면 …하기 위해 …할 수 있을까?’처럼 목적과 구체 상태를 함께 담은 열린 질문이면 충분해요.",
         ),
       },
     ];

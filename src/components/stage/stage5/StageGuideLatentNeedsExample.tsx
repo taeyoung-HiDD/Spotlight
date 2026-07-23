@@ -104,11 +104,6 @@ function GuidePairCard({
                 <p className="synthesis-postit-text break-keep">
                   <LocalizedText>{pair.latentText}</LocalizedText>
                 </p>
-                {pair.kevinGenerated ? (
-                  <span className="synthesis-postit-caption absolute bottom-2.5 left-2 pr-9 text-[11px] font-medium">
-                    {locale === "en" ? "Kevin draft" : "Kevin 초안"}
-                  </span>
-                ) : null}
               </GuidePostitPaper>
             </div>
           </div>

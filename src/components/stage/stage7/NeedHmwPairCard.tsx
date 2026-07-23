@@ -15,6 +15,8 @@ interface NeedHmwPairCardProps {
   question: HmwQuestion;
   subject: Stage5SubjectRef;
   subjectIndex: number;
+  /** 1-based 페어 번호 (잠재 니즈·HMW 동일) */
+  pairIndex: number;
   onUpdateHmw: (text: string) => void;
   onUpdateLatentNeed?: (text: string) => void;
 }
@@ -23,6 +25,7 @@ export function NeedHmwPairCard({
   question,
   subject,
   subjectIndex,
+  pairIndex,
   onUpdateHmw,
   onUpdateLatentNeed,
 }: NeedHmwPairCardProps) {
@@ -30,11 +33,13 @@ export function NeedHmwPairCard({
   const locale = useUiLocale();
 
   return (
-    <article className="hmw-board rounded-2xl border border-border-warm/70 bg-cream/40 p-4">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:gap-6">
+    <article className="hmw-board min-w-0 rounded-2xl border border-border-warm/70 bg-cream/40 p-3 sm:p-4">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 sm:items-start">
         <div className={POSTIT_SHELL_WIDTH_HMW_PAIR}>
           <p className={`mb-2 ${stageCaption}`}>
-            {locale === "en" ? "Latent need" : "잠재 니즈"}
+            {locale === "en"
+              ? `Latent need - ${pairIndex}`
+              : `잠재 니즈 - ${pairIndex}`}
           </p>
           <div className="source-latent-pair__paper-slot aspect-square w-full">
             <div className="source-latent-pair__paper synthesis-postit-paper synthesis-postit-paper--latent_need relative">
@@ -56,10 +61,10 @@ export function NeedHmwPairCard({
                       ? "Write a latent need"
                       : "잠재 니즈를 적어 주세요"
                   }
-                  className="synthesis-postit-text min-h-[7rem] text-[13px]"
+                  autoFit={false}
                 />
               ) : (
-                <p className="synthesis-postit-text whitespace-pre-wrap break-keep text-[13px] leading-relaxed text-foreground">
+                <p className="synthesis-postit-text whitespace-pre-wrap break-keep text-foreground">
                   <LocalizedText>{question.latentNeedText}</LocalizedText>
                 </p>
               )}
@@ -70,7 +75,7 @@ export function NeedHmwPairCard({
         <HmwQuestionSquareField
           value={question.hmwText}
           onChange={onUpdateHmw}
-          kevinGenerated={question.kevinGenerated}
+          pairIndex={pairIndex}
         />
       </div>
     </article>

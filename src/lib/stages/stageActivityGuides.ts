@@ -259,7 +259,7 @@ const GUIDE_OVERRIDES: Partial<Record<number, Omit<StageActivityGuideContent, "s
         {
           title: "잠재 니즈 확인·수정",
           description:
-            "Kevin 초안을 읽고, 미리보기를 펼쳐 맞는지·빠진 게 있는지 다듬어요.",
+            "초안을 읽고, 미리보기를 펼쳐 맞는지·빠진 게 있는지 다듬어요.",
         },
         {
           title: "직접 추가",
@@ -301,12 +301,12 @@ const GUIDE_OVERRIDES: Partial<Record<number, Omit<StageActivityGuideContent, "s
     7: {
       headline: "잠재 니즈를 HMW 질문으로 바꿔요",
       summary:
-        "진짜 필요 찾기에서 도출한 잠재 니즈를 How Might We 질문으로 바꿔, 아이디어를 펼칠 출발점을 만듭니다.",
+        "진짜 필요 찾기에서 도출한 잠재 니즈를 How Might We 질문으로 바꿔, 아이디어를 펼칠 출발점을 만듭니다. Kevin이 사전 HMW 질문 초안을 채워 두었어요.",
       activities: [
         {
           title: "니즈 → HMW 변환",
           description:
-            "6단계 잠재 니즈를 보고 ‘어떻게 하면 …하기 위해 …할 수 있을까?’ 형태의 열린 질문으로 바꿔요.",
+            "6단계 잠재 니즈를 보고 ‘어떻게 하면 …하기 위해 …할 수 있을까?’ 형태의 열린 질문으로 바꿔요. Kevin이 채워 둔 사전 초안을 출발점으로 다듬어도 좋아요.",
         },
         {
           title: "질문 다듬기",

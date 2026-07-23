@@ -150,17 +150,7 @@ export function LatentNeedsWorkPanel({
           >
             니즈 분류하기로
           </button>
-        ) : (
-          <button
-            type="button"
-            onClick={() =>
-              onChange(setNeedsWorkflowPhase(data, "needs_analysis", journey))
-            }
-            className={stageBtnSecondary}
-          >
-            니즈 분석하기로
-          </button>
-        )}
+        ) : null}
       </div>
     </section>
   );

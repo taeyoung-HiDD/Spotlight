@@ -8,7 +8,7 @@ import { WorkspaceForwardButton } from "@/components/navigation/WorkspaceForward
 import { LatentNeedsCoachPanel } from "@/components/stage/stage5/LatentNeedsCoachPanel";
 import { LatentNeedsWorkPanel } from "@/components/stage/stage5/LatentNeedsWorkPanel";
 import { withBootstrappedJourneyNeeds } from "@/components/stage/stage5/LatentNeedsJourneyBoard";
-import { fetchStage4Discoveries } from "@/lib/artifacts/stage4Discoveries";
+import { getStagePageName } from "@/lib/navigation/stageNavLabels";import { fetchStage4Discoveries } from "@/lib/artifacts/stage4Discoveries";
 import {
   fetchStage5LatentNeeds,
   saveStage5LatentNeeds,
@@ -300,6 +300,7 @@ export function Stage5Iceberg({ projectId }: Stage5IcebergProps) {
               <WorkspaceBackButton
                 projectId={projectId}
                 fallbackStageId={5}
+                backPageName={getStagePageName(5)}
               />
               {data.workflowPhase === "needs_categorization" ? (
                 <WorkspaceForwardButton

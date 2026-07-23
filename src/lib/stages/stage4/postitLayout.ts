@@ -6,9 +6,9 @@ export const POSTIT_SHELL_WIDTH =
 export const POSTIT_SHELL_WIDTH_STAGE5 =
   "w-[clamp(7.8rem,100%,10.125rem)] shrink-0";
 
-/** HMW 페어 좌측 — 기준과 동일, 절대 상한 120%(16.2rem) */
+/** HMW 페어 카드 안 포스트잇 — 기준(13.5rem)의 75%, 동일 고정 크기 */
 export const POSTIT_SHELL_WIDTH_HMW_PAIR =
-  "w-[clamp(10.4rem,100%,13.5rem)] max-w-[min(100%,16.2rem)] shrink-0";
+  "w-[clamp(7.8rem,100%,10.125rem)] shrink-0";
 
 /** id에 포함된 타임스탬프로 생성 순 정렬 */
 export function postitSortKey(id: string): number {

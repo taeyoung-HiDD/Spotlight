@@ -949,15 +949,42 @@ body {
   flex-shrink: 0;
 }
 
-/* 7단계 HMW — 잠재 니즈 포스트잇과 동일 정사각 크기 */
+/* 7단계 HMW — 잠재 니즈·HMW 포스트잇: 텍스트 양과 무관하게 동일 정사각 */
 .hmw-question__paper-slot {
   width: 100%;
   flex-shrink: 0;
+  aspect-ratio: 1 / 1;
+}
+
+.hmw-board .source-latent-pair__paper-slot {
+  width: 100%;
+  flex-shrink: 0;
+  aspect-ratio: 1 / 1;
+}
+
+.hmw-board .source-latent-pair__paper,
+.hmw-board .source-latent-pair__paper-slot .synthesis-postit-paper,
+.hmw-board .hmw-question__paper-slot .synthesis-postit-paper--hmw,
+.hmw-board .synthesis-postit-paper {
+  width: 100%;
+  height: 100%;
+  aspect-ratio: 1 / 1;
+  grid-template: minmax(0, 1fr) / minmax(0, 1fr);
+}
+
+.hmw-board .synthesis-postit-paper > .synthesis-postit-text,
+.hmw-board .synthesis-postit-paper > textarea.synthesis-postit-text,
+.hmw-board .synthesis-postit-paper > p.synthesis-postit-text {
+  align-self: stretch;
+  justify-self: stretch;
+  height: auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
 .hmw-question__paper-slot .synthesis-postit-paper--hmw {
   width: 100%;
-  aspect-ratio: 1 / 1;
 }
 
 /* 7단계 HMW 보드 — 다크 모드에서도 밝은 포스트잇·검정 잉크 유지 */
@@ -982,7 +1009,8 @@ body {
   -webkit-text-fill-color: rgb(28 26 22 / 0.42) !important;
 }
 
-.hmw-board .synthesis-postit-paper--hmw > textarea.synthesis-postit-text {
+.hmw-board .synthesis-postit-paper--hmw > textarea.synthesis-postit-text,
+.hmw-board .synthesis-postit-paper--latent_need > textarea.synthesis-postit-text {
   overflow-x: hidden;
   overflow-y: auto;
 }

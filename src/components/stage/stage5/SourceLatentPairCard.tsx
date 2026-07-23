@@ -139,11 +139,6 @@ function EditablePostitBody({
           autoFit={false}
         />
       )}
-      {postit.kevinGenerated ? (
-        <span className="synthesis-postit-caption absolute bottom-2.5 left-2 pr-9 text-[11px] font-medium">
-          {locale === "en" ? "Kevin draft" : "Kevin 초안"}
-        </span>
-      ) : null}
     </PostitPaper>
   );
 }

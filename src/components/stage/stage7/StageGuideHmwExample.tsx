@@ -19,23 +19,23 @@ export function StageGuideHmwExample({ visual }: StageGuideHmwExampleProps) {
   };
 
   return (
-    <div className="hmw-board rounded-2xl border border-border-warm/70 bg-cream/40 p-4">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:gap-6">
+    <div className="hmw-board rounded-2xl border border-border-warm/70 bg-cream/40 p-3 sm:p-4">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 sm:items-start">
         <div className={POSTIT_SHELL_WIDTH_HMW_PAIR}>
-          <p className={`mb-2 ${stageCaption}`}>잠재 니즈</p>
+          <p className={`mb-2 ${stageCaption}`}>잠재 니즈 - 1</p>
           <div className="source-latent-pair__paper-slot aspect-square w-full">
             <div className="source-latent-pair__paper synthesis-postit-paper synthesis-postit-paper--latent_need relative">
               <div className="absolute bottom-[13px] right-[13px] z-[1]">
                 <SubjectInitialBadge subject={subject} subjectIndex={0} size="sm" />
               </div>
-              <p className="synthesis-postit-text whitespace-pre-wrap break-keep text-[13px] leading-relaxed">
+              <p className="synthesis-postit-text whitespace-pre-wrap break-keep">
                 {visual.latentNeedText}
               </p>
             </div>
           </div>
         </div>
 
-        <HmwQuestionSquareField value={visual.hmwText} readOnly />
+        <HmwQuestionSquareField value={visual.hmwText} readOnly pairIndex={1} />
       </div>
     </div>
   );

@@ -1,4 +1,8 @@
-import type { Stage5LatentNeedsData } from "@/lib/stages/stage5/latentNeedsTypes";
+import type {
+  NeedGroup,
+  Stage5LatentNeedsData,
+} from "@/lib/stages/stage5/latentNeedsTypes";
+import { sortedNeedGroups } from "@/lib/stages/stage5/latentNeedsGroups";
 import {
   applyGeneratedHmw,
   applyHeuristicHmwDrafts,
@@ -10,6 +14,34 @@ import {
   type HmwQuestion,
   type Stage7HmwData,
 } from "@/lib/stages/stage7/hmwTypes";
+
+/** 6단계 분류 그룹을 HMW 보드용으로 스냅샷 (병합된 니즈만 유지) */
+function snapshotNeedGroupsFromStage5(
+  stage5: Stage5LatentNeedsData,
+  needIds: Set<string>,
+): {
+  needGroups: NeedGroup[];
+  needGroupMemberIds: Record<string, string[]>;
+} {
+  const needGroups: NeedGroup[] = [];
+  const needGroupMemberIds: Record<string, string[]> = {};
+  const used = new Set<string>();
+
+  for (const group of sortedNeedGroups(stage5)) {
+    const members = (stage5.needGroupMemberIds?.[group.id] ?? []).filter(
+      (id) => needIds.has(id) && !used.has(id),
+    );
+    for (const id of members) used.add(id);
+    needGroups.push({
+      id: group.id,
+      name: group.name.trim() || `그룹 ${needGroups.length + 1}`,
+      order: needGroups.length,
+    });
+    needGroupMemberIds[group.id] = members;
+  }
+
+  return { needGroups, needGroupMemberIds };
+}
 
 export function stage5HasLatentNeeds(data: Stage5LatentNeedsData): boolean {
   return data.postits.some(
@@ -33,12 +65,25 @@ export function hmwQuestionsChanged(
   return idsBefore !== idsAfter;
 }
 
+function needGroupsSnapshotKey(data: Stage7HmwData): string {
+  const groups = [...(data.needGroups ?? [])]
+    .sort((a, b) => a.order - b.order)
+    .map((g) => {
+      const members = (data.needGroupMemberIds?.[g.id] ?? []).join(",");
+      return `${g.id}:${g.name}:${members}`;
+    });
+  return groups.join("|");
+}
+
 /** HMW 본문·니즈 스냅샷 등 저장이 필요한 변경인지 */
 export function hmwDataChanged(
   before: Stage7HmwData,
   after: Stage7HmwData,
 ): boolean {
   if (hmwQuestionsChanged(before, after)) return true;
+  if (needGroupsSnapshotKey(before) !== needGroupsSnapshotKey(after)) {
+    return true;
+  }
   const beforeById = new Map(before.questions.map((q) => [q.id, q]));
   return after.questions.some((q) => {
     const prev = beforeById.get(q.id);
@@ -73,10 +118,17 @@ export function mergeStage5IntoHmw(
     };
   });
 
+  const groupSnapshot = snapshotNeedGroupsFromStage5(
+    stage5,
+    new Set(questions.map((q) => q.latentNeedId)),
+  );
+
   return {
     ...hmw,
     subjects: stage5.subjects,
     questions,
+    needGroups: groupSnapshot.needGroups,
+    needGroupMemberIds: groupSnapshot.needGroupMemberIds,
     stage5SyncedAt: new Date().toISOString(),
   };
 }

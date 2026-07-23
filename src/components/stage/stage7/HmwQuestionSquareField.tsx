@@ -10,33 +10,30 @@ interface HmwQuestionSquareFieldProps {
   value: string;
   onChange?: (text: string) => void;
   readOnly?: boolean;
-  kevinGenerated?: boolean;
+  /** 1-based 페어 번호 */
+  pairIndex?: number;
 }
 
 export function HmwQuestionSquareField({
   value,
   onChange,
   readOnly = false,
-  kevinGenerated = false,
+  pairIndex,
 }: HmwQuestionSquareFieldProps) {
   const locale = useUiLocale();
+  const labelBase = locale === "en" ? "HMW question" : "HMW 질문";
+  const label =
+    pairIndex != null ? `${labelBase} - ${pairIndex}` : labelBase;
 
   return (
     <div className={POSTIT_SHELL_WIDTH_HMW_PAIR}>
       <div className="mb-2 flex flex-wrap items-center gap-2">
-        <p className={stageCaption}>
-          {locale === "en" ? "HMW question" : "HMW 질문"}
-        </p>
-        {kevinGenerated ? (
-          <span className="rounded-md bg-highlight px-2 py-0.5 text-[11px] font-medium text-gold">
-            {locale === "en" ? "Kevin draft" : "Kevin 초안"}
-          </span>
-        ) : null}
+        <p className={stageCaption}>{label}</p>
       </div>
       <div className="hmw-question__paper-slot aspect-square w-full">
         <div className="source-latent-pair__paper synthesis-postit-paper synthesis-postit-paper--hmw">
           {readOnly ? (
-            <p className="synthesis-postit-text whitespace-pre-wrap break-keep text-[13px] leading-relaxed">
+            <p className="synthesis-postit-text whitespace-pre-wrap break-keep">
               <LocalizedText>{value}</LocalizedText>
             </p>
           ) : (
