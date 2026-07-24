@@ -292,9 +292,11 @@ export function Stage5Iceberg({ projectId }: Stage5IcebergProps) {
             className={`${stagePanel} stage-workspace-nav mt-4 flex flex-wrap items-center justify-between gap-3`}
           >
             <p className={stageCaption}>
-              {data.workflowPhase === "needs_categorization"
-                ? "그룹으로 정리한 뒤 HMW 질문 만들기로 넘어가 보세요."
-                : "잠재 니즈를 배치한 뒤, 니즈 분류하기로 묶어 보세요."}
+              {data.workflowPhase === "core_selection"
+                ? "핵심 니즈를 고른 뒤 HMW 질문 만들기로 넘어가 보세요."
+                : data.workflowPhase === "needs_categorization"
+                  ? "그룹으로 정리한 뒤, 핵심 니즈 선별로 좁혀 보세요."
+                  : "잠재 니즈를 배치한 뒤, 니즈 분류하기로 묶어 보세요."}
             </p>
             <div className="flex flex-wrap gap-2.5">
               <WorkspaceBackButton
@@ -302,11 +304,28 @@ export function Stage5Iceberg({ projectId }: Stage5IcebergProps) {
                 fallbackStageId={5}
                 backPageName={getStagePageName(5)}
               />
-              {data.workflowPhase === "needs_categorization" ? (
+              {data.workflowPhase === "core_selection" ? (
                 <WorkspaceForwardButton
                   stageId={7}
+                  onClick={() => {
+                    if (
+                      data.coreNeedIds.length === 0 &&
+                      !window.confirm(
+                        "아직 핵심 니즈를 고르지 않았어요. 이대로 넘어가면 모든 잠재 니즈로 HMW 질문을 만들어요. 계속할까요?",
+                      )
+                    ) {
+                      return;
+                    }
+                    router.push(`/project/${projectId}/stage/7`);
+                  }}
+                />
+              ) : data.workflowPhase === "needs_categorization" ? (
+                <WorkspaceForwardButton
+                  pageName="핵심 니즈 선별"
                   onClick={() =>
-                    router.push(`/project/${projectId}/stage/7`)
+                    handleDataChange(
+                      setNeedsWorkflowPhase(data, "core_selection", journey),
+                    )
                   }
                 />
               ) : (

@@ -1,13 +1,31 @@
+import {
+  buildHeuristicCandidates,
+  evaluateHmwQualityRules,
+  pickBestHmwCandidate,
+} from "@/lib/stages/stage7/hmwQualityChecklist";
 import { needToHmwDraft } from "@/lib/stages/stage7/hmwText";
-import type { HmwQuestion, Stage7HmwData } from "@/lib/stages/stage7/hmwTypes";
+import type {
+  HmwQualityTip,
+  HmwVariationCandidate,
+  HmwVariationKind,
+  Stage7HmwData,
+} from "@/lib/stages/stage7/hmwTypes";
 
 export interface GenerateHmwItemInput {
   questionId: string;
   latentNeedText: string;
 }
 
+export interface GenerateHmwItemResult {
+  questionId: string;
+  hmwText: string;
+  variationKind?: HmwVariationKind;
+  qualityTips?: HmwQualityTip[];
+  candidates?: HmwVariationCandidate[];
+}
+
 export interface GenerateHmwResponse {
-  items: Array<{ questionId: string; hmwText: string }>;
+  items: GenerateHmwItemResult[];
   source?: string;
 }
 
@@ -33,30 +51,42 @@ export async function requestHmwGeneration(
 export function applyHeuristicHmwDrafts(data: Stage7HmwData): Stage7HmwData {
   return {
     ...data,
-    questions: data.questions.map((q) =>
-      q.hmwText.trim()
-        ? q
-        : {
-            ...q,
-            hmwText: needToHmwDraft(q.latentNeedText),
-            kevinGenerated: false,
-          },
-    ),
+    questions: data.questions.map((q) => {
+      if (q.hmwText.trim()) return q;
+      const draft = needToHmwDraft(q.latentNeedText);
+      const candidates = buildHeuristicCandidates(q.latentNeedText, draft);
+      const best = pickBestHmwCandidate(candidates);
+      return {
+        ...q,
+        hmwText: best?.text ?? draft,
+        variationKind: best?.kind,
+        qualityTips: best?.tips ?? evaluateHmwQualityRules(draft, q.latentNeedText),
+        candidates,
+        kevinGenerated: false,
+      };
+    }),
   };
 }
 
 export function applyGeneratedHmw(
   data: Stage7HmwData,
-  items: Array<{ questionId: string; hmwText: string }>,
+  items: GenerateHmwItemResult[],
 ): Stage7HmwData {
-  const byId = new Map(items.map((item) => [item.questionId, item.hmwText.trim()]));
+  const byId = new Map(items.map((item) => [item.questionId, item]));
   return {
     ...data,
     kevinGeneratedAt: new Date().toISOString(),
     questions: data.questions.map((q) => {
       const generated = byId.get(q.id);
-      if (!generated) return q;
-      return { ...q, hmwText: generated, kevinGenerated: true };
+      if (!generated?.hmwText.trim()) return q;
+      return {
+        ...q,
+        hmwText: generated.hmwText.trim(),
+        kevinGenerated: true,
+        variationKind: generated.variationKind,
+        qualityTips: generated.qualityTips,
+        candidates: generated.candidates,
+      };
     }),
   };
 }

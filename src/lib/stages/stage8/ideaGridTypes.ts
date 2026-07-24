@@ -1,5 +1,6 @@
 import type { ScamperLetter } from "@/lib/stages/stage8/scamperCatalog";
 
+/** 기본·최소 그리드 칸 수 (HMW가 없을 때) */
 export const IDEA_GRID_SIZE = 9;
 
 export type IdeaGridView = "grid" | "editor" | "scamper" | "hmw_setup";
@@ -18,7 +19,7 @@ export interface IdeaSketch {
 
 export interface IdeaGridData {
   slots: (IdeaSketch | null)[];
-  /** 칸별 연결 HMW 질문 id (길이 9) */
+  /** 칸별 연결 HMW 질문 id (슬롯과 동일 길이) */
   cellHmwIds: string[];
   selectedCellIndex: number | null;
   activeView: IdeaGridView;
@@ -29,6 +30,10 @@ export interface IdeaGridData {
 
 export function createIdeaId(): string {
   return `idea-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+}
+
+export function ideaGridCellCount(data: IdeaGridData): number {
+  return Math.max(data.slots.length, data.cellHmwIds.length, 1);
 }
 
 export function defaultIdeaGrid(): IdeaGridData {
@@ -77,19 +82,30 @@ function normalizeIdea(raw: unknown): IdeaSketch | null {
   };
 }
 
+/** 저장된 슬롯 길이를 존중하되, 비어 있으면 기본 9칸 */
 export function normalizeIdeaGrid(
   partial: Partial<IdeaGridData> | null | undefined,
 ): IdeaGridData {
   if (!partial) return defaultIdeaGrid();
-  const slots = Array.from({ length: IDEA_GRID_SIZE }, (_, index) => {
-    const raw = partial.slots?.[index];
+
+  const rawSlots = Array.isArray(partial.slots) ? partial.slots : [];
+  const rawIds = Array.isArray(partial.cellHmwIds) ? partial.cellHmwIds : [];
+  const size = Math.max(rawSlots.length, rawIds.length, IDEA_GRID_SIZE);
+
+  const slots = Array.from({ length: size }, (_, index) => {
+    const raw = rawSlots[index];
     if (!raw) return null;
     return normalizeIdea(raw);
   });
+  const cellHmwIds = Array.from({ length: size }, (_, index) => {
+    const id = rawIds[index];
+    return typeof id === "string" ? id : "";
+  });
+
   const selected =
     typeof partial.selectedCellIndex === "number" &&
     partial.selectedCellIndex >= 0 &&
-    partial.selectedCellIndex < IDEA_GRID_SIZE
+    partial.selectedCellIndex < size
       ? partial.selectedCellIndex
       : null;
   const view =
@@ -105,10 +121,6 @@ export function normalizeIdeaGrid(
     partial.scamperLetterIndex < 7
       ? partial.scamperLetterIndex
       : 0;
-  const cellHmwIds = Array.from({ length: IDEA_GRID_SIZE }, (_, index) => {
-    const id = partial.cellHmwIds?.[index];
-    return typeof id === "string" ? id : "";
-  });
   const filled = slots.filter((slot) => slot && slot.title.trim()).length;
   return {
     slots,
@@ -121,12 +133,37 @@ export function normalizeIdeaGrid(
   };
 }
 
+/** 그리드 칸 수를 맞추며 기존 아이디어·HMW 연결을 최대한 유지 */
+export function resizeIdeaGrid(
+  data: IdeaGridData,
+  size: number,
+): IdeaGridData {
+  const nextSize = Math.max(1, size);
+  const slots = Array.from({ length: nextSize }, (_, i) => data.slots[i] ?? null);
+  const cellHmwIds = Array.from(
+    { length: nextSize },
+    (_, i) => data.cellHmwIds[i] ?? "",
+  );
+  const selected =
+    data.selectedCellIndex != null &&
+    data.selectedCellIndex >= 0 &&
+    data.selectedCellIndex < nextSize
+      ? data.selectedCellIndex
+      : null;
+  return {
+    ...data,
+    slots,
+    cellHmwIds,
+    selectedCellIndex: selected,
+  };
+}
+
 export function upsertIdeaAtCell(
   data: IdeaGridData,
   cellIndex: number,
   idea: IdeaSketch,
 ): IdeaGridData {
-  if (cellIndex < 0 || cellIndex >= IDEA_GRID_SIZE) return data;
+  if (cellIndex < 0 || cellIndex >= data.slots.length) return data;
   const slots = [...data.slots];
   slots[cellIndex] = idea;
   return { ...data, slots, selectedCellIndex: cellIndex, activeView: "grid" };
@@ -136,13 +173,14 @@ export function clearIdeaAtCell(
   data: IdeaGridData,
   cellIndex: number,
 ): IdeaGridData {
-  if (cellIndex < 0 || cellIndex >= IDEA_GRID_SIZE) return data;
+  if (cellIndex < 0 || cellIndex >= data.slots.length) return data;
   const slots = [...data.slots];
   slots[cellIndex] = null;
   return {
     ...data,
     slots,
-    selectedCellIndex: data.selectedCellIndex === cellIndex ? null : data.selectedCellIndex,
+    selectedCellIndex:
+      data.selectedCellIndex === cellIndex ? null : data.selectedCellIndex,
     activeView: "grid",
   };
 }

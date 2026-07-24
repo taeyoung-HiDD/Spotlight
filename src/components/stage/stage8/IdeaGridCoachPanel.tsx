@@ -52,7 +52,7 @@ export function IdeaGridCoachPanel({
         type: "bubble",
         variant: "secondary",
         content: formatCoachDialogBreaks(
-          "9칸을 다 채우지 않아도 괜찮아요. 막히면 SCAMPER 보강 도구로 같은 아이디어를 비틀어 볼 수 있어요.",
+          "앞 단계 HMW마다 칸이 생겨요. 모든 칸을 다 채우지 않아도 괜찮아요. 막히면 SCAMPER 보강 도구로 같은 아이디어를 비틀어 볼 수 있어요.",
         ),
       },
     ];
@@ -63,9 +63,9 @@ export function IdeaGridCoachPanel({
       projectId,
       stageId: 8,
       stageTitle: "아이디어 펼치기",
-      artifactSummary: `아이디어 ${filledIdeaCount(data)}/9 · HMW ${hmwQuestions.filter((q) => q.hmwText.trim()).length}개 연결`,
+      artifactSummary: `아이디어 ${filledIdeaCount(data)}/${data.slots.length} · HMW ${hmwQuestions.filter((q) => q.hmwText.trim()).length}개 연결`,
       stageBehaviorNote:
-        "8단계 아이디어 펼치기: HMW 질문에서 9칸 그리드·스케치·SCAMPER로 아이디어를 quantity-first로 펼칩니다.",
+        "8단계 아이디어 펼치기: 7단계 HMW 질문 전체(개수만큼 칸)에 대해 스케치·SCAMPER로 아이디어를 quantity-first로 펼칩니다.",
     }),
     [projectId, data, hmwQuestions],
   );

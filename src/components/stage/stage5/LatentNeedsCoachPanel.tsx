@@ -17,7 +17,8 @@ import { subjectDisplayLabel } from "@/lib/stages/stage5/subjectInitials";
 const STAGE6_NEEDS_DIRECTIVE = `6단계 진짜 필요 찾기:
 - 4단계 언급·관찰을 바탕으로 잠재 니즈를 정리하는 단계입니다.
 - 결론처럼 말하지 않고, 검증 포인트를 짧게 제안합니다.
-- 조사 결과 탭(언급·관찰·발견·잠재 니즈)과 조사 대상 필터로 보고 싶은 항목·사람만 골라 볼 수 있습니다.`;
+- 조사 결과 탭(언급·관찰·발견·잠재 니즈)과 조사 대상 필터로 보고 싶은 항목·사람만 골라 볼 수 있습니다.
+- 핵심 니즈 선별 탭에서는 중요도×해결 공백 사분면으로 최대 5개의 핵심 니즈를 고르고, 나머지는 보류함에 둡니다. 보류는 폐기가 아니라 잠시 접어두는 것입니다.`;
 
 function clip(s: string, max: number): string {
   const t = s.trim();
@@ -25,11 +26,51 @@ function clip(s: string, max: number): string {
   return `${t.slice(0, max)}…`;
 }
 
+function buildCoreSelectionMessages(
+  data: Stage5LatentNeedsData,
+): CoachDialogItem[] {
+  const messages: CoachDialogItem[] = [
+    {
+      type: "highlight",
+      label: "핵심 니즈 선별",
+      content: formatCoachDialogBreaks(
+        "모든 니즈를 다 해결할 수는 없어요. 좋은 아이디어로 이어질 핵심 니즈를 최대 5개까지 골라, 다음 단계 HMW 질문의 재료로 삼아요.",
+      ),
+    },
+    {
+      type: "bubble",
+      content: formatCoachDialogBreaks(
+        "카드를 사분면에 끌어다 놓아 보세요. 세로는 중요도(고통이 크고 자주 겪는가), 가로는 해결 공백(쓸 만한 대안이 없는가)이에요. 오른쪽 위에 모이는 카드가 핵심 후보예요.",
+      ),
+    },
+    {
+      type: "bubble",
+      content: formatCoachDialogBreaks(
+        "자구책 있음·자주 겪음 같은 근거 배지를 눌러 판단 근거를 남겨 두면, 나중에 되돌아볼 때 도움이 돼요. 핵심이 아니라고 본 카드는 보류함으로 — 버리는 게 아니라 잠시 접어두는 거예요.",
+      ),
+    },
+  ];
+
+  if (data.coreNeedIds.length > 0) {
+    messages.push({
+      type: "bubble",
+      content: formatCoachDialogBreaks(
+        `지금 핵심 니즈 ${data.coreNeedIds.length}개를 골랐어요. 혼자 고르는 중이라면 「Kevin 관점 듣기」로 반대 관점을 한 번 받아 보세요. 흔들리지 않으면 그대로 진행해도 좋아요.`,
+      ),
+    });
+  }
+
+  return messages;
+}
+
 function buildIntroMessages(
   data: Stage5LatentNeedsData,
   subjectCountFromStage4: number,
   locale: UiLocale,
 ): CoachDialogItem[] {
+  if (data.workflowPhase === "core_selection") {
+    return buildCoreSelectionMessages(data);
+  }
   const purpose = getStagePurposeCopy(6, locale);
   const messages: CoachDialogItem[] = [
     {
@@ -115,6 +156,16 @@ function summarizeBoard(data: Stage5LatentNeedsData): string {
     for (const f of findings.slice(0, 2)) lines.push(`  - 발견: ${f}`);
     for (const l of latent.slice(0, 3)) lines.push(`  - 잠재 니즈: ${l}`);
   }
+  if (data.coreNeedIds.length > 0 || data.parkedNeedIds.length > 0) {
+    lines.push(
+      `핵심 니즈 ${data.coreNeedIds.length}개 · 보류 ${data.parkedNeedIds.length}개`,
+    );
+    const byId = new Map(data.postits.map((p) => [p.id, p] as const));
+    for (const id of data.coreNeedIds) {
+      const text = byId.get(id)?.text.trim();
+      if (text) lines.push(`  - 핵심: ${text}`);
+    }
+  }
   return lines.join("\n");
 }
 
@@ -174,9 +225,11 @@ export function LatentNeedsCoachPanel({
   );
 
   const phaseSub =
-    data.workflowPhase === "needs_categorization"
-      ? "니즈 분류하기"
-      : "니즈 분석하기";
+    data.workflowPhase === "core_selection"
+      ? "핵심 니즈 선별"
+      : data.workflowPhase === "needs_categorization"
+        ? "니즈 분류하기"
+        : "니즈 분석하기";
 
   if (variant === "intro") {
     return (

@@ -9,7 +9,7 @@ import {
   type Stage5LatentNeedsData,
 } from "@/lib/stages/stage5/latentNeedsTypes";
 import { hmwForCell } from "@/lib/stages/stage8/bootstrapIdeaGridFromHmw";
-import { IDEA_GRID_SIZE, type IdeaGridData } from "@/lib/stages/stage8/ideaGridTypes";
+import { type IdeaGridData } from "@/lib/stages/stage8/ideaGridTypes";
 
 export type GridCellHmwState = "empty" | "need_only" | "hmw_ready";
 
@@ -74,13 +74,13 @@ function assignCellHmw(
   cellIndex: number,
   questionId: string,
 ): IdeaGridData {
-  const cellHmwIds = [...grid.cellHmwIds];
-  while (cellHmwIds.length < IDEA_GRID_SIZE) {
-    cellHmwIds.push("");
-  }
+  const size = Math.max(grid.slots.length, grid.cellHmwIds.length, cellIndex + 1);
+  const cellHmwIds = Array.from({ length: size }, (_, i) => grid.cellHmwIds[i] ?? "");
+  const slots = Array.from({ length: size }, (_, i) => grid.slots[i] ?? null);
   cellHmwIds[cellIndex] = questionId;
   return {
     ...grid,
+    slots,
     cellHmwIds,
     activeView: "grid",
     selectedCellIndex: null,

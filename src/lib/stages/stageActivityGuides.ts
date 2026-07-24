@@ -265,6 +265,11 @@ const GUIDE_OVERRIDES: Partial<Record<number, Omit<StageActivityGuideContent, "s
           title: "직접 추가",
           description: "언급·관찰 카드 아래 「잠재 니즈 추가」로 포스트잇을 더할 수 있어요.",
         },
+        {
+          title: "핵심 니즈 선별",
+          description:
+            "니즈를 그룹으로 분류한 뒤, 중요도×해결 공백 사분면에 배치해 좋은 아이디어로 이어질 핵심 니즈를 최대 5개까지 골라요. 나머지는 보류함에 두고 언제든 다시 꺼낼 수 있어요.",
+        },
       ],
       example: {
         label: "잠재 니즈 작성 흐름",
@@ -301,12 +306,12 @@ const GUIDE_OVERRIDES: Partial<Record<number, Omit<StageActivityGuideContent, "s
     7: {
       headline: "잠재 니즈를 HMW 질문으로 바꿔요",
       summary:
-        "진짜 필요 찾기에서 도출한 잠재 니즈를 How Might We 질문으로 바꿔, 아이디어를 펼칠 출발점을 만듭니다. Kevin이 사전 HMW 질문 초안을 채워 두었어요.",
+        "진짜 필요 찾기에서 선별한 핵심 잠재 니즈를 How Might We 질문으로 바꿔, 아이디어를 펼칠 출발점을 만듭니다. Kevin이 세 변주 초안을 만들고 품질 체크 후 하나를 채워 두었어요.",
       activities: [
         {
           title: "니즈 → HMW 변환",
           description:
-            "6단계 잠재 니즈를 보고 ‘어떻게 하면 …하기 위해 …할 수 있을까?’ 형태의 열린 질문으로 바꿔요. Kevin이 채워 둔 사전 초안을 출발점으로 다듬어도 좋아요.",
+            "6단계 잠재 니즈를 보고 ‘어떻게 하면 …하기 위해 …할 수 있을까?’ 형태의 열린 질문으로 바꿔요. Kevin이 Amp up / Remove bad / Explore opposite로 만든 초안을 출발점으로 다듬어도 좋아요.",
         },
         {
           title: "질문 다듬기",

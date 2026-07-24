@@ -150,7 +150,7 @@ export function IdeaInputSketchPanel({
             <span className="rounded-md bg-highlight px-2 py-0.5 text-[11px] font-medium text-gold">
               {cellIndex + 1}번 칸
             </span>
-            <span className={`${stageCaption} text-muted`}>9 그리드 안</span>
+            <span className={`${stageCaption} text-muted`}>아이디어 그리드</span>
           </div>
           <h3 className="text-lg font-semibold text-foreground">
             {existing ? "아이디어 수정" : "새 아이디어 추가"}

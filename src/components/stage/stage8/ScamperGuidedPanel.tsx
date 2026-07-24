@@ -74,7 +74,7 @@ export function ScamperGuidedPanel({
     return (
       <div className="rounded-2xl border border-border-warm bg-panel p-5">
         <p className={`mb-3 ${stageCaption}`}>
-          SCAMPER를 쓰려면 9 그리드에 아이디어를 하나 이상 적어 주세요.
+          SCAMPER를 쓰려면 그리드에 아이디어를 하나 이상 적어 주세요.
         </p>
         <button type="button" onClick={onClose} className={stageBtnSecondary}>
           그리드로 돌아가기
@@ -219,7 +219,7 @@ export function ScamperGuidedPanel({
 
           {!hasEmpty ? (
             <p className={`mt-2 ${stageCaption} text-gold`}>
-              9칸이 가득 찼어요. 비운 칸이 있으면 추가할 수 있어요.
+              칸이 가득 찼어요. 비운 칸이 있으면 추가할 수 있어요.
             </p>
           ) : null}
         </div>

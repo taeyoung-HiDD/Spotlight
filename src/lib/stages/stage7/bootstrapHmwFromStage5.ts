@@ -84,6 +84,7 @@ export function hmwDataChanged(
   if (needGroupsSnapshotKey(before) !== needGroupsSnapshotKey(after)) {
     return true;
   }
+  if (before.coreSelectionApplied !== after.coreSelectionApplied) return true;
   const beforeById = new Map(before.questions.map((q) => [q.id, q]));
   return after.questions.some((q) => {
     const prev = beforeById.get(q.id);
@@ -99,8 +100,13 @@ export function mergeStage5IntoHmw(
   hmw: Stage7HmwData,
   stage5: Stage5LatentNeedsData,
 ): Stage7HmwData {
+  // 핵심 니즈를 선별했다면 그것만, 아니면 전체 잠재 니즈 (하위호환)
+  const coreIds = new Set(stage5.coreNeedIds ?? []);
   const latentNeeds = stage5.postits.filter(
-    (p) => p.kind === "latent_need" && p.text.trim(),
+    (p) =>
+      p.kind === "latent_need" &&
+      p.text.trim() &&
+      (coreIds.size === 0 || coreIds.has(p.id)),
   );
   const existingByNeedId = new Map(
     hmw.questions.map((q) => [q.latentNeedId, q]),
@@ -115,6 +121,9 @@ export function mergeStage5IntoHmw(
       latentNeedText: need.text.trim(),
       hmwText: existing?.hmwText ?? "",
       kevinGenerated: existing?.kevinGenerated,
+      variationKind: existing?.variationKind,
+      qualityTips: existing?.qualityTips,
+      candidates: existing?.candidates,
     };
   });
 
@@ -129,6 +138,7 @@ export function mergeStage5IntoHmw(
     questions,
     needGroups: groupSnapshot.needGroups,
     needGroupMemberIds: groupSnapshot.needGroupMemberIds,
+    coreSelectionApplied: coreIds.size > 0,
     stage5SyncedAt: new Date().toISOString(),
   };
 }

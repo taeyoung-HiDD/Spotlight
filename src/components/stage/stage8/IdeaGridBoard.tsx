@@ -3,7 +3,7 @@
 import { LocalizedText } from "@/components/i18n/LocalizedText";
 import {
   filledIdeaCount,
-  IDEA_GRID_SIZE,
+  ideaGridCellCount,
   type IdeaGridData,
   type IdeaSketch,
 } from "@/lib/stages/stage8/ideaGridTypes";
@@ -72,13 +72,14 @@ export function IdeaGridBoard({
   onSelectCell,
 }: IdeaGridBoardProps) {
   const filled = filledIdeaCount(data);
+  const cellCount = ideaGridCellCount(data);
 
   return (
     <div>
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <span className={stageLabel}>9 그리드</span>
+        <span className={stageLabel}>아이디어 그리드</span>
         <span className="rounded-md bg-highlight px-2 py-0.5 text-[11px] font-medium text-gold">
-          {filled} / {IDEA_GRID_SIZE} 채움
+          {filled} / {cellCount} 채움 · HMW {hmwQuestions.length}개
         </span>
       </div>
 
@@ -92,7 +93,7 @@ export function IdeaGridBoard({
 
           return (
             <button
-              key={`idea-cell-${index}`}
+              key={`idea-cell-${index}-${data.cellHmwIds[index] || "empty"}`}
               type="button"
               onClick={() => onSelectCell(index)}
               className={[
@@ -152,8 +153,7 @@ export function IdeaGridBoard({
       </div>
 
       <p className={`mt-3 ${stageCaption}`}>
-        7단계에서 만든 HMW가 칸마다 보여요. 비어 있는 칸은 니즈와 HMW를 이어서
-        만들 수 있어요.
+        7단계 HMW 질문마다 칸이 생겨요. 각 칸에서 아이디어를 펼쳐 보세요.
       </p>
     </div>
   );

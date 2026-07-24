@@ -87,7 +87,7 @@ export function IdeaGridWorkPanel({
   return (
     <section className={stagePanel}>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-        <span className={stageLabel}>아이디어 펼치기 · 9 그리드</span>
+        <span className={stageLabel}>아이디어 펼치기</span>
         <TermChip
           label="용어"
           definition="Quantity-first — 먼저 많이 펼치고, 평가·우선순위는 다음 단계에서 해요."

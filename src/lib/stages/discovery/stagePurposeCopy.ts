@@ -53,7 +53,7 @@ const STAGE_PURPOSE_KO: Partial<Record<number, StagePurposeCopy>> = {
   6: {
     label: "진짜 필요를 찾는 이유",
     purpose:
-      "4단계 언급·관찰과 여정에서 본 흐름을 바탕으로, 조사 대상마다 말 아래에 있을 수 있는 잠재 니즈를 정리해요. 아직 결론이 아니에요.",
+      "4단계 언급·관찰과 여정에서 본 흐름을 바탕으로, 조사 대상마다 말 아래에 있을 수 있는 잠재 니즈를 정리해요. 분류한 뒤에는 사분면으로 좋은 아이디어로 이어질 핵심 니즈를 최대 5개까지 골라요. 아직 결론이 아니에요.",
     workCaption: "니즈 분석하기",
     placeholderLines: [
       "조사 내용이 한 보드에 모여요.",
@@ -63,7 +63,7 @@ const STAGE_PURPOSE_KO: Partial<Record<number, StagePurposeCopy>> = {
   7: {
     label: "HMW 질문을 만드는 이유",
     purpose:
-      "6단계에서 정리한 잠재 니즈를 조사 대상·니즈 그룹별로 보며 ‘어떻게 하면 …하기 위해 …할 수 있을까?’ 형태의 열린 질문으로 바꿔, 아이디어를 펼치기 전에 탐색할 방향을 잡는 단계예요. Kevin이 사전 HMW 질문 초안을 채워 두었으니, 읽고 다듬어 보세요.",
+      "6단계에서 선별한 핵심 잠재 니즈를 조사 대상·니즈 그룹별로 보며 ‘어떻게 하면 …하기 위해 …할 수 있을까?’ 형태의 열린 질문으로 바꿔, 아이디어를 펼치기 전에 탐색할 방향을 잡는 단계예요. Kevin이 Amp up / Remove bad / Explore opposite 세 변주로 사전 HMW 초안을 만들고, 품질 체크 후 가장 알맞은 하나를 채워 두었어요. 자유롭게 다듬어 보세요.",
     workCaption: "HMW 질문 만들기",
     placeholderLines: [
       "왼쪽에 잠재 니즈가 보이면,",
@@ -73,8 +73,8 @@ const STAGE_PURPOSE_KO: Partial<Record<number, StagePurposeCopy>> = {
   8: {
     label: "아이디어를 펼치는 이유",
     purpose:
-      "7단계 HMW 질문을 출발점으로, 9칸 그리드·스케치·SCAMPER로 해결 방향을 quantity-first로 펼치는 단계예요. 아직 하나로 고르지 않아요.",
-    workCaption: "아이디어 펼치기 · 9 그리드",
+      "7단계 HMW 질문 전체를 출발점으로, 질문마다 칸을 두고 스케치·SCAMPER로 해결 방향을 quantity-first로 펼치는 단계예요. 아직 하나로 고르지 않아요.",
+    workCaption: "아이디어 펼치기",
     placeholderLines: [
       "빈 칸을 눌러 제목·설명·스케치를 적고,",
       "막히면 SCAMPER로 같은 아이디어를 비틀어 보세요.",
@@ -156,7 +156,7 @@ const STAGE_PURPOSE_EN: Partial<Record<number, StagePurposeCopy>> = {
   6: {
     label: "Why find latent needs",
     purpose:
-      "Review Stage 4 quotes and observations on one board, and note latent needs that may sit under what each subject said. These are still hypotheses.",
+      "Review Stage 4 quotes and observations on one board, and note latent needs that may sit under what each subject said. After grouping, use the quadrant to pick up to 5 core needs most likely to lead to good ideas. These are still hypotheses.",
     workCaption: "Latent needs analysis",
     placeholderLines: [
       "Research notes appear on one board.",
@@ -166,7 +166,7 @@ const STAGE_PURPOSE_EN: Partial<Record<number, StagePurposeCopy>> = {
   7: {
     label: "Why write How Might We questions",
     purpose:
-      "Turn Stage 6 latent needs into open ‘How might we … in order to …?’ questions so ideation has a clear exploration direction. Kevin has drafted preliminary HMW questions—read and refine them.",
+      "Turn the core latent needs selected in Stage 6 into open ‘How might we … in order to …?’ questions so ideation has a clear exploration direction. Kevin drafts three variations (amp up / remove the bad / explore the opposite), quality-checks them, and fills the best one—refine freely.",
     workCaption: "How Might We questions",
     placeholderLines: [
       "When latent needs appear on the left,",
@@ -176,8 +176,8 @@ const STAGE_PURPOSE_EN: Partial<Record<number, StagePurposeCopy>> = {
   8: {
     label: "Why expand ideas",
     purpose:
-      "Starting from Stage 7 HMW questions, expand solution directions quantity-first with a 9-cell grid, sketches, and SCAMPER. Don't pick one yet.",
-    workCaption: "Ideation · 9-grid",
+      "Starting from all Stage 7 HMW questions, expand solution directions quantity-first—one cell per question—with sketches and SCAMPER. Don't pick one yet.",
+    workCaption: "Ideation",
     placeholderLines: [
       "Tap empty cells for title, description, and sketch,",
       "or twist ideas with SCAMPER when stuck.",

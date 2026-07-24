@@ -30,13 +30,56 @@ export interface Stage5BoardPostit {
   kevinGenerated?: boolean;
 }
 
-export type NeedsWorkflowPhase = "needs_analysis" | "needs_categorization";
+export type NeedsWorkflowPhase =
+  | "needs_analysis"
+  | "needs_categorization"
+  | "core_selection";
 
 export type NeedGroup = {
   id: string;
   name: string;
   order: number;
 };
+
+/** 사분면 셀: 중요도(세로) × 해결 공백(가로) */
+export type NeedQuadrantCell =
+  | "high_importance_high_gap"
+  | "high_importance_low_gap"
+  | "low_importance_high_gap"
+  | "low_importance_low_gap";
+
+/** 핵심 니즈 판단 근거 배지 */
+export type NeedSignalId =
+  | "workaround"
+  | "frequency"
+  | "pain"
+  | "breadth"
+  | "gap";
+
+export interface NeedSelectionRating {
+  /** 사분면 배치 (드래그로 결정) */
+  cell: NeedQuadrantCell;
+  /** 근거 배지 */
+  signals: NeedSignalId[];
+}
+
+/** 핵심 니즈 최대 개수 */
+export const CORE_NEED_LIMIT = 5;
+
+export const NEED_QUADRANT_CELLS: NeedQuadrantCell[] = [
+  "high_importance_low_gap",
+  "high_importance_high_gap",
+  "low_importance_low_gap",
+  "low_importance_high_gap",
+];
+
+export const NEED_SIGNAL_IDS: NeedSignalId[] = [
+  "workaround",
+  "frequency",
+  "pain",
+  "breadth",
+  "gap",
+];
 
 export interface Stage5LatentNeedsData {
   subjects: Stage5SubjectRef[];
@@ -48,12 +91,18 @@ export interface Stage5LatentNeedsData {
    * 진짜 필요찾기에서 여정 지도 하단 행에 사용.
    */
   journeyStepNeedIds: Record<string, string[]>;
-  /** 니즈 분석하기 → 니즈 분류하기 */
+  /** 니즈 분석하기 → 니즈 분류하기 → 핵심 니즈 선별 */
   workflowPhase: NeedsWorkflowPhase;
   /** 니즈 분류 그룹 */
   needGroups: NeedGroup[];
   /** 그룹 id → 잠재 니즈 포스트잇 id */
   needGroupMemberIds: Record<string, string[]>;
+  /** 잠재 니즈 id → 사분면 평가 */
+  needRatings: Record<string, NeedSelectionRating>;
+  /** 핵심 니즈 (최대 CORE_NEED_LIMIT개) */
+  coreNeedIds: string[];
+  /** 보류함 — 언제든 다시 꺼낼 수 있음 */
+  parkedNeedIds: string[];
 }
 
 export function defaultStage5LatentNeeds(): Stage5LatentNeedsData {
@@ -66,6 +115,9 @@ export function defaultStage5LatentNeeds(): Stage5LatentNeedsData {
     workflowPhase: "needs_analysis",
     needGroups: [],
     needGroupMemberIds: {},
+    needRatings: {},
+    coreNeedIds: [],
+    parkedNeedIds: [],
   };
 }
 
@@ -118,6 +170,24 @@ export function pruneStage5LatentNeedsData(
     needGroupMemberIds[groupId] = cleaned;
   }
 
+  const latentNeedIds = new Set(
+    postits.filter((p) => p.kind === "latent_need").map((p) => p.id),
+  );
+
+  const needRatings: Record<string, NeedSelectionRating> = {};
+  for (const [needId, rating] of Object.entries(data.needRatings ?? {})) {
+    if (!latentNeedIds.has(needId) || !rating) continue;
+    needRatings[needId] = rating;
+  }
+
+  const parkedNeedIds = dedupeIds(data.parkedNeedIds ?? []).filter((id) =>
+    latentNeedIds.has(id),
+  );
+  const parkedSet = new Set(parkedNeedIds);
+  const coreNeedIds = dedupeIds(data.coreNeedIds ?? [])
+    .filter((id) => latentNeedIds.has(id) && !parkedSet.has(id))
+    .slice(0, CORE_NEED_LIMIT);
+
   return {
     ...data,
     subjects,
@@ -125,11 +195,21 @@ export function pruneStage5LatentNeedsData(
     journeyStepNeedIds,
     needGroups,
     needGroupMemberIds,
-    workflowPhase:
-      data.workflowPhase === "needs_categorization"
-        ? "needs_categorization"
-        : "needs_analysis",
+    needRatings,
+    coreNeedIds,
+    parkedNeedIds,
+    workflowPhase: normalizeWorkflowPhase(data.workflowPhase),
   };
+}
+
+function dedupeIds(ids: string[]): string[] {
+  return [...new Set(ids.filter((id) => typeof id === "string" && id))];
+}
+
+function normalizeWorkflowPhase(raw: unknown): NeedsWorkflowPhase {
+  return raw === "needs_categorization" || raw === "core_selection"
+    ? raw
+    : "needs_analysis";
 }
 
 export function createStage5BoardPostit(
@@ -207,13 +287,43 @@ export function normalizeStage5LatentNeeds(
     kevinGeneratedAt:
       typeof raw.kevinGeneratedAt === "string" ? raw.kevinGeneratedAt : "",
     journeyStepNeedIds: normalizeJourneyStepNeedIds(raw.journeyStepNeedIds),
-    workflowPhase:
-      raw.workflowPhase === "needs_categorization"
-        ? "needs_categorization"
-        : "needs_analysis",
+    workflowPhase: normalizeWorkflowPhase(raw.workflowPhase),
     needGroups: normalizeNeedGroups(raw.needGroups),
     needGroupMemberIds: normalizeJourneyStepNeedIds(raw.needGroupMemberIds),
+    needRatings: normalizeNeedRatings(raw.needRatings),
+    coreNeedIds: normalizeIdList(raw.coreNeedIds),
+    parkedNeedIds: normalizeIdList(raw.parkedNeedIds),
   });
+}
+
+function normalizeIdList(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.filter((id): id is string => typeof id === "string" && Boolean(id));
+}
+
+function normalizeNeedRatings(
+  raw: unknown,
+): Record<string, NeedSelectionRating> {
+  if (!raw || typeof raw !== "object") return {};
+  const out: Record<string, NeedSelectionRating> = {};
+  for (const [needId, value] of Object.entries(
+    raw as Record<string, unknown>,
+  )) {
+    if (!needId || !value || typeof value !== "object") continue;
+    const rating = value as Partial<NeedSelectionRating>;
+    if (!NEED_QUADRANT_CELLS.includes(rating.cell as NeedQuadrantCell)) {
+      continue;
+    }
+    out[needId] = {
+      cell: rating.cell as NeedQuadrantCell,
+      signals: Array.isArray(rating.signals)
+        ? rating.signals.filter((s): s is NeedSignalId =>
+            NEED_SIGNAL_IDS.includes(s as NeedSignalId),
+          )
+        : [],
+    };
+  }
+  return out;
 }
 
 function normalizeNeedGroups(raw: unknown): NeedGroup[] {

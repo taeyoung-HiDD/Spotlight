@@ -1,5 +1,6 @@
 "use client";
 
+import { IconArrowDown, IconArrowRight } from "@tabler/icons-react";
 import { HmwQuestionSquareField } from "@/components/stage/stage7/HmwQuestionSquareField";
 import { SubjectInitialBadge } from "@/components/stage/stage5/SubjectInitialBadge";
 import { POSTIT_SHELL_WIDTH_HMW_PAIR } from "@/lib/stages/stage4/postitLayout";
@@ -20,7 +21,7 @@ export function StageGuideHmwExample({ visual }: StageGuideHmwExampleProps) {
 
   return (
     <div className="hmw-board rounded-2xl border border-border-warm/70 bg-cream/40 p-3 sm:p-4">
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 sm:items-start">
+      <div className="flex flex-col items-stretch gap-4 sm:flex-row sm:items-start sm:gap-5">
         <div className={POSTIT_SHELL_WIDTH_HMW_PAIR}>
           <p className={`mb-2 ${stageCaption}`}>잠재 니즈 - 1</p>
           <div className="source-latent-pair__paper-slot aspect-square w-full">
@@ -33,6 +34,22 @@ export function StageGuideHmwExample({ visual }: StageGuideHmwExampleProps) {
               </p>
             </div>
           </div>
+        </div>
+
+        <div
+          className="flex shrink-0 items-center justify-center self-center py-1 sm:px-1 sm:pt-7"
+          aria-label="HMW 질문으로 변환"
+        >
+          <IconArrowDown
+            className="size-5 text-gold sm:hidden"
+            stroke={2}
+            aria-hidden
+          />
+          <IconArrowRight
+            className="hidden size-5 text-gold sm:block"
+            stroke={2}
+            aria-hidden
+          />
         </div>
 
         <HmwQuestionSquareField value={visual.hmwText} readOnly pairIndex={1} />

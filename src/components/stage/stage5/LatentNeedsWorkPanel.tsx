@@ -2,6 +2,7 @@
 
 import { useUiLocale } from "@/hooks/useUiLocale";
 import { LatentNeedsCategorizationBoard } from "@/components/stage/stage5/LatentNeedsCategorizationBoard";
+import { LatentNeedsCoreSelectionBoard } from "@/components/stage/stage5/LatentNeedsCoreSelectionBoard";
 import { LatentNeedsJourneyBoard } from "@/components/stage/stage5/LatentNeedsJourneyBoard";
 import { TermChip } from "@/components/stage/TermChip";
 import { getStagePurposeCopy } from "@/lib/stages/discovery/stagePurposeCopy";
@@ -38,6 +39,11 @@ const PHASES = [
     label: "니즈 분류하기",
     hint: "Needs Categorization",
   },
+  {
+    id: "core_selection" as const,
+    label: "핵심 니즈 선별",
+    hint: "사분면으로 최대 5개",
+  },
 ];
 
 export function LatentNeedsWorkPanel({
@@ -56,6 +62,7 @@ export function LatentNeedsWorkPanel({
   const purposeCopy = getStagePurposeCopy(6, locale);
   const phase = data.workflowPhase ?? "needs_analysis";
   const isCategorization = phase === "needs_categorization";
+  const isCoreSelection = phase === "core_selection";
 
   return (
     <section className={stagePanel}>
@@ -97,20 +104,30 @@ export function LatentNeedsWorkPanel({
         <TermChip
           label="용어"
           definition={
-            isCategorization
-              ? "비슷한 잠재 니즈를 묶은 그룹 — 이름과 구성은 가설이며 검증이 필요해요."
-              : "여정 단계 아래 잠재 니즈 — 아직 검증이 필요한 진짜 필요 가설이에요."
+            isCoreSelection
+              ? "핵심 니즈 — 중요도와 해결 공백이 모두 커서 좋은 아이디어로 이어질 가능성이 높은 니즈예요. 선별도 가설이에요."
+              : isCategorization
+                ? "비슷한 잠재 니즈를 묶은 그룹 — 이름과 구성은 가설이며 검증이 필요해요."
+                : "여정 단계 아래 잠재 니즈 — 아직 검증이 필요한 진짜 필요 가설이에요."
           }
         />
       </div>
 
       <p className={`mb-4 ${stageCaption}`}>
-        {isCategorization
-          ? "도출한 잠재 니즈를 비슷한 것끼리 묶어 분류해 보세요. 그룹 이름·구성은 언제든 바꿀 수 있어요."
-          : purposeCopy.purpose}
+        {isCoreSelection
+          ? "모든 니즈를 다 해결할 수는 없어요. 사분면에 배치해 보고, HMW 질문으로 가져갈 핵심 니즈를 골라 보세요."
+          : isCategorization
+            ? "도출한 잠재 니즈를 비슷한 것끼리 묶어 분류해 보세요. 그룹 이름·구성은 언제든 바꿀 수 있어요."
+            : purposeCopy.purpose}
       </p>
 
-      {isCategorization ? (
+      {isCoreSelection ? (
+        <LatentNeedsCoreSelectionBoard
+          projectId={projectId}
+          data={data}
+          onChange={onChange}
+        />
+      ) : isCategorization ? (
         <LatentNeedsCategorizationBoard
           projectId={projectId}
           data={data}
@@ -138,7 +155,7 @@ export function LatentNeedsWorkPanel({
                 ? `마지막 저장 ${lastSavedAt}`
                 : "자동 저장됩니다."}
         </p>
-        {!isCategorization ? (
+        {!isCategorization && !isCoreSelection ? (
           <button
             type="button"
             onClick={() =>
@@ -149,6 +166,16 @@ export function LatentNeedsWorkPanel({
             className={stageBtnSecondary}
           >
             니즈 분류하기로
+          </button>
+        ) : isCategorization ? (
+          <button
+            type="button"
+            onClick={() =>
+              onChange(setNeedsWorkflowPhase(data, "core_selection", journey))
+            }
+            className={stageBtnSecondary}
+          >
+            핵심 니즈 선별로
           </button>
         ) : null}
       </div>

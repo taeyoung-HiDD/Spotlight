@@ -15,6 +15,7 @@ import {
   type HmwQuestion,
   type Stage7HmwData,
 } from "@/lib/stages/stage7/hmwTypes";
+import { evaluateHmwQualityRules } from "@/lib/stages/stage7/hmwQualityChecklist";
 import {
   stageBtnPrimary,
   stageBtnSecondary,
@@ -200,7 +201,14 @@ export function HmwBoard({
         subjectIndex={subjectIndex}
         pairIndex={pairIndexById.get(question.id) ?? 1}
         onUpdateHmw={(text) =>
-          onChange(updateHmwQuestion(data, question.id, text))
+          onChange(
+            updateHmwQuestion(
+              data,
+              question.id,
+              text,
+              evaluateHmwQualityRules(text, question.latentNeedText),
+            ),
+          )
         }
         onUpdateLatentNeed={
           manual
@@ -214,6 +222,14 @@ export function HmwBoard({
 
   return (
     <div className="space-y-4">
+      {data.coreSelectionApplied ? (
+        <p className="rounded-md bg-[#FFFDF4] px-3 py-2 text-[13px] font-medium text-foreground break-keep">
+          6단계에서 고른 핵심 니즈{" "}
+          {data.questions.filter((q) => !isManualHmwQuestion(q)).length}개
+          기준으로 만들고 있어요. 보류한 니즈는 6단계 보류함에서 다시 꺼낼 수
+          있어요.
+        </p>
+      ) : null}
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 flex-1 space-y-3">
           <div>
@@ -328,7 +344,7 @@ export function HmwBoard({
             {groupedSections.map((section) => (
               <section key={section.key} className="space-y-3">
                 <div className="flex items-baseline gap-2 border-b border-border-warm/70 pb-1.5">
-                  <h3 className="text-[15px] font-semibold text-foreground break-keep">
+                  <h3 className="text-[18px] font-semibold leading-snug text-foreground break-keep">
                     {section.title}
                   </h3>
                   <span className={stageCaption}>
