@@ -1,7 +1,12 @@
+export type KanoSignal = "must_be" | "attractive" | "unknown";
+
 export type CoreNeedReview = {
   needId: string;
   counterQuestion: string;
   riskNote: string;
+  /** Kano 관점 신호 — 판정이 아니라 질문 강조용 */
+  kanoSignal?: KanoSignal;
+  mustBeSuspicion?: boolean;
 };
 
 export type ReviewCoreNeedsResponse = {

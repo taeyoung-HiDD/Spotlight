@@ -153,7 +153,8 @@ export function IdeaGridBoard({
       </div>
 
       <p className={`mt-3 ${stageCaption}`}>
-        7단계 HMW 질문마다 칸이 생겨요. 각 칸에서 아이디어를 펼쳐 보세요.
+        핵심 니즈 HMW로 먼저 펼치고, 더 필요하면 「다음 사분면에서 HMW 더
+        가져오기」로 칸을 늘릴 수 있어요.
       </p>
     </div>
   );

@@ -73,11 +73,11 @@ const STAGE_PURPOSE_KO: Partial<Record<number, StagePurposeCopy>> = {
   8: {
     label: "아이디어를 펼치는 이유",
     purpose:
-      "7단계 HMW 질문 전체를 출발점으로, 질문마다 칸을 두고 스케치·SCAMPER로 해결 방향을 quantity-first로 펼치는 단계예요. 아직 하나로 고르지 않아요.",
+      "6단계에서 고른 핵심 니즈 기반 HMW를 출발점으로, 질문마다 칸을 두고 스케치·SCAMPER·원리 카드·팀 관점으로 해결 방향을 quantity-first로 펼치는 단계예요. 더 필요하면 다음 사분면 니즈로 HMW를 꺼내 올 수 있어요. 아직 하나로 고르지 않아요.",
     workCaption: "아이디어 펼치기",
     placeholderLines: [
       "빈 칸을 눌러 제목·설명·스케치를 적고,",
-      "막히면 SCAMPER로 같은 아이디어를 비틀어 보세요.",
+      "막히면 「다른 관점이 필요해요」로 자극을 받아 보세요.",
     ],
   },
   9: {
@@ -176,11 +176,11 @@ const STAGE_PURPOSE_EN: Partial<Record<number, StagePurposeCopy>> = {
   8: {
     label: "Why expand ideas",
     purpose:
-      "Starting from all Stage 7 HMW questions, expand solution directions quantity-first—one cell per question—with sketches and SCAMPER. Don't pick one yet.",
+      "Starting from core-need HMW questions, expand solution directions quantity-first—one cell per question—with sketches, SCAMPER, principle cards, and team perspectives. Pull more HMW from the next quadrant when needed. Don't pick one yet.",
     workCaption: "Ideation",
     placeholderLines: [
       "Tap empty cells for title, description, and sketch,",
-      "or twist ideas with SCAMPER when stuck.",
+      "or use “Need another angle” when stuck.",
     ],
   },
   9: {

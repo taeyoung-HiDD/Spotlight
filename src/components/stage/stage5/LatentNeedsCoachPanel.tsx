@@ -34,7 +34,7 @@ function buildCoreSelectionMessages(
       type: "highlight",
       label: "핵심 니즈 선별",
       content: formatCoachDialogBreaks(
-        "모든 니즈를 다 해결할 수는 없어요. 좋은 아이디어로 이어질 핵심 니즈를 최대 5개까지 골라, 다음 단계 HMW 질문의 재료로 삼아요.",
+        "모든 니즈를 다 해결할 수는 없어요. 좋은 아이디어로 이어질 핵심 니즈를 골라, 다음 단계 HMW 질문의 재료로 삼아요. 보통 2~3개가 적당하고, 최대 5개까지 가능해요.",
       ),
     },
     {

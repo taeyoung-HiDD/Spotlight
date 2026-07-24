@@ -52,7 +52,7 @@ export function IdeaGridCoachPanel({
         type: "bubble",
         variant: "secondary",
         content: formatCoachDialogBreaks(
-          "앞 단계 HMW마다 칸이 생겨요. 모든 칸을 다 채우지 않아도 괜찮아요. 막히면 SCAMPER 보강 도구로 같은 아이디어를 비틀어 볼 수 있어요.",
+          "앞 단계 HMW마다 칸이 생겨요. 핵심 니즈 기준으로 먼저 펼치고, 더 필요하면 「다음 사분면에서 HMW 더 가져오기」로 칸을 늘릴 수 있어요. 막히면 「다른 관점이 필요해요」로 SCAMPER·원리 카드·팀 관점을 받아 보세요. 칸을 비우면 아이디어 은행에 보류됩니다.",
         ),
       },
     ];
@@ -65,7 +65,7 @@ export function IdeaGridCoachPanel({
       stageTitle: "아이디어 펼치기",
       artifactSummary: `아이디어 ${filledIdeaCount(data)}/${data.slots.length} · HMW ${hmwQuestions.filter((q) => q.hmwText.trim()).length}개 연결`,
       stageBehaviorNote:
-        "8단계 아이디어 펼치기: 7단계 HMW 질문 전체(개수만큼 칸)에 대해 스케치·SCAMPER로 아이디어를 quantity-first로 펼칩니다.",
+        "8단계 아이디어 펼치기: 핵심 니즈 기반 HMW로 칸을 채우고 quantity-first로 아이디어를 펼칩니다. 막히면 SCAMPER·원리 카드·팀 관점 자극을 쓰고, 칸을 비우면 아이디어 은행에 보류합니다. 더 필요하면 다음 사분면 니즈로 HMW를 추가할 수 있습니다. AI 스케치는 참고 사례일 뿐 사용자 스케치를 덮지 않습니다.",
     }),
     [projectId, data, hmwQuestions],
   );

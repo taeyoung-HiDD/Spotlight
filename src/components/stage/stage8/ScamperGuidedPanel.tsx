@@ -58,6 +58,8 @@ export function ScamperGuidedPanel({
         sourceHmwText: source.idea.sourceHmwText,
         scamperLetter: step.letter,
         parentIdeaId: source.idea.id,
+        stimulusType: "scamper",
+        stimulusId: step.letter,
       }),
     );
     setDraftText("");

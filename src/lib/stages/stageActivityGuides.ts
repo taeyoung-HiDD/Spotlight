@@ -343,27 +343,28 @@ const GUIDE_OVERRIDES: Partial<Record<number, Omit<StageActivityGuideContent, "s
     8: {
       headline: "HMW에서 아이디어를 quantity-first로 펼쳐요",
       summary:
-        "7단계 HMW 질문을 출발점으로 9칸 그리드에 아이디어를 적고, 스케치·SCAMPER로 변형을 더해요.",
+        "7단계 HMW 질문을 출발점으로 그리드에 아이디어를 적고, 스케치·SCAMPER·원리 카드·팀 관점으로 변형을 더해요.",
       activities: [
         {
-          title: "9 그리드 채우기",
+          title: "그리드 채우기",
           description: "빈 칸을 눌러 한 줄 제목·짧은 설명·스케치를 적어요.",
         },
         {
-          title: "SCAMPER 보강",
-          description: "막히면 7글자(S·C·A·M·P·E·R)로 같은 아이디어를 비틀어 봐요.",
+          title: "다른 관점 자극",
+          description:
+            "막히면 「다른 관점이 필요해요」로 SCAMPER·원리 카드·팀 관점을 받아 봐요.",
         },
         {
-          title: "가설 라벨 유지",
-          description: "아직 검증 전이므로 ‘이렇게 하면 될 것 같다’ 수준으로 남겨 두세요.",
+          title: "아이디어 은행",
+          description: "칸을 비우면 보류함(은행)에 두고 나중에 다시 꺼낼 수 있어요.",
         },
       ],
       example: {
         label: "아이디어 예시",
         content:
-          "「예상 도착 시간을 캘린더에 자동 반영하는 알림」— 3번 칸에 제목, 짧은 설명, 스케치를 함께.",
+          "「예상 도착 시간을 캘린더에 자동 반영하는 알림」— 칸에 제목, 짧은 설명, 스케치를 함께.",
       },
-      tip: "9칸을 다 채우지 않아도 9단계 우선순위 정하기로 넘어갈 수 있어요.",
+      tip: "모든 칸을 채우지 않아도 9단계 우선순위 정하기로 넘어갈 수 있어요.",
     },
     9: {
       headline: "무엇부터 할지 순서를 정해요",

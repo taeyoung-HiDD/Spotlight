@@ -100,13 +100,17 @@ export function mergeStage5IntoHmw(
   hmw: Stage7HmwData,
   stage5: Stage5LatentNeedsData,
 ): Stage7HmwData {
-  // 핵심 니즈를 선별했다면 그것만, 아니면 전체 잠재 니즈 (하위호환)
+  // 핵심 선별 시: 핵심 ∪ 이미 HMW에 있는 니즈(8단계 다음 사분면 확장분) 보존
+  // 미선별 시: 전체 잠재 니즈 (하위호환)
   const coreIds = new Set(stage5.coreNeedIds ?? []);
+  const existingNeedIds = new Set(hmw.questions.map((q) => q.latentNeedId));
   const latentNeeds = stage5.postits.filter(
     (p) =>
       p.kind === "latent_need" &&
       p.text.trim() &&
-      (coreIds.size === 0 || coreIds.has(p.id)),
+      (coreIds.size === 0 ||
+        coreIds.has(p.id) ||
+        existingNeedIds.has(p.id)),
   );
   const existingByNeedId = new Map(
     hmw.questions.map((q) => [q.latentNeedId, q]),

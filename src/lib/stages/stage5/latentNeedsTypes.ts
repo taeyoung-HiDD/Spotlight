@@ -66,6 +66,9 @@ export interface NeedSelectionRating {
 /** 핵심 니즈 최대 개수 */
 export const CORE_NEED_LIMIT = 5;
 
+/** 이 개수부터 Kevin이 「2~3개 권장」 안내 (막지 않음) */
+export const CORE_NEED_SOFT_WARN_AT = 4;
+
 export const NEED_QUADRANT_CELLS: NeedQuadrantCell[] = [
   "high_importance_low_gap",
   "high_importance_high_gap",
@@ -103,6 +106,8 @@ export interface Stage5LatentNeedsData {
   coreNeedIds: string[];
   /** 보류함 — 언제든 다시 꺼낼 수 있음 */
   parkedNeedIds: string[];
+  /** 핵심으로 고른 이유 (선택, needId → 짧은 텍스트) */
+  selectionRationales: Record<string, string>;
 }
 
 export function defaultStage5LatentNeeds(): Stage5LatentNeedsData {
@@ -118,6 +123,7 @@ export function defaultStage5LatentNeeds(): Stage5LatentNeedsData {
     needRatings: {},
     coreNeedIds: [],
     parkedNeedIds: [],
+    selectionRationales: {},
   };
 }
 
@@ -188,6 +194,13 @@ export function pruneStage5LatentNeedsData(
     .filter((id) => latentNeedIds.has(id) && !parkedSet.has(id))
     .slice(0, CORE_NEED_LIMIT);
 
+  const selectionRationales: Record<string, string> = {};
+  for (const [needId, text] of Object.entries(data.selectionRationales ?? {})) {
+    if (!latentNeedIds.has(needId) || typeof text !== "string") continue;
+    const trimmed = text.trim();
+    if (trimmed) selectionRationales[needId] = trimmed.slice(0, 200);
+  }
+
   return {
     ...data,
     subjects,
@@ -198,6 +211,7 @@ export function pruneStage5LatentNeedsData(
     needRatings,
     coreNeedIds,
     parkedNeedIds,
+    selectionRationales,
     workflowPhase: normalizeWorkflowPhase(data.workflowPhase),
   };
 }
@@ -293,7 +307,21 @@ export function normalizeStage5LatentNeeds(
     needRatings: normalizeNeedRatings(raw.needRatings),
     coreNeedIds: normalizeIdList(raw.coreNeedIds),
     parkedNeedIds: normalizeIdList(raw.parkedNeedIds),
+    selectionRationales: normalizeSelectionRationales(raw.selectionRationales),
   });
+}
+
+function normalizeSelectionRationales(
+  raw: unknown,
+): Record<string, string> {
+  if (!raw || typeof raw !== "object") return {};
+  const out: Record<string, string> = {};
+  for (const [needId, text] of Object.entries(raw as Record<string, unknown>)) {
+    if (!needId || typeof text !== "string") continue;
+    const trimmed = text.trim();
+    if (trimmed) out[needId] = trimmed.slice(0, 200);
+  }
+  return out;
 }
 
 function normalizeIdList(raw: unknown): string[] {

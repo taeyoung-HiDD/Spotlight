@@ -34,16 +34,21 @@ export function buildIdeaSketchImagePrompt(input: IdeaSketchImageInput): string 
     .join("\n");
 
   const body = `
-Create ONE hand-drawn concept sketch for a design-thinking idea.
+Create ONE hand-drawn concept sketch as OPTIONAL REFERENCE material for a design-thinking idea the user already drafted.
 
-=== REFERENCE CONTEXT (read only — NEVER render these strings or related field labels in the image) ===
+IMPORTANT COACHING CONSTRAINT:
+- The user has already written their own idea (title + description). Your image is a visual REFERENCE only — not a finished idea to replace theirs.
+- Do NOT invent a new product concept that overrides the user's draft.
+- Visualize the interaction implied by THEIR words, not a polished competing solution.
+
+=== USER DRAFT CONTEXT (read only — NEVER render these strings or related field labels in the image) ===
 ${contextLines || "Infer the core interaction from the concept."}
 
 The title, HMW question, and description above are metadata for YOU only.
 They must NOT appear as text, headers, form fields, or labeled empty slots in the drawing.
 
 === DRAW ONLY ===
-- One visual scene of the core product interaction or user experience implied by the context
+- One visual scene of the core product interaction or user experience implied by the user's draft
 - Icons, maps, people, devices, simple charts as wordless shapes (no axis names, no legends)
 - Light hatching and arrows allowed; focus on what happens, not what it is called
 

@@ -17,12 +17,19 @@ import {
   saveStage5LatentNeeds,
 } from "@/lib/artifacts/stage5LatentNeeds";
 import { mergeStage5IntoHmw } from "@/lib/stages/stage7/bootstrapHmwFromStage5";
+import { requestHmwGeneration } from "@/lib/stages/stage7/generateHmwClient";
 import { useDebouncedPersist } from "@/hooks/useDebouncedPersist";
 import {
   defaultIdeaGrid,
   type IdeaGridData,
 } from "@/lib/stages/stage8/ideaGridTypes";
 import { bootstrapIdeaGridFromHmw } from "@/lib/stages/stage8/bootstrapIdeaGridFromHmw";
+import {
+  appendGeneratedHmwToGrid,
+  findNextQuadrantToPull,
+  prepareHmwQuestionsForNeeds,
+  usedLatentNeedIds,
+} from "@/lib/stages/stage8/pullNextQuadrantHmw";
 import {
   defaultStage7Hmw,
   type Stage7HmwData,
@@ -64,6 +71,7 @@ export function Stage8Ideation({ projectId }: Stage8IdeationProps) {
   const [stage5AllSlots, setStage5AllSlots] = useState<ArtifactSlots>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [pullingQuadrant, setPullingQuadrant] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
 
@@ -214,6 +222,92 @@ export function Stage8Ideation({ projectId }: Stage8IdeationProps) {
     ],
   );
 
+  const handlePullNextQuadrant = useCallback(async () => {
+    const next = findNextQuadrantToPull(
+      stage5Data,
+      usedLatentNeedIds(hmwData),
+    );
+    if (!next) {
+      setSaveError("더 꺼낼 사분면 니즈가 없어요.");
+      return;
+    }
+
+    setPullingQuadrant(true);
+    setSaveError(null);
+    try {
+      const preparedHmw = prepareHmwQuestionsForNeeds(hmwData, next.needs);
+
+      const inputs = preparedHmw.questions
+        .filter(
+          (q) =>
+            next.needs.some((n) => n.id === q.latentNeedId) &&
+            q.latentNeedText.trim() &&
+            !q.hmwText.trim(),
+        )
+        .map((q) => ({
+          questionId: q.id,
+          latentNeedText: q.latentNeedText,
+        }));
+
+      let generatedItems:
+        | Awaited<ReturnType<typeof requestHmwGeneration>>["items"]
+        | undefined;
+      try {
+        if (inputs.length > 0) {
+          const response = await requestHmwGeneration(projectId, inputs);
+          generatedItems = response.items;
+        }
+      } catch {
+        generatedItems = undefined;
+      }
+
+      const result = appendGeneratedHmwToGrid({
+        grid: data,
+        hmw: preparedHmw,
+        needs: next.needs,
+        generatedItems,
+      });
+      const syncedGrid = bootstrapIdeaGridFromHmw(result.grid, result.hmw);
+
+      const [gridResult, hmwResult] = await Promise.all([
+        saveStage8IdeaGrid({
+          projectId,
+          artifactId,
+          data: syncedGrid,
+          existingSlots: allSlots,
+        }),
+        saveStage7Hmw({
+          projectId,
+          artifactId: hmwArtifactId,
+          data: result.hmw,
+          existingSlots: hmwAllSlots,
+        }),
+      ]);
+      setData(syncedGrid);
+      setHmwData(result.hmw);
+      setArtifactId(gridResult.artifactId);
+      setHmwArtifactId(hmwResult.artifactId);
+      setLastSavedAt(formatSavedTime(new Date().toISOString()));
+    } catch (e) {
+      setSaveError(
+        e instanceof Error
+          ? e.message
+          : "다음 사분면 HMW를 가져오지 못했습니다.",
+      );
+    } finally {
+      setPullingQuadrant(false);
+    }
+  }, [
+    allSlots,
+    artifactId,
+    data,
+    hmwAllSlots,
+    hmwArtifactId,
+    hmwData,
+    projectId,
+    stage5Data,
+  ]);
+
   const handleChange = useCallback((next: IdeaGridData) => {
     setData(next);
   }, []);
@@ -259,6 +353,8 @@ export function Stage8Ideation({ projectId }: Stage8IdeationProps) {
             stage5Data={stage5Data}
             onChange={handleChange}
             onSaveNeedHmw={handleSaveNeedHmw}
+            onPullNextQuadrant={handlePullNextQuadrant}
+            pullingQuadrant={pullingQuadrant}
             saving={saving}
             saveError={saveError}
             lastSavedAt={lastSavedAt}

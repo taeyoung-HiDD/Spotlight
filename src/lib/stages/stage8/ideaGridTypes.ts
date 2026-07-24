@@ -3,18 +3,31 @@ import type { ScamperLetter } from "@/lib/stages/stage8/scamperCatalog";
 /** 기본·최소 그리드 칸 수 (HMW가 없을 때) */
 export const IDEA_GRID_SIZE = 9;
 
-export type IdeaGridView = "grid" | "editor" | "scamper" | "hmw_setup";
+export type IdeaGridView =
+  | "grid"
+  | "editor"
+  | "scamper"
+  | "hmw_setup"
+  | "principle"
+  | "team_persona";
+
+export type IdeaStimulusType = "scamper" | "principle_card" | "team_persona";
 
 export interface IdeaSketch {
   id: string;
   title: string;
   description: string;
   tags: string[];
+  /** 사용자가 올린 스케치 */
   sketchDataUrl: string;
+  /** AI가 만든 참고 시각 사례 (사용자 스케치를 덮지 않음) */
+  referenceSketchDataUrl?: string;
   sourceHmwId: string;
   sourceHmwText: string;
   scamperLetter?: ScamperLetter;
   parentIdeaId?: string;
+  stimulusId?: string;
+  stimulusType?: IdeaStimulusType;
 }
 
 export interface IdeaGridData {
@@ -26,6 +39,10 @@ export interface IdeaGridData {
   scamperSourceIdeaId: string;
   scamperLetterIndex: number;
   hmwSyncedAt: string;
+  /** 보류(은행)에 둔 아이디어 */
+  bankedIdeas: IdeaSketch[];
+  /** 경쟁사 링을 먼저 연 세션 (베타 계측) */
+  competitorRingUnlockedEarly: boolean;
 }
 
 export function createIdeaId(): string {
@@ -45,6 +62,8 @@ export function defaultIdeaGrid(): IdeaGridData {
     scamperSourceIdeaId: "",
     scamperLetterIndex: 0,
     hmwSyncedAt: "",
+    bankedIdeas: [],
+    competitorRingUnlockedEarly: false,
   };
 }
 
@@ -75,10 +94,20 @@ function normalizeIdea(raw: unknown): IdeaSketch | null {
     description: String(o.description ?? ""),
     tags,
     sketchDataUrl: String(o.sketchDataUrl ?? ""),
+    referenceSketchDataUrl: o.referenceSketchDataUrl
+      ? String(o.referenceSketchDataUrl)
+      : undefined,
     sourceHmwId: String(o.sourceHmwId ?? ""),
     sourceHmwText: String(o.sourceHmwText ?? ""),
     scamperLetter: o.scamperLetter as ScamperLetter | undefined,
     parentIdeaId: o.parentIdeaId ? String(o.parentIdeaId) : undefined,
+    stimulusId: o.stimulusId ? String(o.stimulusId) : undefined,
+    stimulusType:
+      o.stimulusType === "scamper" ||
+      o.stimulusType === "principle_card" ||
+      o.stimulusType === "team_persona"
+        ? o.stimulusType
+        : undefined,
   };
 }
 
@@ -112,6 +141,8 @@ export function normalizeIdeaGrid(
     partial.activeView === "editor" ||
     partial.activeView === "scamper" ||
     partial.activeView === "hmw_setup" ||
+    partial.activeView === "principle" ||
+    partial.activeView === "team_persona" ||
     partial.activeView === "grid"
       ? partial.activeView
       : "grid";
@@ -122,6 +153,11 @@ export function normalizeIdeaGrid(
       ? partial.scamperLetterIndex
       : 0;
   const filled = slots.filter((slot) => slot && slot.title.trim()).length;
+  const bankedIdeas = Array.isArray(partial.bankedIdeas)
+    ? partial.bankedIdeas
+        .map(normalizeIdea)
+        .filter((idea): idea is IdeaSketch => idea !== null)
+    : [];
   return {
     slots,
     cellHmwIds,
@@ -130,6 +166,9 @@ export function normalizeIdeaGrid(
     scamperSourceIdeaId: String(partial.scamperSourceIdeaId ?? ""),
     scamperLetterIndex: letterIndex,
     hmwSyncedAt: String(partial.hmwSyncedAt ?? ""),
+    bankedIdeas,
+    competitorRingUnlockedEarly:
+      partial.competitorRingUnlockedEarly === true,
   };
 }
 

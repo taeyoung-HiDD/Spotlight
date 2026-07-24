@@ -11,6 +11,7 @@ import {
   parkNeed,
   parkedLatentNeeds,
   placeNeedInQuadrant,
+  setSelectionRationale,
   toggleCoreNeed,
   toggleNeedSignal,
   unparkNeed,
@@ -22,6 +23,7 @@ import {
 } from "@/lib/stages/stage5/reviewCoreNeedsClient";
 import {
   CORE_NEED_LIMIT,
+  CORE_NEED_SOFT_WARN_AT,
   NEED_SIGNAL_IDS,
   type NeedQuadrantCell,
   type Stage5BoardPostit,
@@ -118,6 +120,7 @@ function QuadrantNeedCard({
   isDragging,
   coreLimitReached,
   onChange,
+  onCoreAddAttempt,
   onDragStart,
   onDragEnd,
 }: {
@@ -127,12 +130,21 @@ function QuadrantNeedCard({
   isDragging: boolean;
   coreLimitReached: boolean;
   onChange: (data: Stage5LatentNeedsData) => void;
+  onCoreAddAttempt: (nextCount: number) => void;
   onDragStart: (e: React.DragEvent) => void;
   onDragEnd: () => void;
 }) {
   const isCore = data.coreNeedIds.includes(postit.id);
   const rating = data.needRatings[postit.id];
   const coreDisabled = !isCore && coreLimitReached;
+  const rationale = data.selectionRationales?.[postit.id] ?? "";
+
+  const handleToggleCore = () => {
+    if (!isCore) {
+      onCoreAddAttempt(data.coreNeedIds.length + 1);
+    }
+    onChange(toggleCoreNeed(data, postit.id));
+  };
 
   return (
     <div
@@ -158,7 +170,7 @@ function QuadrantNeedCard({
         </p>
         <button
           type="button"
-          onClick={() => onChange(toggleCoreNeed(data, postit.id))}
+          onClick={handleToggleCore}
           disabled={coreDisabled}
           title={
             coreDisabled
@@ -181,6 +193,25 @@ function QuadrantNeedCard({
       </div>
 
       <LocalizedText>{postit.text}</LocalizedText>
+
+      {isCore ? (
+        <label className="mt-1.5 block">
+          <span className="mb-0.5 block text-[10px] font-semibold text-[#1c1a16]/55">
+            왜 이걸 골랐나요? (선택)
+          </span>
+          <input
+            type="text"
+            value={rationale}
+            onChange={(e) =>
+              onChange(setSelectionRationale(data, postit.id, e.target.value))
+            }
+            onMouseDown={(e) => e.stopPropagation()}
+            onPointerDown={(e) => e.stopPropagation()}
+            placeholder="예: 조사에서 자주 나왔고, 대안이 약함"
+            className="w-full rounded-sm border border-[#7E57C2]/25 bg-white/80 px-1.5 py-1 text-[11px] font-medium text-[#1c1a16] outline-none placeholder:text-[#1c1a16]/35 focus:border-spotlight/50"
+          />
+        </label>
+      ) : null}
 
       <div className="mt-1.5 flex flex-wrap gap-1">
         {NEED_SIGNAL_IDS.map((signal) => {
@@ -233,6 +264,7 @@ export function LatentNeedsCoreSelectionBoard({
   const [reviewing, setReviewing] = useState(false);
   const [reviews, setReviews] = useState<CoreNeedReview[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [softWarnVisible, setSoftWarnVisible] = useState(false);
 
   const groupNames = useMemo(() => needGroupNameMap(data), [data]);
   const unplaced = useMemo(() => unplacedLatentNeeds(data), [data]);
@@ -242,6 +274,14 @@ export function LatentNeedsCoreSelectionBoard({
     [data.postits],
   );
   const coreLimitReached = data.coreNeedIds.length >= CORE_NEED_LIMIT;
+  const showSoftWarn =
+    softWarnVisible || data.coreNeedIds.length >= CORE_NEED_SOFT_WARN_AT;
+
+  const handleCoreAddAttempt = useCallback((nextCount: number) => {
+    if (nextCount >= CORE_NEED_SOFT_WARN_AT) {
+      setSoftWarnVisible(true);
+    }
+  }, []);
 
   const handleDragStart = useCallback((needId: string) => {
     return (e: React.DragEvent) => {
@@ -347,6 +387,20 @@ export function LatentNeedsCoreSelectionBoard({
           </span>
         ) : null}
       </div>
+
+      {showSoftWarn ? (
+        <div className="rounded-xl border border-spotlight/40 bg-[#FFFDF4] px-3 py-2.5">
+          <p className="text-[13px] font-semibold text-foreground break-keep">
+            Kevin: 지금 {data.coreNeedIds.length || CORE_NEED_SOFT_WARN_AT}개를
+            골랐어요. 2~3개로 좁히면 다음 단계에서 더 깊이 파고들 수 있어요.
+            그래도 계속 {data.coreNeedIds.length || CORE_NEED_SOFT_WARN_AT}개로
+            가시겠어요?
+          </p>
+          <p className={`mt-1 ${stageCaption}`}>
+            막지는 않아요. 원하면 최대 {CORE_NEED_LIMIT}개까지 유지해도 됩니다.
+          </p>
+        </div>
+      ) : null}
 
       {error ? (
         <p className="text-[13px] font-medium text-[#C62828] break-keep">
@@ -456,6 +510,7 @@ export function LatentNeedsCoreSelectionBoard({
                             isDragging={draggingId === postit.id}
                             coreLimitReached={coreLimitReached}
                             onChange={onChange}
+                            onCoreAddAttempt={handleCoreAddAttempt}
                             onDragStart={handleDragStart(postit.id)}
                             onDragEnd={handleDragEnd}
                           />
@@ -534,16 +589,31 @@ export function LatentNeedsCoreSelectionBoard({
           <div className="space-y-2">
             {reviews.map((review) => {
               const need = needById.get(review.needId);
+              const mustBe =
+                review.mustBeSuspicion === true ||
+                review.kanoSignal === "must_be";
               return (
                 <div
                   key={review.needId}
-                  className="rounded-md border border-border-warm bg-panel px-3 py-2.5"
+                  className={[
+                    "rounded-md border bg-panel px-3 py-2.5",
+                    mustBe
+                      ? "border-spotlight/50 bg-[#FFFDF4]"
+                      : "border-border-warm",
+                  ].join(" ")}
                 >
-                  {need ? (
-                    <p className="mb-1 text-[12px] font-semibold text-muted break-keep">
-                      <LocalizedText>{clip(need.text, 60)}</LocalizedText>
-                    </p>
-                  ) : null}
+                  <div className="mb-1 flex flex-wrap items-center gap-1.5">
+                    {need ? (
+                      <p className="text-[12px] font-semibold text-muted break-keep">
+                        <LocalizedText>{clip(need.text, 60)}</LocalizedText>
+                      </p>
+                    ) : null}
+                    {mustBe ? (
+                      <span className="rounded-sm bg-spotlight/20 px-1.5 py-px text-[10px] font-semibold text-foreground">
+                        당연할 수도? · 질문으로만
+                      </span>
+                    ) : null}
+                  </div>
                   <p className="text-[13px] font-semibold text-foreground leading-relaxed break-keep">
                     <LocalizedText>{review.counterQuestion}</LocalizedText>
                   </p>

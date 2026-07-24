@@ -86,9 +86,12 @@ export function toggleCoreNeed(
   needId: string,
 ): Stage5LatentNeedsData {
   if (data.coreNeedIds.includes(needId)) {
+    const selectionRationales = { ...data.selectionRationales };
+    delete selectionRationales[needId];
     return {
       ...data,
       coreNeedIds: data.coreNeedIds.filter((id) => id !== needId),
+      selectionRationales,
     };
   }
   if (data.coreNeedIds.length >= CORE_NEED_LIMIT) return data;
@@ -101,6 +104,22 @@ export function toggleCoreNeed(
   };
 }
 
+/** 선별 근거(선택) 업데이트 */
+export function setSelectionRationale(
+  data: Stage5LatentNeedsData,
+  needId: string,
+  rationale: string,
+): Stage5LatentNeedsData {
+  const trimmed = rationale.trim().slice(0, 200);
+  const selectionRationales = { ...data.selectionRationales };
+  if (!trimmed) {
+    delete selectionRationales[needId];
+  } else {
+    selectionRationales[needId] = trimmed;
+  }
+  return { ...data, selectionRationales };
+}
+
 /** 보류함으로 보내기 (핵심 지정은 해제, 사분면 평가는 보존) */
 export function parkNeed(
   data: Stage5LatentNeedsData,
@@ -109,10 +128,13 @@ export function parkNeed(
   const need = data.postits.find((p) => p.id === needId);
   if (!need || need.kind !== "latent_need") return data;
   if (data.parkedNeedIds.includes(needId)) return data;
+  const selectionRationales = { ...data.selectionRationales };
+  delete selectionRationales[needId];
   return {
     ...data,
     parkedNeedIds: [...data.parkedNeedIds, needId],
     coreNeedIds: data.coreNeedIds.filter((id) => id !== needId),
+    selectionRationales,
   };
 }
 

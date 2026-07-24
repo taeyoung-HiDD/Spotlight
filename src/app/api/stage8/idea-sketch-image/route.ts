@@ -29,9 +29,12 @@ export async function POST(request: Request) {
       ? (body as { hmwText: string }).hmwText.trim()
       : "";
 
-  if (!projectId || !title) {
+  if (!projectId || !title || !description) {
     return NextResponse.json(
-      { error: "projectId와 한 줄 제목이 필요합니다." },
+      {
+        error:
+          "projectId와 한 줄 제목·짧은 설명이 모두 필요합니다. 먼저 아이디어를 적어 주세요.",
+      },
       { status: 400 },
     );
   }
