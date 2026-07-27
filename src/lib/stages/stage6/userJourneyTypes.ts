@@ -50,6 +50,10 @@ export type PersonaJourneyMap = {
   poolItemIds: string[];
   /** 페르소나가 여정에서 기대하는 것 (자유 입력) */
   expectations: string;
+  /** 프로젝트 주제 맞춤 여정 단계가 AI로 생성·적용된 시각 */
+  stagesGeneratedAt?: string;
+  /** 터치포인트·Pain point가 진입 시 AI 분석으로 채워진 시각 */
+  zonesGeneratedAt?: string;
 };
 
 export type UserJourneyMapData = {
@@ -125,6 +129,49 @@ export function defaultUserJourneyMap(): UserJourneyMapData {
   };
 }
 
+/** 아직 공통 기본 여정 단계 그대로인지 (사용자가 라벨을 바꾸지 않음) */
+export function personaHasDefaultJourneySteps(
+  persona: PersonaJourneyMap,
+): boolean {
+  const sorted = [...persona.steps].sort((a, b) => a.order - b.order);
+  if (sorted.length !== DEFAULT_JOURNEY_STEPS.length) return false;
+  return sorted.every(
+    (step, index) => step.label.trim() === DEFAULT_JOURNEY_STEPS[index]!.label,
+  );
+}
+
+/**
+ * 페르소나의 여정 단계를 새 라벨로 교체합니다.
+ * 기존 단계에 배치돼 있던 카드는 풀로 되돌려 자동 배치가 다시 고르게 합니다.
+ */
+export function replacePersonaJourneySteps(
+  data: UserJourneyMapData,
+  subjectId: string,
+  labels: string[],
+): UserJourneyMapData {
+  const persona = data.personas[subjectId];
+  const cleaned = labels.map((label) => label.trim()).filter(Boolean);
+  if (!persona || cleaned.length === 0) return data;
+
+  const assigned = persona.steps.flatMap((step) =>
+    allStepItemIds(step, data.itemsById),
+  );
+  const poolItemIds = [...new Set([...persona.poolItemIds, ...assigned])];
+
+  return {
+    ...data,
+    personas: {
+      ...data.personas,
+      [subjectId]: {
+        ...persona,
+        steps: cleaned.map((label, index) => createJourneyStep(label, index)),
+        poolItemIds,
+        stagesGeneratedAt: new Date().toISOString(),
+      },
+    },
+  };
+}
+
 function normalizeSteps(
   raw: unknown,
   fallback: JourneyMapStep[],
@@ -173,6 +220,14 @@ function normalizePersonaMap(
       : [],
     expectations:
       typeof raw.expectations === "string" ? raw.expectations : "",
+    stagesGeneratedAt:
+      typeof raw.stagesGeneratedAt === "string"
+        ? raw.stagesGeneratedAt
+        : undefined,
+    zonesGeneratedAt:
+      typeof raw.zonesGeneratedAt === "string"
+        ? raw.zonesGeneratedAt
+        : undefined,
   };
 }
 

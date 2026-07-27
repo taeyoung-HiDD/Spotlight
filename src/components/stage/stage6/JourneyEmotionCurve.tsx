@@ -92,7 +92,7 @@ export function JourneyEmotionCurve({
         className ?? "",
       ].join(" ")}
       role="img"
-      aria-label="여정 단계별 사용자 감정 곡선. Pain point 수와 정도에 따라 오르내립니다."
+      aria-label="여정 단계별 사용자 감정 곡선. 사용자 행동과 Pain point 내용을 종합해 자동으로 오르내립니다."
     >
       <svg
         className="user-journey-board__emotion-svg block h-[7.5rem] w-full"

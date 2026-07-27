@@ -22,7 +22,6 @@ import {
   zoneDropActivePlaceholder,
   zoneDropPlaceholder,
 } from "@/lib/stages/stage6/userJourneyBoardLabels";
-import { requestJourneyZoneGeneration } from "@/lib/stages/stage6/generateJourneyZoneClient";
 import { buildJourneyEmotionPoints } from "@/lib/stages/stage6/journeyEmotionFromPain";
 import { isJourneyAiZone } from "@/lib/stages/stage6/journeyStepZones";
 import {
@@ -30,11 +29,9 @@ import {
   addJourneyStep,
   addManualJourneyPersona,
   addStepAiEntry,
-  appendStepAiEntries,
   assignItemToStep,
   getActivePersonaMap,
   journeyItemsForZone,
-  parseGeneratedAiEntries,
   poolItems,
   removeJourneyStep,
   removeStepAiEntry,
@@ -46,7 +43,6 @@ import {
   updateStepAiEntry,
   updateStepLabel,
   JOURNEY_STEP_ZONES,
-  type JourneyAiZone,
   type JourneyMapItem,
   type JourneyMapItemKind,
   type JourneyMapStep,
@@ -144,28 +140,6 @@ type ItemPlacement = {
   zone: JourneyStepZone;
 };
 
-function researchItemsForStepAi(
-  data: UserJourneyMapData,
-  step: JourneyMapStep,
-): JourneyMapItem[] {
-  const zoneItems = resolveStepZoneItems(step, data.itemsById);
-  const ids = [
-    ...new Set([
-      ...zoneItems.behavior,
-      ...zoneItems.touchpoint,
-      ...zoneItems.pain_point,
-    ]),
-  ];
-  return ids
-    .map((id) => data.itemsById[id])
-    .filter(
-      (item): item is JourneyMapItem =>
-        Boolean(item) &&
-        (item.kind === "quote" || item.kind === "observation") &&
-        Boolean(item.text.trim()),
-    );
-}
-
 function findItemPlacement(
   steps: JourneyMapStep[],
   itemsById: UserJourneyMapData["itemsById"],
@@ -190,6 +164,8 @@ interface UserJourneyBoardProps {
   projectId: string;
   data: UserJourneyMapData;
   onChange: (data: UserJourneyMapData) => void;
+  /** 진입 시 터치포인트·Pain point AI 자동 분석 진행 중 */
+  autoFilling?: boolean;
 }
 
 function readDragItemId(e: React.DragEvent): string | null {
@@ -345,7 +321,7 @@ function JourneyStepZoneCell({
   aiEntries,
   dropTarget,
   draggingItemId,
-  aiGenerating,
+  autoFilling,
   cellClassName,
   expandedPostitId,
   onExpandedChange,
@@ -358,8 +334,6 @@ function JourneyStepZoneCell({
   onAiEntryChange,
   onAiEntryAdd,
   onAiEntryRemove,
-  onAiGenerate,
-  aiContextReady,
 }: {
   zoneKey: string;
   zone: JourneyStepZone;
@@ -367,7 +341,7 @@ function JourneyStepZoneCell({
   aiEntries?: string[];
   dropTarget: string | null;
   draggingItemId: string | null;
-  aiGenerating?: boolean;
+  autoFilling?: boolean;
   cellClassName?: string;
   expandedPostitId: string | null;
   onExpandedChange: (postitId: string | null) => void;
@@ -380,14 +354,13 @@ function JourneyStepZoneCell({
   onAiEntryChange?: (index: number, text: string) => void;
   onAiEntryAdd?: () => void;
   onAiEntryRemove?: (index: number) => void;
-  onAiGenerate?: () => void;
-  aiContextReady?: boolean;
 }) {
   const isDropActive = dropTarget === zoneKey;
   const showAi = isJourneyAiZone(zone);
   const hasItems = items.length > 0;
   const entries = aiEntries ?? [];
   const hasAiEntries = entries.length > 0;
+  const isAutoFilling = Boolean(showAi && autoFilling && !hasAiEntries);
   const expandBehavior = zone === "behavior";
 
   return (
@@ -439,13 +412,15 @@ function JourneyStepZoneCell({
             );
           })}
         </div>
-      ) : !showAi || (!hasAiEntries && !aiGenerating) ? (
+      ) : !showAi || !hasAiEntries ? (
         <p className="user-journey-board__zone-placeholder px-1 py-3 text-center break-keep [overflow-wrap:anywhere]">
           {isDropActive
             ? zoneDropActivePlaceholder(zone)
-            : showAi
-              ? JOURNEY_BOARD_PLACEHOLDERS.aiZoneDrop
-              : zoneDropPlaceholder(zone)}
+            : isAutoFilling
+              ? JOURNEY_BOARD_PLACEHOLDERS.aiAutoFilling
+              : showAi
+                ? JOURNEY_BOARD_PLACEHOLDERS.aiZoneDrop
+                : zoneDropPlaceholder(zone)}
         </p>
       ) : null}
 
@@ -484,30 +459,13 @@ function JourneyStepZoneCell({
               ))}
             </div>
           ) : null}
-          <div className="flex flex-wrap gap-1">
-            <button
-              type="button"
-              onClick={onAiEntryAdd}
-              className="min-w-0 flex-1 rounded-md border border-dashed border-border-warm bg-panel/80 px-2 py-1 text-[11px] font-semibold text-foreground transition-colors hover:border-spotlight/50 hover:bg-highlight/40"
-            >
-              + {JOURNEY_BOARD_PLACEHOLDERS.aiEntryAdd}
-            </button>
-            <button
-              type="button"
-              onClick={onAiGenerate}
-              disabled={aiGenerating || !aiContextReady}
-              title={
-                !aiContextReady
-                  ? JOURNEY_BOARD_PLACEHOLDERS.aiNeedsItems
-                  : undefined
-              }
-              className="min-w-0 flex-1 rounded-md border border-border-warm bg-cream px-2 py-1 text-[11px] font-semibold text-foreground transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {aiGenerating
-                ? JOURNEY_BOARD_PLACEHOLDERS.aiGenerating
-                : JOURNEY_BOARD_PLACEHOLDERS.aiGenerate}
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={onAiEntryAdd}
+            className="w-full min-w-0 rounded-md border border-dashed border-border-warm bg-panel/80 px-2 py-1 text-[11px] font-semibold text-foreground transition-colors hover:border-spotlight/50 hover:bg-highlight/40"
+          >
+            + {JOURNEY_BOARD_PLACEHOLDERS.aiEntryAdd}
+          </button>
         </div>
       ) : null}
     </div>
@@ -518,6 +476,7 @@ export function UserJourneyBoard({
   projectId,
   data,
   onChange,
+  autoFilling = false,
 }: UserJourneyBoardProps) {
   const subjectId = data.activeSubjectId;
   const persona = getActivePersonaMap(data);
@@ -539,7 +498,6 @@ export function UserJourneyBoard({
     "quote",
   );
 
-  const [aiGeneratingKey, setAiGeneratingKey] = useState<string | null>(null);
   const { expandedPostitId, onExpandedChange } = useJourneyPostitExpansion();
 
   const poolKindCounts = useMemo(() => {
@@ -609,7 +567,6 @@ export function UserJourneyBoard({
         stepIndex,
         zones,
         aiTexts: step.aiTexts ?? {},
-        aiContextReady: researchItemsForStepAi(data, step).length > 0,
       };
     });
   }, [data, persona]);
@@ -642,43 +599,6 @@ export function UserJourneyBoard({
       handleDragEnd();
     },
     [data, onChange, handleDragEnd, subjectId],
-  );
-
-  const handleAiGenerate = useCallback(
-    async (stepId: string, zone: JourneyAiZone) => {
-      if (!persona || !subjectId || !activeSubject) return;
-      const step = persona.steps.find((s) => s.id === stepId);
-      if (!step) return;
-      const items = researchItemsForStepAi(data, step);
-      if (items.length === 0) return;
-
-      const key = `${stepId}-${zone}`;
-      setAiGeneratingKey(key);
-      try {
-        const result = await requestJourneyZoneGeneration({
-          projectId,
-          subjectName: activeSubject.name,
-          stepLabel: step.label,
-          expectations: persona.expectations,
-          zone,
-          items: items.map((item) => ({ kind: item.kind, text: item.text })),
-        });
-        onChange(
-          appendStepAiEntries(
-            data,
-            subjectId,
-            stepId,
-            zone,
-            parseGeneratedAiEntries(result.text),
-          ),
-        );
-      } catch {
-        // 사용자가 재시도할 수 있도록 조용히 실패
-      } finally {
-        setAiGeneratingKey((current) => (current === key ? null : current));
-      }
-    },
-    [activeSubject, data, onChange, persona, projectId, subjectId],
   );
 
   const handleDropOnPool = useCallback(
@@ -903,7 +823,7 @@ export function UserJourneyBoard({
                 <Fragment key={zone}>
                   <JourneyRowLabelCell row={zone} />
                   {stepRows.map(
-                    ({ step, stepIndex, zones, aiContextReady }) => (
+                    ({ step, stepIndex, zones }) => (
                     <JourneyStepZoneCell
                       key={`${step.id}-${zone}`}
                       zoneKey={`${step.id}-${zone}`}
@@ -916,7 +836,7 @@ export function UserJourneyBoard({
                       }
                       dropTarget={dropTarget}
                       draggingItemId={draggingItemId}
-                      aiGenerating={aiGeneratingKey === `${step.id}-${zone}`}
+                      autoFilling={autoFilling}
                       cellClassName={stepColumnCellClass(zone, stepIndex)}
                       expandedPostitId={expandedPostitId}
                       onExpandedChange={onExpandedChange}
@@ -974,12 +894,6 @@ export function UserJourneyBoard({
                               )
                           : undefined
                       }
-                      onAiGenerate={
-                        isJourneyAiZone(zone)
-                          ? () => void handleAiGenerate(step.id, zone)
-                          : undefined
-                      }
-                      aiContextReady={aiContextReady}
                     />
                   ),
                   )}

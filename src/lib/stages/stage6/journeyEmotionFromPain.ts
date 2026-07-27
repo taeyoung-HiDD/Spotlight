@@ -31,6 +31,11 @@ const SEVERITY_PATTERNS: Array<{ re: RegExp; weight: number }> = [
   },
 ];
 
+const POSITIVE_PATTERNS: Array<{ re: RegExp; weight: number }> = [
+  { re: /만족|기쁘|즐겁|행복|뿌듯|설레|신나|든든|안심/, weight: 0.3 },
+  { re: /좋았|좋아|편했|편하|편리|간편|수월|도움|익숙|재미|기대/, weight: 0.18 },
+];
+
 function clamp(n: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, n));
 }
@@ -51,6 +56,34 @@ function collectPainTexts(
     texts,
     painCount: items.length + aiBullets.length,
   };
+}
+
+function collectBehaviorTexts(
+  step: JourneyMapStep,
+  itemsById: UserJourneyMapData["itemsById"],
+): string[] {
+  const zoneItems = resolveStepZoneItems(step, itemsById);
+  return zoneItems.behavior
+    .map((id) => itemsById[id])
+    .filter((item): item is JourneyMapItem => Boolean(item?.text.trim()))
+    .map((item) => item.text.trim());
+}
+
+/** 사용자 행동(언급·관찰) 텍스트의 긍·부정 톤 → -1 ~ +1 */
+export function scoreBehaviorSentiment(texts: string[]): number {
+  if (texts.length === 0) return 0;
+  let total = 0;
+  for (const text of texts) {
+    let score = 0;
+    for (const { re, weight } of POSITIVE_PATTERNS) {
+      if (re.test(text)) score += weight;
+    }
+    for (const { re, weight } of SEVERITY_PATTERNS) {
+      if (re.test(text)) score -= weight;
+    }
+    total += clamp(score, -0.6, 0.6);
+  }
+  return clamp(total / texts.length, -1, 1);
 }
 
 /** Pain point 문구 수·강도 → 심각도(0+) */
@@ -91,8 +124,9 @@ function ariaForScore(score: JourneyEmotionScore, painCount: number): string {
 }
 
 /**
- * Pain point 카드·AI 문구의 수와 심각도로 단계별 감정 점수.
- * Pain이 많을수록·강할수록 아래로(부정), 없으면 완만한 긍정·중립.
+ * 사용자 행동과 Pain point 내용을 종합해 단계별 감정 점수를 자동 산정.
+ * 행동 텍스트의 긍·부정 톤이 기준선을 잡고, Pain이 많을수록·강할수록
+ * 아래로(부정) 내려갑니다. 둘 다 없으면 중립.
  */
 export function scoreStepEmotion(
   step: JourneyMapStep,
@@ -100,18 +134,19 @@ export function scoreStepEmotion(
 ): JourneyEmotionPoint {
   const { texts, painCount } = collectPainTexts(step, itemsById);
   const severity = scorePainSeverity(texts);
+  const behaviorTexts = collectBehaviorTexts(step, itemsById);
+  const sentiment = scoreBehaviorSentiment(behaviorTexts);
   const zones = resolveStepZoneItems(step, itemsById);
   const hasOtherContent =
-    zones.behavior.length > 0 ||
     zones.touchpoint.length > 0 ||
     resolveStepAiEntries(step, "touchpoint").some((t) => t.trim());
 
   let score: JourneyEmotionScore;
-  if (painCount === 0 && severity === 0) {
+  if (painCount === 0 && severity === 0 && behaviorTexts.length === 0) {
     score = hasOtherContent ? 0.42 : 0;
   } else {
-    // severity 0.3 → ~0.25, 1.0 → ~-0.3, 2.0+ → ~-1
-    score = clamp(0.55 - severity * 0.72, -1, 0.85);
+    // 행동 톤 중립·pain severity 1.0 → ~-0.27, 2.0+ → ~-1
+    score = clamp(0.45 + sentiment * 0.4 - severity * 0.72, -1, 0.85);
   }
 
   return {

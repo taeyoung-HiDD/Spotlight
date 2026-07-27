@@ -13,12 +13,22 @@ import {
   fetchStage6UserJourney,
   saveStage6UserJourney,
 } from "@/lib/artifacts/stage6UserJourney";
+import { loadToKnowBuildContext } from "@/lib/stages/fieldResearch/stage3Bootstrap";
 import {
-  bootstrapJourneyOnEntry,
+  applyJourneyZoneAutoFill,
+  collectJourneyZoneAutoFillTargets,
+} from "@/lib/stages/stage6/autoFillJourneyZones";
+import {
+  autoPlacePoolItemsIntoJourney,
   journeyPlacementChanged,
+  mergePriorStagesIntoJourney,
 } from "@/lib/stages/stage6/bootstrapJourneyFromPriorStages";
+import { requestJourneyStageGeneration } from "@/lib/stages/stage6/generateJourneyStagesClient";
+import { requestJourneyZonesAutoFill } from "@/lib/stages/stage6/generateJourneyZoneClient";
 import {
   defaultUserJourneyMap,
+  personaHasDefaultJourneySteps,
+  replacePersonaJourneySteps,
   type UserJourneyMapData,
 } from "@/lib/stages/stage6/userJourneyTypes";
 import type { ArtifactSlots } from "@/types/database";
@@ -50,23 +60,80 @@ export function Stage6UserJourney({ projectId }: Stage6UserJourneyProps) {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
+  const [zonesAutoFilling, setZonesAutoFilling] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
     void (async () => {
       try {
-        const [journey, s4] = await Promise.all([
+        const [journey, s4, ctx] = await Promise.all([
           fetchStage6UserJourney(projectId),
           fetchStage4Discoveries(projectId),
+          loadToKnowBuildContext(projectId).catch(() => null),
         ]);
         if (cancelled) return;
 
-        const bootstrapped = bootstrapJourneyOnEntry(journey.data, s4.data);
+        let merged = mergePriorStagesIntoJourney(journey.data, s4.data);
+
+        // 아직 공통 기본 단계 그대로인 페르소나는 문제 정의·리서치 내용에 맞춘
+        // 여정 단계를 AI로 생성해 교체합니다 (성공 시 페르소나당 1회).
+        const problem = ctx?.startingPoint?.trim() ?? "";
+        const stageTargets = merged.subjects.filter((subject) => {
+          const persona = merged.personas[subject.id];
+          return (
+            !!persona &&
+            !persona.stagesGeneratedAt &&
+            personaHasDefaultJourneySteps(persona)
+          );
+        });
+
+        let stagesReplaced = false;
+        if (problem && stageTargets.length > 0) {
+          try {
+            const generated = await requestJourneyStageGeneration({
+              projectId,
+              problem,
+              prePmfSummary: ctx?.contextualInsights ?? "",
+              personas: stageTargets.map((subject) => ({
+                subjectId: subject.id,
+                name: subject.name,
+                context: subject.context,
+                items: Object.values(merged.itemsById)
+                  .filter(
+                    (item) =>
+                      item.subjectId === subject.id &&
+                      item.kind !== "latent_need",
+                  )
+                  .slice(0, 12)
+                  .map((item) => ({ kind: item.kind, text: item.text })),
+              })),
+            });
+            for (const persona of generated) {
+              const next = replacePersonaJourneySteps(
+                merged,
+                persona.subjectId,
+                persona.stages,
+              );
+              if (next !== merged) {
+                merged = next;
+                stagesReplaced = true;
+              }
+            }
+          } catch {
+            // 생성 실패 시 기본 단계 유지 — 다음 진입에서 다시 시도합니다.
+          }
+        }
+        if (cancelled) return;
+
+        const bootstrapped = autoPlacePoolItemsIntoJourney(merged);
         setData(bootstrapped);
         setArtifactId(journey.artifactId);
         setAllSlots(journey.allSlots);
 
-        if (journeyPlacementChanged(journey.data, bootstrapped)) {
+        if (
+          stagesReplaced ||
+          journeyPlacementChanged(journey.data, bootstrapped)
+        ) {
           const result = await saveStage6UserJourney({
             projectId,
             artifactId: journey.artifactId,
@@ -77,6 +144,37 @@ export function Stage6UserJourney({ projectId }: Stage6UserJourneyProps) {
             setArtifactId(result.artifactId);
             setLastSavedAt(formatSavedTime(new Date().toISOString()));
           }
+        }
+
+        // 진입 시 자동 AI 분석 — 아직 비어 있는 터치포인트·Pain point를
+        // 페르소나별 배치 호출 한 번씩으로 채웁니다 (보드는 먼저 표시).
+        const zoneTargets = collectJourneyZoneAutoFillTargets(bootstrapped);
+        if (zoneTargets.length > 0) {
+          setZonesAutoFilling(true);
+          void (async () => {
+            try {
+              for (const target of zoneTargets) {
+                try {
+                  const results = await requestJourneyZonesAutoFill({
+                    projectId,
+                    subjectName: target.subjectName,
+                    expectations: target.expectations,
+                    steps: target.steps,
+                  });
+                  if (cancelled) return;
+                  if (results.length > 0) {
+                    setData((prev) =>
+                      applyJourneyZoneAutoFill(prev, target.subjectId, results),
+                    );
+                  }
+                } catch {
+                  // 실패한 페르소나는 다음 진입에서 다시 시도합니다.
+                }
+              }
+            } finally {
+              if (!cancelled) setZonesAutoFilling(false);
+            }
+          })();
         }
       } catch (e) {
         if (!cancelled) {
@@ -164,6 +262,7 @@ export function Stage6UserJourney({ projectId }: Stage6UserJourneyProps) {
             saveError={saveError}
             lastSavedAt={lastSavedAt}
             projectTitle={workspace?.projectTitle}
+            autoFilling={zonesAutoFilling}
           />
           <div
             className={`${stagePanel} stage-workspace-nav mt-4 flex flex-wrap items-center justify-between gap-3`}

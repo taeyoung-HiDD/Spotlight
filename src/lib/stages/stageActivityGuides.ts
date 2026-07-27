@@ -191,7 +191,7 @@ const GUIDE_OVERRIDES: Partial<Record<number, Omit<StageActivityGuideContent, "s
         {
           title: "여정 단계 확인",
           description:
-            "문제 인지→탐색→선택→사용→사후 등 기본 단계를 팀 상황에 맞게 이름을 바꿔도 돼요.",
+            "프로젝트 주제와 리서치 내용에 맞춰 제안된 여정 단계를 확인하고, 팀 상황에 맞게 이름을 바꾸거나 단계를 추가·삭제해도 돼요.",
         },
         {
           title: "언급·관찰 배치",

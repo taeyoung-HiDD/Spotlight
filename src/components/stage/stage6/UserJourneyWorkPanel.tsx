@@ -26,6 +26,8 @@ interface UserJourneyWorkPanelProps {
   saveError: string | null;
   lastSavedAt: string | null;
   projectTitle?: string;
+  /** 진입 시 터치포인트·Pain point AI 자동 분석 진행 중 */
+  autoFilling?: boolean;
 }
 
 export function UserJourneyWorkPanel({
@@ -36,6 +38,7 @@ export function UserJourneyWorkPanel({
   saveError,
   lastSavedAt,
   projectTitle,
+  autoFilling = false,
 }: UserJourneyWorkPanelProps) {
   const locale = useUiLocale();
   const purposeCopy = getStagePurposeCopy(6, locale);
@@ -92,6 +95,7 @@ export function UserJourneyWorkPanel({
         projectId={projectId}
         data={data}
         onChange={onChange}
+        autoFilling={autoFilling}
       />
 
       <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-border-warm/60 pt-3">

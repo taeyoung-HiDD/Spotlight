@@ -286,17 +286,6 @@ export function mergePriorStagesIntoJourney(
   };
 }
 
-/**
- * 진입 시: 4단계 자료를 병합한 뒤, 풀의 언급·관찰을 여정 단계에 자동 배치.
- */
-export function bootstrapJourneyOnEntry(
-  current: UserJourneyMapData,
-  stage4: Stage4DiscoveriesData,
-): UserJourneyMapData {
-  const merged = mergePriorStagesIntoJourney(current, stage4);
-  return autoPlacePoolItemsIntoJourney(merged);
-}
-
 /** 자동 배치로 zone 배정이 바뀌었는지 */
 export function journeyPlacementChanged(
   before: UserJourneyMapData,
