@@ -2,6 +2,7 @@
 
 import {
   IconChevronDown,
+  IconFileText,
   IconMicrophone,
   IconPhoto,
   IconPlayerPlay,
@@ -44,6 +45,7 @@ function formatFileSize(bytes: number): string {
 function MediaKindIcon({ kind }: { kind: ResearchMediaFile["kind"] }) {
   if (kind === "photo") return <IconPhoto className="size-5" stroke={1.75} />;
   if (kind === "video") return <IconVideo className="size-5" stroke={1.75} />;
+  if (kind === "document") return <IconFileText className="size-5" stroke={1.75} />;
   return <IconMicrophone className="size-5" stroke={1.75} />;
 }
 
@@ -84,6 +86,14 @@ function MediaThumbnail({
   if (media.kind === "audio" && url) {
     return (
       <audio src={url} className="w-full" controls preload="metadata" />
+    );
+  }
+  if (media.kind === "document") {
+    return (
+      <div className="flex size-full flex-col items-center justify-center bg-cream text-muted">
+        <IconFileText className="size-6" stroke={1.75} />
+        <span className="mt-2 text-[12px] font-semibold">문서</span>
+      </div>
     );
   }
   return (
@@ -183,12 +193,46 @@ function ResearchMediaPreviewDialog({
               playsInline
               preload="metadata"
             />
+          ) : media.kind === "document" ? (
+            url ? (
+              url.startsWith("data:text/") ? (
+                <DocumentTextPreview dataUrl={url} />
+              ) : (
+                <iframe
+                  src={url}
+                  className="h-[min(72vh,44rem)] w-full rounded-md bg-white"
+                  title="문서 미리보기"
+                />
+              )
+            ) : (
+              <p className={stageCaption}>미리보기를 불러오지 못했어요.</p>
+            )
           ) : (
             <p className={stageCaption}>미리보기를 불러오지 못했어요.</p>
           )}
         </div>
       </div>
     </div>
+  );
+}
+
+function DocumentTextPreview({ dataUrl }: { dataUrl: string }) {
+  // data:text/plain;charset=utf-8,<urlencoded> 형태를 가정합니다.
+  const decoded = (() => {
+    const comma = dataUrl.indexOf(",");
+    if (comma === -1) return "";
+    const payload = dataUrl.slice(comma + 1);
+    try {
+      return decodeURIComponent(payload);
+    } catch {
+      return payload;
+    }
+  })();
+
+  return (
+    <pre className="max-h-[min(72vh,44rem)] w-full overflow-auto rounded-md bg-white p-3 text-[13px] leading-relaxed text-foreground">
+      {decoded}
+    </pre>
   );
 }
 
@@ -205,9 +249,11 @@ export function ResearchSubjectMediaPanel({
   const photoInputId = useId();
   const videoInputId = useId();
   const audioInputId = useId();
+  const docInputId = useId();
   const photoRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLInputElement>(null);
   const audioRef = useRef<HTMLInputElement>(null);
+  const docRef = useRef<HTMLInputElement>(null);
   const [expanded, setExpanded] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -309,7 +355,7 @@ export function ResearchSubjectMediaPanel({
           <p className={stageLabel}>리서치 자료</p>
           <p className={`mt-1 ${stageCaption}`}>
             {expanded
-              ? "조사 중 기록한 사진·영상·음성을 올려 두세요. 팀과 Kevin이 함께 볼 수 있어요."
+              ? "조사 중 기록한 사진·영상·음성·문서를 올려 두세요. 팀과 Kevin이 함께 볼 수 있어요."
               : mediaFiles.length > 0
                 ? `자료 ${mediaFiles.length}개 · 펼치면 업로드·미리보기`
                 : "자료 없음 · 펼치면 업로드"}
@@ -365,6 +411,18 @@ export function ResearchSubjectMediaPanel({
             e.target.value = "";
           }}
         />
+        <input
+          ref={docRef}
+          id={docInputId}
+          type="file"
+          accept="text/plain,text/markdown,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+          multiple
+          className="sr-only"
+          onChange={(e) => {
+            void handleFiles(e.target.files);
+            e.target.value = "";
+          }}
+        />
         <button
           type="button"
           disabled={uploading}
@@ -391,6 +449,15 @@ export function ResearchSubjectMediaPanel({
         >
           <IconMicrophone className="mr-1 inline size-4" stroke={1.75} />
           음성
+        </button>
+        <button
+          type="button"
+          disabled={uploading}
+          onClick={() => docRef.current?.click()}
+          className={stageBtnSecondary}
+        >
+          <IconFileText className="mr-1 inline size-4" stroke={1.75} />
+          문서
         </button>
       </div>
 
@@ -444,7 +511,10 @@ export function ResearchSubjectMediaPanel({
           {mediaFiles.map((media) => {
             const url = urls[media.id] ?? "";
             const canPreview =
-              (media.kind === "photo" || media.kind === "video") && Boolean(url);
+              (media.kind === "photo" ||
+                media.kind === "video" ||
+                media.kind === "document") &&
+              Boolean(url);
 
             return (
             <li

@@ -159,7 +159,7 @@ const GUIDE_OVERRIDES: Partial<Record<number, Omit<StageActivityGuideContent, "s
         {
           title: "리서치 자료 올리기",
           description:
-            "조사 대상마다 영상·음성을 올리고 분석하면 말함·생각·행동·느낌에 맞춰 배치돼요.",
+            "조사 대상마다 영상·음성·문서를 올리고(필요한 경우) 분석하면 말함·생각·행동·느낌에 맞춰 배치돼요.",
         },
         {
           title: "공감맵 확인·수정",

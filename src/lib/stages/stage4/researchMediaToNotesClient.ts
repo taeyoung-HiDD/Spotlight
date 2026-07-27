@@ -5,6 +5,8 @@ export interface ResearchMediaEmpathyQuadrants {
   thinks: string[];
   does: string[];
   feels: string[];
+  /** (audio 전용) 음성을 텍스트로 전사한 전체 기록 */
+  transcript?: string;
   /** @deprecated 호환 — says와 동일 */
   quotes: string[];
   /** @deprecated 호환 — does와 동일 */
@@ -58,12 +60,15 @@ export async function analyzeResearchMediaToNotes({
   const does = toList(json.does ?? json.observations);
   const thinks = toList(json.thinks);
   const feels = toList(json.feels);
+  const transcript =
+    typeof json.transcript === "string" ? json.transcript.trim() : undefined;
 
   return {
     says,
     thinks,
     does,
     feels,
+    transcript,
     quotes: says,
     observations: does,
   };

@@ -179,7 +179,7 @@ export function TeamDebriefSection({
         className={`mt-3 w-full rounded-md border border-border-warm px-3 py-2 ${stageField} ${stageTextarea}`}
       />
       <p className={`mt-2 ${stageCaption}`}>
-        Kevin에게 디브리핑 요청을 누르면 포스트잇·사진·영상·음성 자료를 종합해
+        Kevin에게 디브리핑 요청을 누르면 포스트잇·사진·영상·음성·문서 자료를 종합해
         오른쪽 코치 패널에서 디브리핑을 받을 수 있어요.
       </p>
     </section>

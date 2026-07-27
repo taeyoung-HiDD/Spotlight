@@ -21,6 +21,7 @@ import type { EmpathyQuadrantId } from "@/lib/stages/stage2/empathyMap";
 import { normalizePersonaBio } from "@/lib/stages/stage4/personaBio";
 import { analyzeResearchMediaToNotes } from "@/lib/stages/stage4/researchMediaToNotesClient";
 import type { ResearchMediaFile } from "@/lib/stages/stage4/researchMediaTypes";
+import { createResearchMediaFile } from "@/lib/stages/stage4/researchMediaTypes";
 import {
   formatConductedAtLabel,
   toDatetimeLocalValue,
@@ -312,6 +313,44 @@ export function Stage4ResearchSynthesisPanel({
               m.id === map.id ? nextMap : m,
             ),
           });
+
+          // 음성 분석 결과에 전사(transcript)가 포함되면, 자동으로 문서 형태로 저장합니다.
+          if (media.kind === "audio" && result.transcript?.trim()) {
+            const transcript = result.transcript.trim().slice(0, 12000);
+            const docFileName = `${media.fileName || "audio"}_transcript.txt`;
+            const hasSameDoc = working.researchSynthesis.subjects
+              .find((s) => s.id === subjectId)
+              ?.mediaFiles.some(
+                (m) => m.kind === "document" && m.fileName === docFileName,
+              );
+
+            if (!hasSameDoc) {
+              const inlineDataUrl = `data:text/plain;charset=utf-8,${encodeURIComponent(
+                transcript,
+              )}`;
+              const sizeBytes = new TextEncoder().encode(transcript).byteLength;
+              const transcriptDoc = createResearchMediaFile({
+                kind: "document",
+                fileName: docFileName,
+                mimeType: "text/plain",
+                sizeBytes,
+                inlineDataUrl,
+              });
+
+              working = {
+                ...working,
+                researchSynthesis: {
+                  ...working.researchSynthesis,
+                  subjects: working.researchSynthesis.subjects.map((s) =>
+                    s.id === subjectId
+                      ? { ...s, mediaFiles: [...s.mediaFiles, transcriptDoc] }
+                      : s,
+                  ),
+                },
+              };
+            }
+          }
+
           addedCount += Math.max(
             0,
             empathyItemCount(working, subjectId) - before,

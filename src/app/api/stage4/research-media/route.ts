@@ -34,10 +34,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "프로젝트 접근 권한이 없습니다." }, { status: 403 });
   }
 
-  const kind = detectResearchMediaKind(file.type);
+  const kind = detectResearchMediaKind(file.type, file.name);
   if (!kind) {
     return NextResponse.json(
-      { error: "사진·영상·음성 파일만 올릴 수 있어요." },
+      { error: "사진·영상·음성·문서 파일만 올릴 수 있어요." },
       { status: 400 },
     );
   }

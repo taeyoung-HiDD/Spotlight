@@ -113,13 +113,15 @@ function buildPrompt({
 작성 규칙:
 - 한국어. 포스트잇 하나 = 사실 하나. 한 문장(최대 두 문장).
 - does는 해석이 아니라 들린 사실.
+- transcript: 질문자/사회자 말은 최대한 제거하고, 들리는 흐름을 최대한 유지한 전사 텍스트를 한 덩어리로 제공합니다. (최대 6000자)
 - JSON만 출력합니다.
 
 {
   "says": ["말함 1"],
   "thinks": ["생각 1"],
   "does": ["행동 1"],
-  "feels": ["느낌 1"]
+  "feels": ["느낌 1"],
+  "transcript": "전사 텍스트"
 }
 
 자료 파일명: ${fileName || "(unknown)"}
@@ -143,6 +145,7 @@ async function generateQuadrants({
   thinks: string[];
   does: string[];
   feels: string[];
+  transcript?: string;
   model: string;
 } | null> {
   let lastError: unknown;
@@ -196,6 +199,7 @@ async function generateQuadrants({
             thinks?: unknown;
             does?: unknown;
             feels?: unknown;
+            transcript?: unknown;
             quotes?: unknown;
             observations?: unknown;
           }
@@ -211,6 +215,10 @@ async function generateQuadrants({
         thinks: normalizeSentences(parsed.thinks),
         does: normalizeSentences(parsed.does ?? parsed.observations),
         feels: normalizeSentences(parsed.feels),
+        transcript:
+          typeof parsed.transcript === "string"
+            ? parsed.transcript.trim()
+            : undefined,
         model: modelName,
       };
     } catch (e) {
@@ -343,6 +351,7 @@ export async function POST(request: Request) {
       thinks: result.thinks,
       does: result.does,
       feels: result.feels,
+      transcript: result.transcript,
       quotes: result.says,
       observations: result.does,
       source: "gemini_media",

@@ -1,4 +1,4 @@
-export type ResearchMediaKind = "photo" | "video" | "audio";
+export type ResearchMediaKind = "photo" | "video" | "audio" | "document";
 
 export interface ResearchMediaFile {
   id: string;
@@ -17,19 +17,31 @@ export const RESEARCH_MEDIA_SIZE_LIMIT: Record<ResearchMediaKind, number> = {
   photo: 10 * 1024 * 1024,
   video: 50 * 1024 * 1024,
   audio: 25 * 1024 * 1024,
+  document: 15 * 1024 * 1024,
 };
 
-export function detectResearchMediaKind(mimeType: string): ResearchMediaKind | null {
+export function detectResearchMediaKind(
+  mimeType: string,
+  fileName?: string,
+): ResearchMediaKind | null {
+  const n = (fileName ?? "").toLowerCase();
   if (mimeType.startsWith("image/")) return "photo";
   if (mimeType.startsWith("video/")) return "video";
   if (mimeType.startsWith("audio/")) return "audio";
+  if (mimeType.startsWith("text/")) return "document";
+  if (mimeType === "application/pdf") return "document";
+  // MIME이 비정상인 경우가 있어 확장자 폴백을 둡니다.
+  if (/\.(txt|md|csv|json|log|rtf)$/i.test(n)) return "document";
+  if (/\.(pdf)$/i.test(n)) return "document";
+  if (/\.(doc|docx|ppt|pptx|xls|xlsx)$/i.test(n)) return "document";
   return null;
 }
 
 export function researchMediaKindLabel(kind: ResearchMediaKind): string {
   if (kind === "photo") return "사진";
   if (kind === "video") return "영상";
-  return "음성";
+  if (kind === "audio") return "음성";
+  return "문서";
 }
 
 export function createResearchMediaFile(
@@ -54,7 +66,12 @@ export function normalizeResearchMediaFiles(raw: unknown): ResearchMediaFile[] {
     if (!item || typeof item !== "object") continue;
     const o = item as Partial<ResearchMediaFile>;
     const kind = o.kind;
-    if (kind !== "photo" && kind !== "video" && kind !== "audio") continue;
+    if (
+      kind !== "photo" &&
+      kind !== "video" &&
+      kind !== "audio" &&
+      kind !== "document"
+    ) continue;
     out.push({
       id:
         typeof o.id === "string" && o.id

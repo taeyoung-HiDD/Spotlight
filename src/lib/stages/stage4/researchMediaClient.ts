@@ -19,14 +19,22 @@ function readFileAsDataUrl(file: File): Promise<string> {
 }
 
 export function validateResearchMediaFile(file: File): ResearchMediaFile["kind"] {
-  const kind = detectResearchMediaKind(file.type);
+  const kind = detectResearchMediaKind(file.type, file.name);
   if (!kind) {
-    throw new Error("사진·영상·음성 파일만 올릴 수 있어요.");
+    throw new Error("사진·영상·음성·문서 파일만 올릴 수 있어요.");
   }
   const limit = RESEARCH_MEDIA_SIZE_LIMIT[kind];
   if (file.size > limit) {
     const mb = Math.round(limit / (1024 * 1024));
-    throw new Error(`${kind === "photo" ? "사진" : kind === "video" ? "영상" : "음성"}은 ${mb}MB 이하만 올릴 수 있어요.`);
+    const label =
+      kind === "photo"
+        ? "사진"
+        : kind === "video"
+          ? "영상"
+          : kind === "audio"
+            ? "음성"
+            : "문서";
+    throw new Error(`${label}은 ${mb}MB 이하만 올릴 수 있어요.`);
   }
   return kind;
 }
