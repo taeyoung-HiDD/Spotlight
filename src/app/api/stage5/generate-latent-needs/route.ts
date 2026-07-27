@@ -43,7 +43,7 @@ function parseSources(raw: unknown): SourcePayload[] {
     .filter((s) => s.sourceId && s.subjectId && s.text);
 }
 
-function buildPrompt(sources: SourcePayload[]): string {
+function buildPrompt(sources: SourcePayload[], retry: boolean): string {
   const blocks = sources.map((s, idx) => {
     const label = s.subjectName.trim() || `조사 대상`;
     const kindLabel =
@@ -68,8 +68,13 @@ function buildPrompt(sources: SourcePayload[]): string {
 - 말로 표현된 니즈(Explicit)나 행동으로 드러나는 니즈(Tacit)를 넘어, 분석을 통해서만 찾아지는 욕구입니다.
 
 작성 형식 — Need Statement 한 문장:
-- "〈궁극적 이유·얻으려는 가치〉하기 위해서 〈가치 달성을 위한 행위〉하고 싶다"
+- 문장 구조는 [이 사람이 궁극적으로 얻고 싶은 가치나 이유]가 먼저 나오고, 그 다음 [그 가치를 위해 실제로 하고 싶은 구체적 행동]이 이어지는 "~하기 위해서 ~하고 싶다" 형태입니다.
 - 예: "막연한 돈 불안에서 벗어나 잘하고 있다는 확신을 얻기 위해서, 내 상황에 맞는 돈 관리 기준을 세우고 싶다"
+- 다른 예: "남들과 비교해 뒤처진다는 느낌 없이 스스로 속도로 나아가기 위해서, 내 소비를 남 눈치 안 보고 결정하고 싶다"
+
+절대 금지:
+- 위 형식 설명을 그대로 옮기거나 문장의 빈 자리를 채우지 않은 채 내보내는 것. "궁극적 이유", "얻으려는 가치", "가치 달성을 위한 행위" 같은 메타 설명 단어 자체를 답으로 쓰면 안 됩니다.
+- 꺾쇠(〈 〉, 《 》) 같은 빈칸 표기를 그대로 남기는 것. 반드시 실제 내용으로 완전히 채운 문장만 냅니다.
 
 규칙:
 - 반드시 해당 포스트잇 내용에서 출발해, 그 사람의 상황에 맞는 구체적인 니즈를 씁니다. 포스트잇마다 내용이 서로 달라야 합니다.
@@ -80,7 +85,11 @@ function buildPrompt(sources: SourcePayload[]): string {
 ${COACH_KOREAN_LABEL_RULE}
 - sourceId를 그대로 반환해 어떤 조사 포스트잇에 붙일지 알 수 있게 합니다.
 - JSON만 출력합니다. 마크다운·설명 없음.
-
+${
+  retry
+    ? "\n[재시도] 이전 시도에서 형식 설명 문구나 빈칸 표기가 그대로 나왔습니다. 이번에는 예시처럼 실제 내용으로 완전히 채운 문장만 쓰세요.\n"
+    : ""
+}
 출력 형식:
 {"needs":[{"sourceId":"...","subjectId":"...","text":"..."}]}
 
@@ -122,6 +131,25 @@ function parseNeedsJson(
   }
 }
 
+async function generateChunk(
+  chunk: SourcePayload[],
+  retry: boolean,
+): Promise<{
+  parsed: Array<{ sourceId: string; subjectId: string; text: string }> | null;
+  model?: string;
+}> {
+  try {
+    const result = await groqComplete(buildPrompt(chunk, retry), {
+      models: resolveGroqTextModels(),
+      temperature: retry ? 0.65 : 0.5,
+      jsonMode: true,
+    });
+    return { parsed: parseNeedsJson(result.text), model: result.model };
+  } catch {
+    return { parsed: null, model: undefined };
+  }
+}
+
 export async function POST(request: Request) {
   let body: unknown;
   try {
@@ -152,41 +180,59 @@ export async function POST(request: Request) {
     return NextResponse.json({ needs: [], source: "heuristic" });
   }
 
+  const bySource = new Map(sources.map((s) => [s.sourceId, s]));
+  const needs: Array<{ sourceId: string; subjectId: string; text: string }> =
+    [];
+  let model: string | undefined;
+
   const chunks: SourcePayload[][] = [];
   for (let i = 0; i < sources.length; i += CHUNK_SIZE) {
     chunks.push(sources.slice(i, i + CHUNK_SIZE));
   }
 
   const settled = await Promise.all(
-    chunks.map(async (chunk) => {
-      try {
-        const result = await groqComplete(buildPrompt(chunk), {
-          models: resolveGroqTextModels(),
-          temperature: 0.5,
-          jsonMode: true,
-        });
-        return { parsed: parseNeedsJson(result.text), model: result.model };
-      } catch {
-        return { parsed: null, model: undefined };
-      }
-    }),
+    chunks.map((chunk) => generateChunk(chunk, false)),
   );
 
-  const bySource = new Map(sources.map((s) => [s.sourceId, s]));
-  const needs: Array<{ sourceId: string; subjectId: string; text: string }> =
-    [];
-  let model: string | undefined;
+  const coveredSourceIds = new Set<string>();
   for (const { parsed, model: chunkModel } of settled) {
     if (!parsed) continue;
     model ??= chunkModel;
     for (const n of parsed) {
       const src = bySource.get(n.sourceId);
-      if (!src) continue;
+      if (!src || coveredSourceIds.has(n.sourceId)) continue;
+      coveredSourceIds.add(n.sourceId);
       needs.push({
         sourceId: n.sourceId,
         subjectId: src.subjectId,
         text: n.text,
       });
+    }
+  }
+
+  // 형식 설명을 그대로 반환해 필터링된 포스트잇은 한 번 더 시도합니다.
+  const missing = sources.filter((s) => !coveredSourceIds.has(s.sourceId));
+  if (missing.length > 0) {
+    const retryChunks: SourcePayload[][] = [];
+    for (let i = 0; i < missing.length; i += CHUNK_SIZE) {
+      retryChunks.push(missing.slice(i, i + CHUNK_SIZE));
+    }
+    const retrySettled = await Promise.all(
+      retryChunks.map((chunk) => generateChunk(chunk, true)),
+    );
+    for (const { parsed, model: chunkModel } of retrySettled) {
+      if (!parsed) continue;
+      model ??= chunkModel;
+      for (const n of parsed) {
+        const src = bySource.get(n.sourceId);
+        if (!src || coveredSourceIds.has(n.sourceId)) continue;
+        coveredSourceIds.add(n.sourceId);
+        needs.push({
+          sourceId: n.sourceId,
+          subjectId: src.subjectId,
+          text: n.text,
+        });
+      }
     }
   }
 

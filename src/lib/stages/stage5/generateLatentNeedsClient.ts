@@ -118,9 +118,14 @@ export function applyGeneratedLatentNeeds(
 
   if (generated.length === 0) return data;
 
-  const kept = data.postits.filter(
-    (p) => p.kind !== "latent_need" || !p.kevinGenerated,
-  );
+  // 이번 배치가 채우지 못한 소스의 기존 카드는 지우지 않고 유지합니다
+  // (형식 오류로 필터링돼 재시도까지 실패한 경우 보드가 비지 않도록).
+  const replacedSourceIds = new Set(seenSource);
+  const kept = data.postits.filter((p) => {
+    if (p.kind !== "latent_need" || !p.kevinGenerated) return true;
+    const linkedIds = p.linkedSourceIds ?? [];
+    return !linkedIds.some((id) => replacedSourceIds.has(id));
+  });
 
   return {
     ...data,
