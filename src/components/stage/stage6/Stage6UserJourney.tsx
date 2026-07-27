@@ -13,6 +13,7 @@ import {
   fetchStage6UserJourney,
   saveStage6UserJourney,
 } from "@/lib/artifacts/stage6UserJourney";
+import { getStagePageName } from "@/lib/navigation/stageNavLabels";
 import { loadToKnowBuildContext } from "@/lib/stages/fieldResearch/stage3Bootstrap";
 import {
   applyJourneyZoneAutoFill,
@@ -278,6 +279,7 @@ export function Stage6UserJourney({ projectId }: Stage6UserJourneyProps) {
               <WorkspaceBackButton
                 projectId={projectId}
                 fallbackStageId={4}
+                backPageName={getStagePageName(4)}
               />
               <WorkspaceForwardButton
                 stageId={6}

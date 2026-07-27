@@ -22,6 +22,7 @@ import {
 } from "@/lib/stages/stage5/bootstrapLatentNeedsFromStage4";
 import {
   applyGeneratedLatentNeeds,
+  boardHasTemplateLatentNeeds,
   buildSourceInputsFromBoard,
   requestLatentNeedsGeneration,
 } from "@/lib/stages/stage5/generateLatentNeedsClient";
@@ -104,10 +105,13 @@ export function Stage5Iceberg({ projectId }: Stage5IcebergProps) {
         setArtifactId(needsResult.artifactId);
         setAllSlots(needsResult.allSlots);
 
+        // 잠재 니즈가 아예 없거나, 과거 폴백이 남긴 동일 템플릿 문구뿐이면
+        // Need Statement 형식으로 (다시) 생성합니다.
         const needsKevin =
-          !next.kevinGeneratedAt &&
           hasSourceNotes(next) &&
-          !next.postits.some((p) => p.kind === "latent_need");
+          ((!next.kevinGeneratedAt &&
+            !next.postits.some((p) => p.kind === "latent_need")) ||
+            boardHasTemplateLatentNeeds(next));
 
         if (shouldSyncStage4 && !needsKevin) {
           const { artifactId: syncedId } = await saveStage5LatentNeeds({
@@ -224,6 +228,12 @@ export function Stage5Iceberg({ projectId }: Stage5IcebergProps) {
     setSaveError(null);
     try {
       const result = await requestLatentNeedsGeneration(projectId, inputs);
+      if (result.needs.length === 0) {
+        setSaveError(
+          "AI 분석이 지금은 어려워요. 잠시 후 다시 시도해 주세요.",
+        );
+        return;
+      }
       const withNeeds = withBootstrappedJourneyNeeds(
         applyGeneratedLatentNeeds(data, result),
         journey,

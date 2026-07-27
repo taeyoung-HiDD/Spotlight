@@ -1,12 +1,13 @@
 import { NextResponse } from "next/server";
 import { resolveGroqApiKey, resolveGroqTextModels } from "@/lib/ai/env";
 import { groqComplete } from "@/lib/ai/providers/groqText";
+import {
+  COACH_KOREAN_LABEL_RULE,
+  sanitizeCoachKoreanText,
+} from "@/lib/coach/sanitizeCoachKorean";
 import { COACH_SYSTEM_INSTRUCTION } from "@/lib/coach/systemInstruction";
 import { fetchProjectAccess } from "@/lib/projects/projectAccess";
-import {
-  heuristicLatentNeedForSource,
-  type SourceLatentInput,
-} from "@/lib/stages/stage5/generateLatentNeedsHeuristic";
+import { isTemplateLatentNeedText } from "@/lib/stages/stage5/generateLatentNeedsHeuristic";
 
 interface SourcePayload {
   sourceId: string;
@@ -17,6 +18,9 @@ interface SourcePayload {
 }
 
 const KIND_SET = new Set(["quote", "observation", "finding"]);
+
+/** 포스트잇이 많을 때 한 호출 실패로 전체가 비지 않도록 묶어서 요청 */
+const CHUNK_SIZE = 10;
 
 function parseSources(raw: unknown): SourcePayload[] {
   if (!Array.isArray(raw)) return [];
@@ -57,12 +61,23 @@ function buildPrompt(sources: SourcePayload[]): string {
 
 ---
 [지시]
-아래는 조사 결과 포스트잇입니다. **각 포스트잇마다 잠재 니즈를 정확히 1개** 도출하세요.
+아래 조사 결과 포스트잇마다 **잠재 니즈(Latent Needs)를 정확히 1개씩** 도출합니다.
+
+잠재 니즈란:
+- 겉으로 보이는 사실(Fact)은 빙산의 일각입니다. 그 아래에 있는, 사용자가 바라고 희망하지만 사회적 압력(체면·부끄러움) 때문에 표현하지 못하거나 스스로 자각하지 못하는 깊은 욕구(Desire)입니다.
+- 말로 표현된 니즈(Explicit)나 행동으로 드러나는 니즈(Tacit)를 넘어, 분석을 통해서만 찾아지는 욕구입니다.
+
+작성 형식 — Need Statement 한 문장:
+- "〈궁극적 이유·얻으려는 가치〉하기 위해서 〈가치 달성을 위한 행위〉하고 싶다"
+- 예: "막연한 돈 불안에서 벗어나 잘하고 있다는 확신을 얻기 위해서, 내 상황에 맞는 돈 관리 기준을 세우고 싶다"
 
 규칙:
-- 해당 언급·관찰·발견 아래에 있을 수 있는 더 깊은 욕구·불편·기대를 추론합니다.
-- 각 항목은 한 문장으로 씁니다. (가설) 같은 접두어는 쓰지 않습니다.
-- 결론처럼 단정하지 않습니다.
+- 반드시 해당 포스트잇 내용에서 출발해, 그 사람의 상황에 맞는 구체적인 니즈를 씁니다. 포스트잇마다 내용이 서로 달라야 합니다.
+- 포스트잇 문장을 되풀이하거나 요약하지 않습니다. 표면 사실 아래의 욕구를 씁니다.
+- 솔루션(기능·서비스·제품 아이디어)이 아니라 욕구·가치를 씁니다.
+- "아직 드러나지 않은 욕구가 있을 수 있어요" 같은 뭉뚱그린 문장은 금지합니다.
+- (가설) 같은 접두어는 쓰지 않고, 결론처럼 단정하지 않습니다.
+${COACH_KOREAN_LABEL_RULE}
 - sourceId를 그대로 반환해 어떤 조사 포스트잇에 붙일지 알 수 있게 합니다.
 - JSON만 출력합니다. 마크다운·설명 없음.
 
@@ -92,24 +107,19 @@ function parseNeedsJson(
       .map((n) => ({
         sourceId: String(n.sourceId ?? "").trim(),
         subjectId: String(n.subjectId ?? "").trim(),
-        text: String(n.text ?? "").trim(),
+        text: sanitizeCoachKoreanText(String(n.text ?? "")).trim(),
       }))
-      .filter((n) => n.sourceId && n.subjectId && n.text);
+      .filter(
+        (n) =>
+          n.sourceId &&
+          n.subjectId &&
+          n.text &&
+          !isTemplateLatentNeedText(n.text),
+      );
     return needs.length > 0 ? needs : null;
   } catch {
     return null;
   }
-}
-
-function heuristicFallback(sources: SourcePayload[]) {
-  return {
-    needs: sources.map((s) => ({
-      sourceId: s.sourceId,
-      subjectId: s.subjectId,
-      text: heuristicLatentNeedForSource(s as SourceLatentInput),
-    })),
-    source: "heuristic",
-  };
 }
 
 export async function POST(request: Request) {
@@ -137,49 +147,52 @@ export async function POST(request: Request) {
     );
   }
 
+  // AI를 못 쓰면 뭉뚱그린 템플릿 대신 빈 결과를 돌려 다음에 다시 시도하게 둡니다.
   if (!resolveGroqApiKey()) {
-    return NextResponse.json(heuristicFallback(sources));
+    return NextResponse.json({ needs: [], source: "heuristic" });
   }
 
-  try {
-    const result = await groqComplete(buildPrompt(sources), {
-      models: resolveGroqTextModels(),
-      temperature: 0.4,
-      jsonMode: true,
-    });
+  const chunks: SourcePayload[][] = [];
+  for (let i = 0; i < sources.length; i += CHUNK_SIZE) {
+    chunks.push(sources.slice(i, i + CHUNK_SIZE));
+  }
 
-    const parsed = parseNeedsJson(result.text);
-    if (!parsed?.length) {
-      return NextResponse.json(heuristicFallback(sources));
-    }
+  const settled = await Promise.all(
+    chunks.map(async (chunk) => {
+      try {
+        const result = await groqComplete(buildPrompt(chunk), {
+          models: resolveGroqTextModels(),
+          temperature: 0.5,
+          jsonMode: true,
+        });
+        return { parsed: parseNeedsJson(result.text), model: result.model };
+      } catch {
+        return { parsed: null, model: undefined };
+      }
+    }),
+  );
 
-    const bySource = new Map(sources.map((s) => [s.sourceId, s]));
-    const needs = parsed.map((n) => {
+  const bySource = new Map(sources.map((s) => [s.sourceId, s]));
+  const needs: Array<{ sourceId: string; subjectId: string; text: string }> =
+    [];
+  let model: string | undefined;
+  for (const { parsed, model: chunkModel } of settled) {
+    if (!parsed) continue;
+    model ??= chunkModel;
+    for (const n of parsed) {
       const src = bySource.get(n.sourceId);
-      return {
-        sourceId: n.sourceId,
-        subjectId: src?.subjectId ?? n.subjectId,
-        text: n.text,
-      };
-    });
-
-    // 모델이 일부 source를 빠뜨리면 휴리스틱으로 보완
-    const covered = new Set(needs.map((n) => n.sourceId));
-    for (const src of sources) {
-      if (covered.has(src.sourceId)) continue;
+      if (!src) continue;
       needs.push({
-        sourceId: src.sourceId,
+        sourceId: n.sourceId,
         subjectId: src.subjectId,
-        text: heuristicLatentNeedForSource(src),
+        text: n.text,
       });
     }
-
-    return NextResponse.json({
-      needs,
-      source: "groq",
-      model: result.model,
-    });
-  } catch {
-    return NextResponse.json(heuristicFallback(sources));
   }
+
+  if (needs.length === 0) {
+    return NextResponse.json({ needs: [], source: "heuristic" });
+  }
+
+  return NextResponse.json({ needs, source: "groq", model });
 }

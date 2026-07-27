@@ -1,4 +1,5 @@
 import { isStage5SourcePostitKind } from "@/lib/stages/stage5/bootstrapLatentNeedsFromStage4";
+import { isTemplateLatentNeedText } from "@/lib/stages/stage5/generateLatentNeedsHeuristic";
 import { cleanLatentNeedText } from "@/lib/stages/stage5/latentNeedText";
 import type { Stage5LatentNeedsData } from "@/lib/stages/stage5/latentNeedsTypes";
 import {
@@ -62,18 +63,27 @@ export function buildSourceInputsFromBoard(
   });
 }
 
+/** 과거 폴백이 저장한 동일 템플릿 잠재 니즈가 보드에 남아 있는지 */
+export function boardHasTemplateLatentNeeds(
+  data: Stage5LatentNeedsData,
+): boolean {
+  return data.postits.some(
+    (p) =>
+      p.kind === "latent_need" &&
+      p.kevinGenerated &&
+      isTemplateLatentNeedText(p.text),
+  );
+}
+
 /**
  * Kevin 초안 잠재 니즈를 교체하고, 각 조사 포스트잇에 1개씩 붙입니다.
  * 사용자가 직접 쓴 잠재 니즈는 유지합니다.
+ * 쓸 수 있는 결과가 없으면(AI 실패) 기존 데이터를 그대로 두어 다음에 재시도합니다.
  */
 export function applyGeneratedLatentNeeds(
   data: Stage5LatentNeedsData,
   result: GenerateLatentNeedsResponse,
 ): Stage5LatentNeedsData {
-  const kept = data.postits.filter(
-    (p) => p.kind !== "latent_need" || !p.kevinGenerated,
-  );
-
   const validSourceIds = new Set(
     data.postits
       .filter((p) => isStage5SourcePostitKind(p.kind))
@@ -89,7 +99,7 @@ export function applyGeneratedLatentNeeds(
       continue;
     }
     const trimmed = cleanLatentNeedText(item.text);
-    if (!trimmed) continue;
+    if (!trimmed || isTemplateLatentNeedText(trimmed)) continue;
 
     const source = data.postits.find((p) => p.id === sourceId);
     const subjectId = source?.subjectId ?? item.subjectId;
@@ -105,6 +115,12 @@ export function applyGeneratedLatentNeeds(
       }),
     );
   }
+
+  if (generated.length === 0) return data;
+
+  const kept = data.postits.filter(
+    (p) => p.kind !== "latent_need" || !p.kevinGenerated,
+  );
 
   return {
     ...data,
