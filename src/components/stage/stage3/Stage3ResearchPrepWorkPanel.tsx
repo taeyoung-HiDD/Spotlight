@@ -25,8 +25,9 @@ import {
 import { buildToKnowExportRows } from "@/lib/stages/fieldResearch/toKnowExport";
 import {
   applyTopicQuestionsToToKnowTable,
+  ensureTopicQuestionsCoverage,
+  hasInsufficientTopicQuestions,
   hasSubjectSpecificQuestions,
-  resolveTopicQuestionSubjects,
 } from "@/lib/stages/fieldResearch/topicInterviewQuestions";
 import {
   redistributeCounts,
@@ -218,6 +219,7 @@ export function Stage3ResearchPrepWorkPanel({
     ],
   );
 
+  // 질문 테마(가이드 카테고리)별 그룹 — 모든 조사 대상에게 동일하게 묻는 단일 가이드
   const toKnowPreviewGroups = useMemo(() => {
     const rows = buildToKnowExportRows(
       toKnowRows,
@@ -225,17 +227,22 @@ export function Stage3ResearchPrepWorkPanel({
     );
     const buckets = new Map<string, string[]>();
     const order: string[] = [];
+    const seen = new Set<string>();
     for (const row of rows) {
-      const subject = row.infoCategory.trim() || "대상자 미지정";
-      if (!buckets.has(subject)) {
-        buckets.set(subject, []);
-        order.push(subject);
+      const theme = row.category.trim() || "기타";
+      // 레거시 대상자별 데이터의 중복 문항은 한 번만 표시
+      const key = row.infoToIdentify.replace(/\s+/g, "");
+      if (seen.has(key)) continue;
+      seen.add(key);
+      if (!buckets.has(theme)) {
+        buckets.set(theme, []);
+        order.push(theme);
       }
-      buckets.get(subject)!.push(row.infoToIdentify);
+      buckets.get(theme)!.push(row.infoToIdentify);
     }
-    return order.map((subject) => ({
-      subject,
-      questions: buckets.get(subject)!,
+    return order.map((theme) => ({
+      theme,
+      questions: buckets.get(theme)!,
     }));
   }, [data.toKnowCoreQuestion, problem, toKnowRows]);
 
@@ -276,29 +283,28 @@ export function Stage3ResearchPrepWorkPanel({
     setGenError(null);
     reset();
     try {
-      const subjects = resolveTopicQuestionSubjects(
-        data.toKnowTable,
-        targetLabels,
-      );
       const nextPrep = await generateStage3ResearchPrep({
         problem,
         prePmfSummary: prePmfSummary || undefined,
         targetLabels,
-        questionSubjects: subjects,
       });
       markComplete();
       const nextRespondents = respondentsFromSegments(nextPrep.segments);
-      const hasTopicQuestions = nextPrep.topicQuestions.length > 0;
+      const topicQuestions = ensureTopicQuestionsCoverage(
+        problem,
+        nextPrep.topicQuestions,
+      );
+      const hasTopicQuestions = topicQuestions.length > 0;
       const nextTable = hasTopicQuestions
-        ? applyTopicQuestionsToToKnowTable(
-            data.toKnowTable,
-            nextPrep.topicQuestions,
-            subjects,
-          )
+        ? applyTopicQuestionsToToKnowTable(data.toKnowTable, topicQuestions)
         : data.toKnowTable;
       onChange({
         ...data,
-        researchPrep: { ...data.researchPrep, ...nextPrep },
+        researchPrep: {
+          ...data.researchPrep,
+          ...nextPrep,
+          topicQuestions,
+        },
         toKnowTable: nextTable,
         toKnowTopicApplied: hasTopicQuestions || data.toKnowTopicApplied,
         respondents: nextRespondents,
@@ -341,22 +347,49 @@ export function Stage3ResearchPrepWorkPanel({
     runGenerate,
   ]);
 
-  // 이미 추천을 받아 둔 프로젝트 — 도메인 중립 템플릿 질문 또는 대상자 공용 질문을
-  // 주제·대상자 맞춤 질문으로 1회 교체
+  // 이미 추천을 받아 둔 프로젝트 — 템플릿 질문 또는 레거시 대상자별 질문을
+  // 테마별 단일 가이드로 1회 교체
   useEffect(() => {
     if (!editable || generating || topicRefreshRef.current) return;
     if (!prep.recommendationsGenerated) return;
-    const subjects = resolveTopicQuestionSubjects(
-      data.toKnowTable,
-      targetLabels,
+    // 레거시 대상자별 질문 데이터는 테마형 단일 가이드로 다시 생성
+    const needsThemeFormat = hasSubjectSpecificQuestions(prep.topicQuestions);
+    const needsMoreQuestions = hasInsufficientTopicQuestions(
+      prep.topicQuestions,
     );
-    // 대상자가 2명 이상인데 질문이 대상자별로 나뉘어 있지 않으면 다시 생성
-    const needsSubjectSplit =
-      subjects.length >= 2 &&
-      prep.topicQuestions.length > 0 &&
-      !hasSubjectSpecificQuestions(prep.topicQuestions);
-    if (data.toKnowTopicApplied && !needsSubjectSplit) return;
+    if (data.toKnowTopicApplied && !needsThemeFormat && !needsMoreQuestions) {
+      return;
+    }
     if (!problem.trim() && !prePmfSummary?.trim()) return;
+
+    // 이미 테마형 질문이 있으면 AI 재호출 없이 최소 개수만 즉시 보충
+    if (needsMoreQuestions && !needsThemeFormat && prep.topicQuestions.length > 0) {
+      topicRefreshRef.current = true;
+      const topicQuestions = ensureTopicQuestionsCoverage(
+        problem,
+        prep.topicQuestions,
+      );
+      if (
+        topicQuestions.length &&
+        !hasInsufficientTopicQuestions(topicQuestions)
+      ) {
+        onChange({
+          ...data,
+          researchPrep: {
+            ...data.researchPrep,
+            topicQuestions,
+          },
+          toKnowTable: applyTopicQuestionsToToKnowTable(
+            data.toKnowTable,
+            topicQuestions,
+          ),
+          toKnowTopicApplied: true,
+        });
+        return;
+      }
+      topicRefreshRef.current = false;
+    }
+
     topicRefreshRef.current = true;
     void (async () => {
       try {
@@ -364,22 +397,21 @@ export function Stage3ResearchPrepWorkPanel({
           problem,
           prePmfSummary: prePmfSummary || undefined,
           targetLabels,
-          questionSubjects: subjects,
         });
-        if (!refreshed.topicQuestions.length) return;
-        if (needsSubjectSplit && !hasSubjectSpecificQuestions(refreshed.topicQuestions)) {
-          return;
-        }
+        const topicQuestions = ensureTopicQuestionsCoverage(
+          problem,
+          refreshed.topicQuestions,
+        );
+        if (!topicQuestions.length) return;
         const nextTable = applyTopicQuestionsToToKnowTable(
           data.toKnowTable,
-          refreshed.topicQuestions,
-          subjects,
+          topicQuestions,
         );
         onChange({
           ...data,
           researchPrep: {
             ...data.researchPrep,
-            topicQuestions: refreshed.topicQuestions,
+            topicQuestions,
           },
           toKnowTable: nextTable,
           toKnowTopicApplied: true,
@@ -728,35 +760,35 @@ export function Stage3ResearchPrepWorkPanel({
                 ) : null}
               </div>
 
-              {/* 이번 프로젝트 확인 질문 미리 보기 — 대상자별 아코디언 */}
+              {/* 이번 프로젝트 확인 질문 미리 보기 — 질문 테마별 아코디언 */}
               {toKnowPreviewGroups.length ? (
                 <div className="mt-5">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <p className={stageLabel}>이번 프로젝트에서 확인할 질문</p>
                     <span className={stageCaption}>
-                      대상자를 선택하면 질문이 펼쳐져요
+                      모든 조사 대상에게 동일하게 묻고 답변을 비교해요
                     </span>
                   </div>
                   <div className="mt-2 space-y-2">
                     {toKnowPreviewGroups.map((group) => {
-                      const open = expandedSubject === group.subject;
+                      const open = expandedSubject === group.theme;
                       return (
                         <div
-                          key={group.subject}
+                          key={group.theme}
                           className="overflow-hidden rounded-lg border border-border-warm bg-cream/40"
                         >
                           <button
                             type="button"
                             onClick={() =>
                               setExpandedSubject((prev) =>
-                                prev === group.subject ? null : group.subject,
+                                prev === group.theme ? null : group.theme,
                               )
                             }
                             aria-expanded={open}
                             className="flex w-full items-center justify-between gap-2 px-4 py-3 text-left transition-colors hover:bg-cream/70"
                           >
                             <span className="text-[13.5px] font-semibold text-foreground break-keep">
-                              {group.subject}
+                              {group.theme}
                               <span className="ml-2 text-[12px] font-medium text-muted">
                                 질문 {group.questions.length}개
                               </span>
@@ -772,7 +804,7 @@ export function Stage3ResearchPrepWorkPanel({
                           {open ? (
                             <ul className="list-disc space-y-1 border-t border-border-warm px-4 py-3 pl-8 text-[13.5px] leading-relaxed text-muted break-keep">
                               {group.questions.map((q, i) => (
-                                <li key={`${group.subject}-${i}`}>{q}</li>
+                                <li key={`${group.theme}-${i}`}>{q}</li>
                               ))}
                             </ul>
                           ) : null}

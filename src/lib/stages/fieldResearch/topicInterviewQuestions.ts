@@ -1,6 +1,9 @@
 /**
  * CORE 3 — 주제(문제 정의)와 직결된 인터뷰 질문.
- * AI/휴리스틱이 생성한 topicQuestions를 To-know 표(대상자별 확인 질문)로 반영한다.
+ *
+ * 질문은 조사 대상별이 아니라 **테마(가이드 카테고리)별 단일 가이드**로 구성한다.
+ * CORE 2에서 모집하는 대상(극단 사용자 스펙트럼)에게 같은 질문을 묻고
+ * 답변 차이를 비교하는 것이 목적이므로, 대상별 질문지와 일치시킬 필요가 없다.
  */
 
 import { sanitizeCoachKoreanText } from "@/lib/coach/sanitizeCoachKorean";
@@ -14,13 +17,19 @@ import type { ToKnowRow } from "@/lib/stages/fieldResearch/types";
 export interface TopicInterviewQuestion {
   category: ToKnowGuideCategory;
   question: string;
-  /** 이 질문을 물어볼 조사 대상자 (없으면 모든 대상자 공용) */
+  /** (레거시) 과거 대상자별 질문 데이터 식별용 — 신규 생성은 subject 없음 */
   subject?: string;
 }
 
-const MAX_PER_SUBJECT_CATEGORY = 4;
-const MAX_PER_SUBJECT = 14;
-const MAX_TOTAL = 48;
+const MAX_PER_KEY_CATEGORY = 5;
+const MAX_PER_KEY = 25;
+const MAX_TOTAL = 80;
+/** 가이드 전체 최소 질문 수 (AI가 적게 내면 휴리스틱으로 보충) */
+export const MIN_TOPIC_QUESTIONS_TOTAL = 15;
+/** 테마(카테고리)당 최소 질문 수 */
+const MIN_PER_CATEGORY = 2;
+/** 생성된 질문 행의 infoCategory — 모든 조사 대상에게 동일하게 묻는 가이드 */
+export const TOPIC_QUESTION_SUBJECT_LABEL = "공통";
 
 function newRowId(prefix: string): string {
   return `tok-${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
@@ -36,6 +45,20 @@ function resolveCategory(raw: unknown): ToKnowGuideCategory | null {
   return null;
 }
 
+/** subject가 「공통」류 표기인지 — 공통 질문은 subject 없이 저장 */
+function isCommonSubjectName(subject: string): boolean {
+  const s = subject.trim().toLowerCase().replace(/\s+/g, "");
+  if (!s) return true;
+  return (
+    s === "공통" ||
+    s === "공통질문" ||
+    s === "전체" ||
+    s === "모두" ||
+    s === "common" ||
+    s === "all"
+  );
+}
+
 function subjectKey(subject: string | undefined): string {
   return (subject ?? "").trim().toLowerCase().replace(/\s+/g, "");
 }
@@ -45,8 +68,8 @@ export function normalizeTopicInterviewQuestions(
 ): TopicInterviewQuestion[] {
   if (!Array.isArray(raw)) return [];
   const out: TopicInterviewQuestion[] = [];
-  const perSubject = new Map<string, number>();
-  const perSubjectCategory = new Map<string, number>();
+  const perKey = new Map<string, number>();
+  const perKeyCategory = new Map<string, number>();
   const seen = new Set<string>();
 
   for (const item of raw) {
@@ -56,14 +79,15 @@ export function normalizeTopicInterviewQuestions(
     const category = resolveCategory(o.category);
     if (!category) continue;
 
-    const subject =
+    const rawSubject =
       typeof o.subject === "string"
         ? sanitizeCoachKoreanText(o.subject.trim()).slice(0, 60)
         : "";
+    const subject = isCommonSubjectName(rawSubject) ? "" : rawSubject;
     const sKey = subjectKey(subject);
-    if ((perSubject.get(sKey) ?? 0) >= MAX_PER_SUBJECT) continue;
+    if ((perKey.get(sKey) ?? 0) >= MAX_PER_KEY) continue;
     const scKey = `${sKey}|${category}`;
-    if ((perSubjectCategory.get(scKey) ?? 0) >= MAX_PER_SUBJECT_CATEGORY) {
+    if ((perKeyCategory.get(scKey) ?? 0) >= MAX_PER_KEY_CATEGORY) {
       continue;
     }
 
@@ -78,14 +102,14 @@ export function normalizeTopicInterviewQuestions(
     if (seen.has(key)) continue;
     seen.add(key);
 
-    perSubject.set(sKey, (perSubject.get(sKey) ?? 0) + 1);
-    perSubjectCategory.set(scKey, (perSubjectCategory.get(scKey) ?? 0) + 1);
+    perKey.set(sKey, (perKey.get(sKey) ?? 0) + 1);
+    perKeyCategory.set(scKey, (perKeyCategory.get(scKey) ?? 0) + 1);
     out.push(
       subject ? { category, question, subject } : { category, question },
     );
   }
 
-  // 카테고리 순서대로 정렬 (입력 순서는 카테고리 내에서 유지)
+  // 카테고리(테마) 순서대로 정렬 (입력 순서는 카테고리 내에서 유지)
   const order = new Map(TO_KNOW_GUIDE_CATEGORY_ORDER.map((c, i) => [c, i]));
   return out
     .map((q, index) => ({ q, index }))
@@ -98,33 +122,32 @@ export function normalizeTopicInterviewQuestions(
     .map(({ q }) => q);
 }
 
-/** AI가 돌려준 subject 표기가 대상자 라벨과 조금 달라도 매칭 */
-function subjectMatches(questionSubject: string, subject: string): boolean {
-  const a = subjectKey(questionSubject);
-  const b = subjectKey(subject);
-  if (!a || !b) return false;
-  return a === b || a.includes(b) || b.includes(a);
-}
-
-/** 대상자별로 배정할 질문 — 전용 질문 우선, 없으면 공용(subject 없음) → 전체 순 폴백 */
-export function questionsForSubject(
-  questions: TopicInterviewQuestion[],
-  subject: string,
-): TopicInterviewQuestion[] {
-  const own = questions.filter(
-    (q) => q.subject && subjectMatches(q.subject, subject),
-  );
-  if (own.length) return own;
-  const shared = questions.filter((q) => !q.subject);
-  if (shared.length) return shared;
-  return questions;
-}
-
-/** 대상자 전용 질문이 있는지 (대상자별 분화 여부 판단) */
+/** 레거시 대상자별 질문 데이터인지 (테마형 단일 가이드로 1회 재생성 대상) */
 export function hasSubjectSpecificQuestions(
   questions: TopicInterviewQuestion[],
 ): boolean {
   return questions.some((q) => Boolean(q.subject?.trim()));
+}
+
+function categoryCounts(
+  questions: TopicInterviewQuestion[],
+): Map<ToKnowGuideCategory, number> {
+  const counts = new Map<ToKnowGuideCategory, number>();
+  for (const q of questions) {
+    counts.set(q.category, (counts.get(q.category) ?? 0) + 1);
+  }
+  return counts;
+}
+
+/** 전체 개수 또는 테마별 개수가 최소치에 못 미치는지 */
+export function hasInsufficientTopicQuestions(
+  questions: TopicInterviewQuestion[],
+): boolean {
+  if (questions.length < MIN_TOPIC_QUESTIONS_TOTAL) return true;
+  const counts = categoryCounts(questions);
+  return TO_KNOW_GUIDE_CATEGORY_ORDER.some(
+    (category) => (counts.get(category) ?? 0) < MIN_PER_CATEGORY,
+  );
 }
 
 function clipTopic(problem: string): string {
@@ -133,18 +156,18 @@ function clipTopic(problem: string): string {
   return `${t.slice(0, 48)}…`;
 }
 
-/** AI 없이도 주제 소재가 질문 안에 들어가도록 하는 폴백 */
-export function heuristicTopicInterviewQuestions(
-  problem: string,
-): TopicInterviewQuestion[] {
+function looksFinancialProblem(problem: string): boolean {
+  return (
+    /금융|자산|저축|투자|돈|월급|경제|자취|사회\s*초년/.test(problem) ||
+    /finance|asset|money/.test(problem.toLowerCase())
+  );
+}
+
+function baseHeuristicPool(problem: string): TopicInterviewQuestion[] {
   const p = clipTopic(problem);
   if (!p) return [];
 
-  const looksFinancial =
-    /금융|자산|저축|투자|돈|월급|경제|자취|사회\s*초년/.test(problem) ||
-    /finance|asset|money/.test(problem.toLowerCase());
-
-  if (looksFinancial) {
+  if (looksFinancialProblem(problem)) {
     return [
       {
         category: "사용자",
@@ -157,6 +180,11 @@ export function heuristicTopicInterviewQuestions(
           "한 달 생활비 중 가장 먼저 빠져나가는 항목은 무엇이고, 그다음 우선순위는 어떻게 정하시나요?",
       },
       {
+        category: "사용자",
+        question:
+          "금융 관련 정보는 주로 어디서, 어떤 계기로 찾아보나요? 최근 사례를 들어 주실 수 있나요?",
+      },
+      {
         category: "현재 문제",
         question:
           "돈 관리 때문에 가장 막막했던 최근 순간은 언제였나요? 그때 어떤 감정이 들었나요?",
@@ -165,6 +193,11 @@ export function heuristicTopicInterviewQuestions(
         category: "현재 문제",
         question:
           "저축이나 투자를 시작해야겠다고 느꼈지만 실제로 못 했던 경험이 있다면, 무엇이 발목을 잡았나요?",
+      },
+      {
+        category: "현재 문제",
+        question:
+          "월급을 받은 뒤 저축과 소비를 나누다가 가장 최근에 막혔던 순간은 언제, 어떻게 넘기셨나요?",
       },
       {
         category: "행동 & 맥락",
@@ -177,6 +210,11 @@ export function heuristicTopicInterviewQuestions(
           "가계부·뱅킹 앱·엑셀 등 직접 만들어 쓰시는 돈 관리 방법이 있다면 어떻게 쓰고 계신가요?",
       },
       {
+        category: "행동 & 맥락",
+        question:
+          "돈 이야기를 주로 누구와 나누시나요? 최근에는 어떤 이야기를 하셨나요?",
+      },
+      {
         category: "기존 솔루션",
         question:
           "지금 쓰시는 금융 앱·서비스는 무엇이고, 계속 쓰는 이유와 아쉬운 점은 각각 무엇인가요?",
@@ -185,6 +223,11 @@ export function heuristicTopicInterviewQuestions(
         category: "기존 솔루션",
         question:
           "예전에 가계부나 저축 챌린지 등을 시도했다 그만두신 적이 있다면, 어떤 순간에 왜 그만두셨나요?",
+      },
+      {
+        category: "기존 솔루션",
+        question:
+          "저축·소비 결정을 내리기 직전에 마지막으로 참고하는 정보나 기준은 무엇인가요?",
       },
       {
         category: "동기 & 목표",
@@ -196,6 +239,11 @@ export function heuristicTopicInterviewQuestions(
         question:
           "부모님이나 또래와 돈 이야기를 할 때, 말로는 안 꺼내지만 속으로 바라시는 것이 있다면 무엇인가요?",
       },
+      {
+        category: "동기 & 목표",
+        question:
+          "돈 관리에서 「이것만은 지키고 싶다」 하는 본인만의 원칙이 있다면 무엇인가요?",
+      },
     ];
   }
 
@@ -203,6 +251,14 @@ export function heuristicTopicInterviewQuestions(
     {
       category: "사용자",
       question: `하루 중 「${p}」 상황을 가장 자주 만나는 순간은 언제이고, 그때 무엇을 하고 계셨나요?`,
+    },
+    {
+      category: "사용자",
+      question: `「${p}」와 관련해 본인이 중요하게 여기는 우선순위(시간·돈·에너지)는 무엇인가요?`,
+    },
+    {
+      category: "사용자",
+      question: `「${p}」 상황을 얼마나 자주 겪으시나요? 가장 최근은 언제였나요?`,
     },
     {
       category: "현재 문제",
@@ -213,12 +269,20 @@ export function heuristicTopicInterviewQuestions(
       question: `최근 「${p}」 때문에 가장 답답했던 순간은 언제, 어떤 상황이었나요? 그때 감정은 어땠나요?`,
     },
     {
+      category: "현재 문제",
+      question: `「${p}」를 평소 어떤 말이나 표현으로 이야기하시나요? 최근 누구에게 어떻게 말했나요?`,
+    },
+    {
       category: "행동 & 맥락",
       question: `「${p}」 상황이 생기면 실제로 어떤 행동을 순서대로 하시나요? 최근 사례로 들려주실 수 있나요?`,
     },
     {
       category: "행동 & 맥락",
       question: `「${p}」를 넘기려고 스스로 만드신 우회 방법이나 임시방편이 있다면 무엇인가요?`,
+    },
+    {
+      category: "행동 & 맥락",
+      question: `「${p}」 전·중·후로 곁에 있는 사람·도구·환경은 어떻게 달라지나요?`,
     },
     {
       category: "기존 솔루션",
@@ -229,6 +293,10 @@ export function heuristicTopicInterviewQuestions(
       question: `그 방법이 「${p}」에서 채워 주지 못해 아쉬웠던 최근 순간은 언제였나요?`,
     },
     {
+      category: "기존 솔루션",
+      question: `「${p}」와 관련한 선택을 하기 직전에 마지막으로 참고하는 정보나 기준은 무엇인가요?`,
+    },
+    {
       category: "동기 & 목표",
       question: `「${p}」가 해결된다면 일상이 구체적으로 어떻게 달라질 것 같나요?`,
     },
@@ -236,52 +304,81 @@ export function heuristicTopicInterviewQuestions(
       category: "동기 & 목표",
       question: `「${p}」와 관련해 말로는 잘 안 꺼내지만 은근히 바라시는 것이 있다면 무엇인가요?`,
     },
+    {
+      category: "동기 & 목표",
+      question: `「${p}」에서 「이것만은 지키고 싶다」 하는 본인만의 원칙이 있다면 무엇인가요?`,
+    },
   ];
 }
 
-/** 기존 표의 대상자(infoCategory) 순서를 유지해 주제 질문을 배정할 대상 목록 */
-export function resolveTopicQuestionSubjects(
-  rows: ToKnowRow[],
-  fallbackSubjects: string[],
-): string[] {
-  const seen = new Set<string>();
-  const out: string[] = [];
-  const push = (name: string) => {
-    const trimmed = name.trim();
-    if (!trimmed) return;
-    const key = trimmed.toLowerCase();
-    if (seen.has(key)) return;
+/** AI 없이도 주제 소재가 질문 안에 들어가도록 하는 테마별 폴백 (카테고리당 3개) */
+export function heuristicTopicInterviewQuestions(
+  problem: string,
+): TopicInterviewQuestion[] {
+  return normalizeTopicInterviewQuestions(baseHeuristicPool(problem));
+}
+
+/**
+ * AI가 적게 낸 질문을 테마별 최소 개수까지 보충.
+ * 기존(AI) 질문은 유지하고, 모자란 테마 위주로 휴리스틱을 채운다.
+ * 결과는 항상 subject 없는 테마형 단일 가이드가 된다.
+ */
+export function ensureTopicQuestionsCoverage(
+  problem: string,
+  existing: TopicInterviewQuestion[],
+): TopicInterviewQuestion[] {
+  let merged = normalizeTopicInterviewQuestions(
+    existing.map(({ category, question }) => ({ category, question })),
+  );
+  if (!hasInsufficientTopicQuestions(merged)) return merged;
+
+  const fillers = heuristicTopicInterviewQuestions(problem);
+  const seen = new Set(merged.map((q) => q.question.replace(/\s+/g, "")));
+
+  // 부족한 테마 우선으로 보충
+  const ordered = [...fillers].sort((a, b) => {
+    const counts = categoryCounts(merged);
+    return (counts.get(a.category) ?? 0) - (counts.get(b.category) ?? 0);
+  });
+
+  for (const filler of ordered) {
+    if (!hasInsufficientTopicQuestions(merged)) break;
+    const key = filler.question.replace(/\s+/g, "");
+    if (seen.has(key)) continue;
+    const counts = categoryCounts(merged);
+    const needsCategory =
+      (counts.get(filler.category) ?? 0) < MIN_PER_CATEGORY;
+    const needsTotal = merged.length < MIN_TOPIC_QUESTIONS_TOTAL;
+    if (!needsCategory && !needsTotal) continue;
+    if ((counts.get(filler.category) ?? 0) >= MAX_PER_KEY_CATEGORY) continue;
     seen.add(key);
-    out.push(trimmed);
-  };
-  for (const row of rows) {
-    if (row.rowKind === "core") continue;
-    push(row.infoCategory ?? "");
+    merged = [...merged, filler];
   }
-  if (!out.length) for (const name of fallbackSubjects) push(name);
-  if (!out.length) push("목표 사용자");
-  return out.slice(0, 4);
+
+  return normalizeTopicInterviewQuestions(merged);
 }
 
 export function buildTopicToKnowRows(
   questions: TopicInterviewQuestion[],
-  subjects: string[],
 ): ToKnowRow[] {
+  // 레거시 대상자별 데이터가 섞여 있어도 같은 문항은 한 번만 표에 올린다
+  const seen = new Set<string>();
   const rows: ToKnowRow[] = [];
-  for (const subject of subjects) {
-    for (const item of questionsForSubject(questions, subject)) {
-      const { big, method } = defaultsForCategory(item.category);
-      rows.push({
-        id: newRowId(`${item.category}-topic`),
-        big,
-        mid: item.category,
-        rowKind: "info",
-        infoCategory: subject,
-        small: item.question,
-        method,
-        note: "",
-      });
-    }
+  for (const item of questions) {
+    const key = item.question.replace(/\s+/g, "");
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const { big, method } = defaultsForCategory(item.category);
+    rows.push({
+      id: newRowId(`${item.category}-topic`),
+      big,
+      mid: item.category,
+      rowKind: "info",
+      infoCategory: TOPIC_QUESTION_SUBJECT_LABEL,
+      small: item.question,
+      method,
+      note: "",
+    });
   }
   return rows;
 }
@@ -293,8 +390,7 @@ export function buildTopicToKnowRows(
 export function applyTopicQuestionsToToKnowTable(
   existing: ToKnowRow[],
   questions: TopicInterviewQuestion[],
-  subjects: string[],
 ): ToKnowRow[] {
   if (!questions.length) return existing;
-  return buildTopicToKnowRows(questions, subjects);
+  return buildTopicToKnowRows(questions);
 }

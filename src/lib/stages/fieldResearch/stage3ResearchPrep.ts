@@ -8,6 +8,7 @@ import { readSelectionProfile } from "@/lib/stages/fieldResearch/selectionProfil
 import type { SelectionCriterionDetail } from "@/lib/stages/fieldResearch/selectionProfile";
 import { normalizeRespondentRole } from "@/lib/stages/fieldResearch/extremeUserRole";
 import {
+  ensureTopicQuestionsCoverage,
   heuristicTopicInterviewQuestions,
   normalizeTopicInterviewQuestions,
   type TopicInterviewQuestion,
@@ -479,7 +480,10 @@ export function heuristicResearchPrep(
     "그 순간 가장 답답했던 점은 무엇이었나요?",
     "지금 쓰는 대안이나 우회 방법이 있다면, 왜 그걸 계속 쓰고 있나요?",
   ];
-  const topicQuestions = heuristicTopicInterviewQuestions(problem);
+  const topicQuestions = ensureTopicQuestionsCoverage(
+    problem,
+    heuristicTopicInterviewQuestions(problem),
+  );
 
   const recommendedMethods: ResearchMethodId[] = [
     "home_visit_in_depth",
@@ -513,16 +517,10 @@ export function buildResearchPrepPrompt(
   problem: string,
   prePmfSummary: string,
   targetLabels: string[],
-  questionSubjects: string[] = [],
 ): string {
   const methodCatalog = getDtFieldResearchCatalog()
     .map((m) => `- ${m.id} (${m.label}): ${m.summary}`)
     .join("\n");
-
-  const subjects = questionSubjects.map((s) => s.trim()).filter(Boolean);
-  const subjectLine = subjects.length
-    ? subjects.map((s) => `「${s}」`).join(" · ")
-    : "(목록 없음 — subject 생략 가능)";
 
   return `
 당신은 사용자 조사 준비 코치입니다. 1·2단계 문제 정의와 사전 조사를 바탕으로, 문제에 맞는 리서치 방법·조사 대상·인원·핵심 질문 가이드를 한국어로 제안합니다.
@@ -547,10 +545,11 @@ ${COACH_KOREAN_LABEL_RULE}
   - recommendedCount: 세그먼트별 인원 (합 = recommendedParticipantCount). 1순위(heavy+light)에 더 많은 인원을 배분하고, secondary는 그보다 적게.
   - reason / reasoning: 유형 전체 선정 이유 1~2문장 + 위 기준들과 연결. secondary에는 「왜 극단 다음 우선순위인지」를 명시.
 - keyQuestionGuides: 과거 행동·맥락을 묻는 질문 3~4개. **문제 정의 속 구체 소재(도메인 명사)를 질문 안에 직접 포함**합니다. (미래 가정·솔루션 검증 질문 금지)
-- topicQuestions: 실제로 물어볼 인터뷰 질문. **아래 조사 대상자 목록의 각 대상자마다 8~10개씩**, {subject, category, question} 형태로 만듭니다. subject는 조사 대상자 목록의 표기를 그대로 사용합니다. category는 "사용자" | "현재 문제" | "행동 & 맥락" | "기존 솔루션" | "동기 & 목표" 중 하나로, 대상자마다 카테고리를 고르게 배분합니다.
-  - **대상자마다 질문이 서로 달라야 합니다.** 같은 질문을 여러 대상자에게 복사 금지. 각 대상자의 역할·상황·경험 수준에 맞춰 소재와 표현을 바꿉니다. (예: 금융 초보자에게는 첫 시도·막막함, 숙련 사용자에게는 도구 조합·한계, 서비스/앱/경쟁사가 대상이라면 그 서비스를 실제로 쓰는 사용자에게 이용 경험·아쉬움을 묻는 질문으로)
+- topicQuestions: 실제로 물어볼 인터뷰 질문 가이드. {category, question} 형태로 **15~18개** 만듭니다. 조사 대상 모두에게 동일하게 묻고 극단 사용자 간 답변을 비교하는 단일 가이드이므로, 대상별로 나누지 않습니다 (subject 필드 없음).
+  - category는 "사용자" | "현재 문제" | "행동 & 맥락" | "기존 솔루션" | "동기 & 목표". **5개 카테고리를 모두 쓰고, 카테고리당 3~4개**를 배분합니다.
   - **모든 질문에 문제 정의 속 구체 소재(도메인 명사·상황)를 직접 넣습니다.** 예: 금융 주제라면 월급·저축·가계부·금융 앱 등. 「평소 하루를 어떻게 보내시나요?」 「일상에서 무엇을 가장 중요하게 여기시나요?」처럼 어느 주제에나 통하는 일반 질문은 금지.
   - 과거의 실제 행동·경험·감정을 묻습니다(최근 언제·어떤 상황·어떻게). 미래 가정·솔루션 검증 질문 금지.
+  - 경험이 적은 응답자(라이트·초보)도, 많은 응답자(헤비)도 답할 수 있게 특정 서비스·경력을 전제하지 않는 표현을 씁니다.
   - 응답자에게 직접 존댓말로 묻는 문장으로, 물음표로 끝냅니다.
 - JSON만 출력
 
@@ -565,11 +564,8 @@ ${prePmfSummary || "(없음)"}
 
 타겟 힌트: ${targetLabels.join(" · ") || "(없음)"}
 
-조사 대상자 목록 (topicQuestions의 subject로 이 표기를 그대로 사용):
-${subjectLine}
-
 출력 형식:
-{"recommendedMethods":["home_visit_in_depth","shadowing"],"methodRecommendationReason":"...","methodRationales":{"home_visit_in_depth":"...","shadowing":"..."},"recommendedParticipantCount":6,"participantCountReason":"...","segments":[{"label":"자취·부모 지원 거의 없는 사회 초년생","role":"heavy","selectionCriteria":["자취 유무","부모 경제 지원","첫 월급·연차"],"criterionDetails":[{"label":"자취 유무","why":"주거비가 저축 여력을 바로 가릅니다."},{"label":"부모 경제 지원","why":"지원이 없으면 금융 도구를 생존형으로 씁니다."},{"label":"첫 월급·연차","why":"입사 초기는 금융 습관이 생기는 극단입니다."}],"recommendedCount":2,"reason":"...","reasoning":"..."},{"label":"소득 변동이 큰 이직·프리랜스 전환기","role":"light","selectionCriteria":["고용 형태","소득 안정성","이직 경험"],"criterionDetails":[{"label":"고용 형태","why":"고용 형태에 따라 금융 접근이 달라집니다."},{"label":"소득 안정성","why":"변동기에는 저축 루틴이 깨지거나 재정비됩니다."},{"label":"이직 경험","why":"경력 전환은 돈 관리를 다시 짜는 계기입니다."}],"recommendedCount":2,"reason":"...","reasoning":"..."},{"label":"또래 커뮤니티로 금융을 배우는 사회 초년생","role":"secondary","selectionCriteria":["또래 영향","금융 학습 채널"],"criterionDetails":[{"label":"또래 영향","why":"극단 다음으로 또래 규범이 행동을 밉니다."},{"label":"금융 학습 채널","why":"커뮤니티 학습은 양 끝과 다른 니즈를 보여 줍니다."}],"recommendedCount":1,"reason":"양 극단 다음 2순위 후보예요.","reasoning":"양 극단 다음 2순위 후보예요."},{"label":"가족과 동거·일부 지원을 받는 초년 직장인","role":"control","selectionCriteria":["동거 여부","부모 경제 지원","혼인 여부"],"criterionDetails":[{"label":"동거 여부","why":"주거비 부담이 낮아 Heavy와 대비됩니다."},{"label":"부모 경제 지원","why":"부분 지원이 자립·의존의 기준선이 됩니다."},{"label":"혼인 여부","why":"가계 단위 차이를 대조하는 데 필요합니다."}],"recommendedCount":1,"reason":"...","reasoning":"..."}],"keyQuestionGuides":["..."],"topicQuestions":[{"subject":"20대 직장인","category":"현재 문제","question":"가장 최근 월급을 받은 뒤 저축과 소비를 나누다가 막막했던 순간은 언제였고, 그때 어떻게 하셨나요?"},{"subject":"금융 초보자","category":"기존 솔루션","question":"돈 관리를 처음 시작하려고 가계부나 앱을 깔았다가 그만둔 적이 있다면, 어떤 순간에 왜 멈추셨나요?"},{"subject":"토스","category":"행동 & 맥락","question":"토스를 쓰면서 월급 관리·저축과 관련해 직접 만들어 쓰시는 사용 습관이 있다면 무엇인가요?"}]}
+{"recommendedMethods":["home_visit_in_depth","shadowing"],"methodRecommendationReason":"...","methodRationales":{"home_visit_in_depth":"...","shadowing":"..."},"recommendedParticipantCount":6,"participantCountReason":"...","segments":[{"label":"자취·부모 지원 거의 없는 사회 초년생","role":"heavy","selectionCriteria":["자취 유무","부모 경제 지원","첫 월급·연차"],"criterionDetails":[{"label":"자취 유무","why":"주거비가 저축 여력을 바로 가릅니다."},{"label":"부모 경제 지원","why":"지원이 없으면 금융 도구를 생존형으로 씁니다."},{"label":"첫 월급·연차","why":"입사 초기는 금융 습관이 생기는 극단입니다."}],"recommendedCount":2,"reason":"...","reasoning":"..."},{"label":"소득 변동이 큰 이직·프리랜스 전환기","role":"light","selectionCriteria":["고용 형태","소득 안정성","이직 경험"],"criterionDetails":[{"label":"고용 형태","why":"고용 형태에 따라 금융 접근이 달라집니다."},{"label":"소득 안정성","why":"변동기에는 저축 루틴이 깨지거나 재정비됩니다."},{"label":"이직 경험","why":"경력 전환은 돈 관리를 다시 짜는 계기입니다."}],"recommendedCount":2,"reason":"...","reasoning":"..."},{"label":"또래 커뮤니티로 금융을 배우는 사회 초년생","role":"secondary","selectionCriteria":["또래 영향","금융 학습 채널"],"criterionDetails":[{"label":"또래 영향","why":"극단 다음으로 또래 규범이 행동을 밉니다."},{"label":"금융 학습 채널","why":"커뮤니티 학습은 양 끝과 다른 니즈를 보여 줍니다."}],"recommendedCount":1,"reason":"양 극단 다음 2순위 후보예요.","reasoning":"양 극단 다음 2순위 후보예요."},{"label":"가족과 동거·일부 지원을 받는 초년 직장인","role":"control","selectionCriteria":["동거 여부","부모 경제 지원","혼인 여부"],"criterionDetails":[{"label":"동거 여부","why":"주거비 부담이 낮아 Heavy와 대비됩니다."},{"label":"부모 경제 지원","why":"부분 지원이 자립·의존의 기준선이 됩니다."},{"label":"혼인 여부","why":"가계 단위 차이를 대조하는 데 필요합니다."}],"recommendedCount":1,"reason":"...","reasoning":"..."}],"keyQuestionGuides":["..."],"topicQuestions":[{"category":"사용자","question":"월급이 들어온 날 가장 먼저 하시는 일과 그다음 순서는 무엇인가요?"},{"category":"사용자","question":"금융 관련 정보는 주로 어디서, 어떤 계기로 찾아보시나요? 최근 사례를 들어 주실 수 있나요?"},{"category":"사용자","question":"한 달 생활비 중 가장 먼저 빠져나가는 항목은 무엇이고, 그다음 우선순위는 어떻게 정하시나요?"},{"category":"현재 문제","question":"가장 최근 월급을 받은 뒤 저축과 소비를 나누다가 막막했던 순간은 언제였고, 그때 어떻게 하셨나요?"},{"category":"현재 문제","question":"저축이나 투자를 시작해야겠다고 느꼈지만 실제로 못 했던 경험이 있다면, 무엇이 발목을 잡았나요?"},{"category":"현재 문제","question":"돈 관리와 관련해 최근 한 달 동안 가장 신경 쓰였던 일은 무엇이었나요?"},{"category":"행동 & 맥락","question":"월급일부터 다음 월급 전까지 돈과 관련해 실제로 하시는 행동을 순서대로 들려주실 수 있나요?"},{"category":"행동 & 맥락","question":"가계부·뱅킹 앱·엑셀 등 직접 만들어 쓰시는 돈 관리 방법이 있다면 어떻게 쓰고 계신가요?"},{"category":"행동 & 맥락","question":"돈 이야기를 주로 누구와 나누시나요? 최근에는 어떤 이야기를 하셨나요?"},{"category":"기존 솔루션","question":"지금 쓰시는 가계부·금융 앱은 무엇이고, 계속 쓰는 이유와 아쉬운 점은 각각 무엇인가요?"},{"category":"기존 솔루션","question":"예전에 가계부나 저축 챌린지 등을 시도했다 그만두신 적이 있다면, 어떤 순간에 왜 그만두셨나요?"},{"category":"기존 솔루션","question":"저축·소비 결정을 내리기 직전에 마지막으로 참고하는 정보나 기준은 무엇인가요?"},{"category":"동기 & 목표","question":"자산 관리가 자리 잡으면 1년 뒤 어떤 모습이길 바라시나요? 그게 왜 중요한가요?"},{"category":"동기 & 목표","question":"부모님이나 또래와 돈 이야기를 할 때, 말로는 안 꺼내지만 속으로 바라시는 것이 있다면 무엇인가요?"},{"category":"동기 & 목표","question":"돈 관리에서 「이것만은 지키고 싶다」 하는 본인만의 원칙이 있다면 무엇인가요?"}]}
 `.trim();
 }
 
