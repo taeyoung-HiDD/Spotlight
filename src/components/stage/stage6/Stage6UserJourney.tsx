@@ -27,6 +27,7 @@ import { requestJourneyStageGeneration } from "@/lib/stages/stage6/generateJourn
 import { requestJourneyZonesAutoFill } from "@/lib/stages/stage6/generateJourneyZoneClient";
 import {
   defaultUserJourneyMap,
+  JOURNEY_STAGES_GENERATION_VERSION,
   personaHasDefaultJourneySteps,
   replacePersonaJourneySteps,
   type UserJourneyMapData,
@@ -75,15 +76,18 @@ export function Stage6UserJourney({ projectId }: Stage6UserJourneyProps) {
 
         let merged = mergePriorStagesIntoJourney(journey.data, s4.data);
 
-        // 아직 공통 기본 단계 그대로인 페르소나는 문제 정의·리서치 내용에 맞춘
-        // 여정 단계를 AI로 생성해 교체합니다 (성공 시 페르소나당 1회).
+        // 아직 공통 기본 단계 그대로이거나, 이전 방식(개별 사건형)으로 생성된
+        // 페르소나는 표준 여정 국면 형식으로 단계를 AI 생성해 교체합니다.
         const problem = ctx?.startingPoint?.trim() ?? "";
         const stageTargets = merged.subjects.filter((subject) => {
           const persona = merged.personas[subject.id];
+          if (!persona) return false;
+          if (!persona.stagesGeneratedAt) {
+            return personaHasDefaultJourneySteps(persona);
+          }
           return (
-            !!persona &&
-            !persona.stagesGeneratedAt &&
-            personaHasDefaultJourneySteps(persona)
+            (persona.stagesGeneratedVersion ?? 1) <
+            JOURNEY_STAGES_GENERATION_VERSION
           );
         });
 

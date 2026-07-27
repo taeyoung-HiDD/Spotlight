@@ -52,9 +52,17 @@ export type PersonaJourneyMap = {
   expectations: string;
   /** 프로젝트 주제 맞춤 여정 단계가 AI로 생성·적용된 시각 */
   stagesGeneratedAt?: string;
+  /** 여정 단계 생성 방식 버전 — 낮으면 진입 시 다시 생성 */
+  stagesGeneratedVersion?: number;
   /** 터치포인트·Pain point가 진입 시 AI 분석으로 채워진 시각 */
   zonesGeneratedAt?: string;
 };
+
+/**
+ * 여정 단계 AI 생성 방식 버전.
+ * v2: 인터뷰 속 개별 사건이 아니라 서비스 디자인 표준 국면(인지→탐색→결정→사용→사후) 형식.
+ */
+export const JOURNEY_STAGES_GENERATION_VERSION = 2;
 
 export type UserJourneyMapData = {
   subjects: JourneyPersonaRef[];
@@ -142,7 +150,8 @@ export function personaHasDefaultJourneySteps(
 
 /**
  * 페르소나의 여정 단계를 새 라벨로 교체합니다.
- * 기존 단계에 배치돼 있던 카드는 풀로 되돌려 자동 배치가 다시 고르게 합니다.
+ * 기존 단계에 배치돼 있던 카드는 풀로 되돌려 자동 배치가 다시 고르게 하고,
+ * 새 단계 기준으로 터치포인트·Pain point AI 분석도 다시 돌도록 초기화합니다.
  */
 export function replacePersonaJourneySteps(
   data: UserJourneyMapData,
@@ -167,6 +176,8 @@ export function replacePersonaJourneySteps(
         steps: cleaned.map((label, index) => createJourneyStep(label, index)),
         poolItemIds,
         stagesGeneratedAt: new Date().toISOString(),
+        stagesGeneratedVersion: JOURNEY_STAGES_GENERATION_VERSION,
+        zonesGeneratedAt: undefined,
       },
     },
   };
@@ -223,6 +234,10 @@ function normalizePersonaMap(
     stagesGeneratedAt:
       typeof raw.stagesGeneratedAt === "string"
         ? raw.stagesGeneratedAt
+        : undefined,
+    stagesGeneratedVersion:
+      typeof raw.stagesGeneratedVersion === "number"
+        ? raw.stagesGeneratedVersion
         : undefined,
     zonesGeneratedAt:
       typeof raw.zonesGeneratedAt === "string"
