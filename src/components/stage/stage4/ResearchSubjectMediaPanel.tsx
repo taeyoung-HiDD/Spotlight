@@ -30,7 +30,7 @@ interface ResearchSubjectMediaPanelProps {
   onChange: (files: ResearchMediaFile[]) => void;
   /** 방금 업로드된 자료 (영상 자동 분석 등) */
   onUploaded?: (added: ResearchMediaFile[]) => void;
-  /** 영상·음성 자료를 AI로 분석해 포스트잇 생성 */
+  /** 영상·음성·문서를 AI로 분석해 포스트잇 생성 */
   onAnalyze?: () => void;
   analyzing?: boolean;
   analyzeError?: string | null;
@@ -270,7 +270,11 @@ export function ResearchSubjectMediaPanel({
     : null;
   const previewUrl = previewMedia ? (urls[previewMedia.id] ?? "") : "";
   const hasAnalyzableMedia = mediaFiles.some(
-    (m) => m.kind === "video" || m.kind === "audio",
+    (m) =>
+      ((m.kind === "video" || m.kind === "audio") &&
+        Boolean(m.storagePath?.trim())) ||
+      (m.kind === "document" &&
+        Boolean(m.storagePath?.trim() || m.inlineDataUrl?.trim())),
   );
 
   const closePreview = useCallback(() => {
@@ -468,7 +472,7 @@ export function ResearchSubjectMediaPanel({
               영상을 올리면 대상자의{" "}
               <b className="font-semibold text-foreground">행동</b>을 읽어{" "}
               <b className="font-semibold text-foreground">행동함</b> 포스트잇으로 붙여요.
-              음성은 말함·생각함·느낌도 함께 정리해요.
+              음성·문서는 말함·생각함·느낌·행동함도 함께 정리해요.
             </p>
             <button
               type="button"
@@ -482,7 +486,7 @@ export function ResearchSubjectMediaPanel({
           </div>
           {!hasAnalyzableMedia ? (
             <p className={`mt-1.5 ${stageCaption}`}>
-              분석하려면 영상 또는 음성 자료를 먼저 올려 주세요.
+              분석하려면 영상·음성·문서 자료를 먼저 올려 주세요.
             </p>
           ) : null}
           {analyzeError ? (

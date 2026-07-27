@@ -19,7 +19,7 @@ import { VirtualPersonaProfileCard } from "@/components/stage/stage4/VirtualPers
 import { generatePersonaBio } from "@/lib/stages/fieldResearch/generatePersonaBioClient";
 import type { EmpathyQuadrantId } from "@/lib/stages/stage2/empathyMap";
 import { normalizePersonaBio } from "@/lib/stages/stage4/personaBio";
-import { analyzeResearchMediaToNotes } from "@/lib/stages/stage4/researchMediaToNotesClient";
+import { analyzeResearchMediaToNotes, isAnalyzableResearchMedia } from "@/lib/stages/stage4/researchMediaToNotesClient";
 import type { ResearchMediaFile } from "@/lib/stages/stage4/researchMediaTypes";
 import { createResearchMediaFile } from "@/lib/stages/stage4/researchMediaTypes";
 import {
@@ -264,14 +264,11 @@ export function Stage4ResearchSynthesisPanel({
         ),
       ];
       const targets = mediaPool.filter(
-        (m) =>
-          (m.kind === "video" || m.kind === "audio") &&
-          m.storagePath?.trim() &&
-          (!idFilter || idFilter.has(m.id)),
+        (m) => isAnalyzableResearchMedia(m) && (!idFilter || idFilter.has(m.id)),
       );
       if (targets.length === 0) {
         if (!options?.mediaIds) {
-          setAnalyzeError("분석할 영상·음성 자료가 없어요.");
+          setAnalyzeError("분석할 영상·음성·문서 자료가 없어요.");
         }
         return;
       }
@@ -292,10 +289,11 @@ export function Stage4ResearchSynthesisPanel({
 
       for (const media of targets) {
         try {
+          if (!isAnalyzableResearchMedia(media)) continue;
           const result = await analyzeResearchMediaToNotes({
             projectId,
             subjectId,
-            media: media as ResearchMediaFile & { kind: "video" | "audio" },
+            media,
           });
           const map = getLinkedEmpathyMap(working, subjectId);
           if (!map) continue;
@@ -396,14 +394,14 @@ export function Stage4ResearchSynthesisPanel({
 
   const handleMediaUploaded = useCallback(
     (subjectId: string, added: ResearchMediaFile[]) => {
-      const videos = added.filter(
-        (m) => m.kind === "video" && m.storagePath?.trim(),
-      );
-      if (videos.length === 0) return;
+      // 영상은 행동함 우선 자동 분석, 문서·음성도 업로드 직후 공감맵에 반영
+      const analyzable = added.filter(isAnalyzableResearchMedia);
+      if (analyzable.length === 0) return;
+      const videoOnly = analyzable.every((m) => m.kind === "video");
       void analyzeSubjectMedia(subjectId, {
-        mediaIds: videos.map((m) => m.id),
-        extraMedia: videos,
-        preferDoesNotice: true,
+        mediaIds: analyzable.map((m) => m.id),
+        extraMedia: analyzable,
+        preferDoesNotice: videoOnly,
       });
     },
     [analyzeSubjectMedia],
@@ -730,7 +728,7 @@ export function Stage4ResearchSynthesisPanel({
               <p className={`mt-2 ${stageCaption}`}>
                 {analyzeFocus === "video-does"
                   ? "영상에서 행동을 읽어 행동함 분면에 붙이는 중…"
-                  : "영상·음성을 분석해 공감맵 4분면에 붙이는 중…"}
+                  : "영상·음성·문서를 분석해 공감맵 4분면에 붙이는 중…"}
               </p>
             ) : analyzeNotice ? (
               <p className={`mt-2 ${stageCaption} text-foreground`}>

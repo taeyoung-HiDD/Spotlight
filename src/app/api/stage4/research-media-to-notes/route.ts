@@ -1,7 +1,15 @@
 import { NextResponse } from "next/server";
-import { resolveGeminiApiKey, resolveGeminiAudioModels } from "@/lib/ai/env";
+import {
+  resolveGeminiApiKey,
+  resolveGeminiAudioModels,
+  resolveGeminiTextModels,
+} from "@/lib/ai/env";
 import { createClient } from "@/lib/supabase/server";
 import { fetchProjectAccess } from "@/lib/projects/projectAccess";
+import {
+  decodeInlineDataUrl,
+  extractResearchDocument,
+} from "@/lib/stages/stage4/extractResearchDocumentText";
 
 const BUCKET = "research-media";
 
@@ -29,10 +37,11 @@ function normalizeSentences(raw: unknown, max = 12): string[] {
 interface MediaToNotesRequest {
   projectId: string;
   subjectId: string;
-  storagePath: string;
+  storagePath?: string;
+  inlineDataUrl?: string;
   mimeType: string;
   fileName?: string;
-  kind: "video" | "audio";
+  kind: "video" | "audio" | "document";
 }
 
 function buildPrompt({
@@ -40,10 +49,38 @@ function buildPrompt({
   fileName,
   doesOnly = false,
 }: {
-  kind: "video" | "audio";
+  kind: "video" | "audio" | "document";
   fileName: string;
   doesOnly?: boolean;
 }): string {
+  if (kind === "document") {
+    return `
+당신은 디자인씽킹 리서치 코치입니다.
+다음 문서는 인터뷰·관찰 기록(음성 전사·노트 등)입니다. 조사 대상자의 공감맵 4분면에 넣을 사실을 정리하세요.
+
+네 분면:
+1) says(말함): 조사 대상자가 직접 말한 인용·발화. 질문자/사회자/인터뷰어 말은 제외.
+2) thinks(생각함): 말·맥락에서 드러난 판단·믿음·가정. 추측이면 끝에 (가설).
+3) does(행동함): 문서에 적힌 관찰 가능한 행동·절차·우회 방식의 사실적 기록.
+4) feels(느낌): 문서에 드러난 감정·톤·스트레스 단서.
+
+작성 규칙:
+- 한국어. 포스트잇 하나 = 사실 하나. 한 문장(최대 두 문장).
+- 문서에 없는 내용을 지어내지 마세요.
+- 각 분면 2~8개 목표. 근거가 없으면 해당 분면은 빈 배열.
+- JSON만 출력합니다.
+
+{
+  "says": ["말함 1"],
+  "thinks": ["생각 1"],
+  "does": ["행동 1"],
+  "feels": ["느낌 1"]
+}
+
+자료 파일명: ${fileName || "(unknown)"}
+`.trim();
+  }
+
   if (kind === "video" && doesOnly) {
     return `
 당신은 디자인씽킹 리서치 코치입니다.
@@ -134,12 +171,14 @@ async function generateQuadrants({
   mimeType,
   mediaBase64,
   prompt,
+  textOnly = false,
 }: {
   apiKey: string;
   models: string[];
   mimeType: string;
   mediaBase64: string;
   prompt: string;
+  textOnly?: boolean;
 }): Promise<{
   says: string[];
   thinks: string[];
@@ -152,6 +191,14 @@ async function generateQuadrants({
 
   for (const modelName of models) {
     try {
+      const parts: Array<
+        | { text: string }
+        | { inlineData: { mimeType: string; data: string } }
+      > = [{ text: prompt }];
+      if (!textOnly && mediaBase64) {
+        parts.push({ inlineData: { mimeType, data: mediaBase64 } });
+      }
+
       const res = await fetch(
         `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
           modelName,
@@ -163,10 +210,7 @@ async function generateQuadrants({
             contents: [
               {
                 role: "user",
-                parts: [
-                  { text: prompt },
-                  { inlineData: { mimeType, data: mediaBase64 } },
-                ],
+                parts,
               },
             ],
             generationConfig: {
@@ -230,6 +274,34 @@ async function generateQuadrants({
   return null;
 }
 
+async function generateQuadrantsFromText({
+  apiKey,
+  models,
+  prompt,
+  documentText,
+}: {
+  apiKey: string;
+  models: string[];
+  prompt: string;
+  documentText: string;
+}): Promise<{
+  says: string[];
+  thinks: string[];
+  does: string[];
+  feels: string[];
+  transcript?: string;
+  model: string;
+} | null> {
+  return generateQuadrants({
+    apiKey,
+    models,
+    mimeType: "text/plain",
+    mediaBase64: "",
+    prompt: `${prompt}\n\n--- 문서 본문 ---\n${documentText}`,
+    textOnly: true,
+  });
+}
+
 export async function POST(request: Request) {
   let body: unknown;
   try {
@@ -238,17 +310,29 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "잘못된 JSON입니다." }, { status: 400 });
   }
 
-  const { projectId, subjectId, storagePath, mimeType, fileName, kind } =
-    body as Partial<MediaToNotesRequest>;
+  const {
+    projectId,
+    subjectId,
+    storagePath,
+    inlineDataUrl,
+    mimeType,
+    fileName,
+    kind,
+  } = body as Partial<MediaToNotesRequest>;
 
   const safeProjectId = String(projectId ?? "").trim();
   const safeSubjectId = String(subjectId ?? "").trim();
   const safeStoragePath = String(storagePath ?? "").trim();
+  const safeInlineDataUrl = String(inlineDataUrl ?? "").trim();
   const safeMimeType = String(mimeType ?? "").trim();
   const safeFileName = typeof fileName === "string" ? fileName.trim() : "";
-  const safeKind = kind === "video" ? "video" : "audio";
+  const safeKind =
+    kind === "video" || kind === "document" ? kind : "audio";
 
-  if (!safeProjectId || !safeSubjectId || !safeStoragePath || !safeMimeType) {
+  if (!safeProjectId || !safeSubjectId || !safeMimeType) {
+    return NextResponse.json({ error: "필수 값이 없습니다." }, { status: 400 });
+  }
+  if (!safeStoragePath && !(safeKind === "document" && safeInlineDataUrl)) {
     return NextResponse.json({ error: "필수 값이 없습니다." }, { status: 400 });
   }
 
@@ -260,17 +344,19 @@ export async function POST(request: Request) {
     );
   }
 
-  const pathParts = safeStoragePath.split("/");
-  const storageProjectId = pathParts[0] ?? "";
-  const storageSubjectId = pathParts[1] ?? "";
-  if (
-    storageProjectId !== safeProjectId ||
-    storageSubjectId !== safeSubjectId
-  ) {
-    return NextResponse.json(
-      { error: "storagePath가 프로젝트/조사 대상과 일치하지 않습니다." },
-      { status: 400 },
-    );
+  if (safeStoragePath) {
+    const pathParts = safeStoragePath.split("/");
+    const storageProjectId = pathParts[0] ?? "";
+    const storageSubjectId = pathParts[1] ?? "";
+    if (
+      storageProjectId !== safeProjectId ||
+      storageSubjectId !== safeSubjectId
+    ) {
+      return NextResponse.json(
+        { error: "storagePath가 프로젝트/조사 대상과 일치하지 않습니다." },
+        { status: 400 },
+      );
+    }
   }
 
   const apiKey = resolveGeminiApiKey();
@@ -281,61 +367,126 @@ export async function POST(request: Request) {
     );
   }
 
-  const modelsToTry = resolveGeminiAudioModels();
-
-  const supabase = await createClient();
-  const { data, error } = await supabase.storage
-    .from(BUCKET)
-    .createSignedUrl(safeStoragePath, 3600);
-  if (error || !data?.signedUrl) {
-    return NextResponse.json(
-      { error: error?.message ?? "서명 URL을 생성하지 못했습니다." },
-      { status: 500 },
-    );
-  }
-
-  const mediaRes = await fetch(data.signedUrl);
-  if (!mediaRes.ok) {
-    return NextResponse.json(
-      { error: "자료 파일을 가져오지 못했습니다." },
-      { status: 502 },
-    );
-  }
-
-  const mediaBuffer = await mediaRes.arrayBuffer();
-  const mediaBase64 = Buffer.from(mediaBuffer).toString("base64");
-
   try {
-    let result = await generateQuadrants({
-      apiKey,
-      models: modelsToTry,
-      mimeType: safeMimeType,
-      mediaBase64,
-      prompt: buildPrompt({
-        kind: safeKind,
-        fileName: safeFileName,
-      }),
-    });
+    let result: {
+      says: string[];
+      thinks: string[];
+      does: string[];
+      feels: string[];
+      transcript?: string;
+      model: string;
+    } | null = null;
 
-    // 영상인데 행동함이 비면, 행동 전용 프롬프트로 한 번 더 시도
-    if (safeKind === "video" && result && result.does.length === 0) {
-      const fallback = await generateQuadrants({
+    if (safeKind === "document") {
+      let buffer: Buffer;
+      let resolvedMime = safeMimeType;
+      if (safeInlineDataUrl) {
+        const decoded = decodeInlineDataUrl(safeInlineDataUrl);
+        buffer = decoded.buffer;
+        resolvedMime = decoded.mimeType || safeMimeType;
+      } else {
+        const supabase = await createClient();
+        const { data, error } = await supabase.storage
+          .from(BUCKET)
+          .createSignedUrl(safeStoragePath, 3600);
+        if (error || !data?.signedUrl) {
+          return NextResponse.json(
+            { error: error?.message ?? "서명 URL을 생성하지 못했습니다." },
+            { status: 500 },
+          );
+        }
+        const mediaRes = await fetch(data.signedUrl);
+        if (!mediaRes.ok) {
+          return NextResponse.json(
+            { error: "자료 파일을 가져오지 못했습니다." },
+            { status: 502 },
+          );
+        }
+        buffer = Buffer.from(await mediaRes.arrayBuffer());
+      }
+
+      const extracted = await extractResearchDocument(
+        buffer,
+        resolvedMime,
+        safeFileName,
+      );
+      const prompt = buildPrompt({
+        kind: "document",
+        fileName: safeFileName,
+      });
+      const textModels = resolveGeminiTextModels();
+
+      if (extracted.mode === "text") {
+        result = await generateQuadrantsFromText({
+          apiKey,
+          models: textModels,
+          prompt,
+          documentText: extracted.text,
+        });
+      } else {
+        result = await generateQuadrants({
+          apiKey,
+          models: [...resolveGeminiAudioModels(), ...textModels],
+          mimeType: "application/pdf",
+          mediaBase64: extracted.buffer.toString("base64"),
+          prompt,
+        });
+      }
+    } else {
+      const modelsToTry = resolveGeminiAudioModels();
+      const supabase = await createClient();
+      const { data, error } = await supabase.storage
+        .from(BUCKET)
+        .createSignedUrl(safeStoragePath, 3600);
+      if (error || !data?.signedUrl) {
+        return NextResponse.json(
+          { error: error?.message ?? "서명 URL을 생성하지 못했습니다." },
+          { status: 500 },
+        );
+      }
+
+      const mediaRes = await fetch(data.signedUrl);
+      if (!mediaRes.ok) {
+        return NextResponse.json(
+          { error: "자료 파일을 가져오지 못했습니다." },
+          { status: 502 },
+        );
+      }
+
+      const mediaBuffer = await mediaRes.arrayBuffer();
+      const mediaBase64 = Buffer.from(mediaBuffer).toString("base64");
+
+      result = await generateQuadrants({
         apiKey,
         models: modelsToTry,
         mimeType: safeMimeType,
         mediaBase64,
         prompt: buildPrompt({
-          kind: "video",
+          kind: safeKind,
           fileName: safeFileName,
-          doesOnly: true,
         }),
       });
-      if (fallback?.does.length) {
-        result = {
-          ...result,
-          does: fallback.does,
-          model: fallback.model,
-        };
+
+      // 영상인데 행동함이 비면, 행동 전용 프롬프트로 한 번 더 시도
+      if (safeKind === "video" && result && result.does.length === 0) {
+        const fallback = await generateQuadrants({
+          apiKey,
+          models: modelsToTry,
+          mimeType: safeMimeType,
+          mediaBase64,
+          prompt: buildPrompt({
+            kind: "video",
+            fileName: safeFileName,
+            doesOnly: true,
+          }),
+        });
+        if (fallback?.does.length) {
+          result = {
+            ...result,
+            does: fallback.does,
+            model: fallback.model,
+          };
+        }
       }
     }
 
@@ -360,7 +511,8 @@ export async function POST(request: Request) {
   } catch (e) {
     return NextResponse.json(
       {
-        error: "자료 분석에 실패했습니다.",
+        error:
+          e instanceof Error ? e.message : "자료 분석에 실패했습니다.",
         details: e instanceof Error ? e.message : String(e),
       },
       { status: 502 },

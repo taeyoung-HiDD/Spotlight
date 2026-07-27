@@ -21,7 +21,23 @@ function toList(raw: unknown): string[] {
     .filter(Boolean);
 }
 
-/** 영상·음성 → 공감맵 4분면 문장 */
+export type AnalyzableResearchMedia = ResearchMediaFile & {
+  kind: "video" | "audio" | "document";
+};
+
+export function isAnalyzableResearchMedia(
+  media: ResearchMediaFile,
+): media is AnalyzableResearchMedia {
+  if (media.kind === "video" || media.kind === "audio") {
+    return Boolean(media.storagePath?.trim());
+  }
+  if (media.kind === "document") {
+    return Boolean(media.storagePath?.trim() || media.inlineDataUrl?.trim());
+  }
+  return false;
+}
+
+/** 영상·음성·문서 → 공감맵 4분면 문장 */
 export async function analyzeResearchMediaToNotes({
   projectId,
   subjectId,
@@ -29,10 +45,10 @@ export async function analyzeResearchMediaToNotes({
 }: {
   projectId: string;
   subjectId: string;
-  media: ResearchMediaFile & { kind: "video" | "audio" };
+  media: AnalyzableResearchMedia;
 }): Promise<ResearchMediaEmpathyQuadrants> {
-  if (!media.storagePath?.trim()) {
-    throw new Error("자료 파일 경로가 없습니다.");
+  if (!isAnalyzableResearchMedia(media)) {
+    throw new Error("분석할 수 있는 자료가 아니에요.");
   }
 
   const res = await fetch("/api/stage4/research-media-to-notes", {
@@ -42,7 +58,8 @@ export async function analyzeResearchMediaToNotes({
       projectId,
       subjectId,
       storagePath: media.storagePath,
-      mimeType: media.mimeType,
+      inlineDataUrl: media.inlineDataUrl,
+      mimeType: media.mimeType || "application/octet-stream",
       fileName: media.fileName,
       kind: media.kind,
     }),
