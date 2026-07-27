@@ -6,7 +6,8 @@ import type { JourneyEmotionPoint } from "@/lib/stages/stage6/journeyEmotionFrom
 
 const VIEW_H = 112;
 const COL_W = 100;
-const PAD_Y = 18;
+/** 영역 높이는 유지한 채, 곡선이 세로로 거의 가득 차도록 여백을 줄입니다. */
+const PAD_Y = 6;
 const MID_Y = VIEW_H / 2;
 
 type JourneyEmotionCurveProps = {
@@ -15,8 +16,10 @@ type JourneyEmotionCurveProps = {
 };
 
 function scoreToY(score: number): number {
-  const amp = (VIEW_H / 2 - PAD_Y) * 0.92;
-  return MID_Y - score * amp;
+  const amp = (VIEW_H / 2 - PAD_Y) * 0.98;
+  // 영역 높이는 유지하고, 감정 점수의 세로 진폭만 약 2배로 키웁니다.
+  const amplified = Math.max(-1, Math.min(1, score * 2));
+  return MID_Y - amplified * amp;
 }
 
 /** Catmull-Rom → cubic Bézier path through column centers */
