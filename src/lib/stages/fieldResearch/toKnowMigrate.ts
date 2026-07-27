@@ -1,4 +1,5 @@
 import {
+  isKnownGuideCategory,
   migrateGuideCategoryLayout,
   sanitizeToKnowCoreQuestion,
 } from "@/lib/stages/fieldResearch/toKnowGuideCategories";
@@ -58,11 +59,13 @@ function stripLegacySmallCode(
   return rest;
 }
 
-/** 레거시 mid 값을 질문(small)으로 합치고 mid는 비움 */
+/** 레거시 mid 값을 질문(small)으로 합치고 mid는 비움 (가이드 주제는 유지) */
 function flattenMidIntoQuestion(row: ToKnowRow): ToKnowRow {
   const mid = row.mid.trim();
   const small = row.small.trim();
   if (!mid) return { ...row, mid: "" };
+  // 가이드 5주제(사용자·현재 문제 등)는 카테고리이므로 질문으로 합치지 않음
+  if (isKnownGuideCategory(mid)) return row;
   if (!small) return { ...row, small: mid, mid: "" };
   return { ...row, mid: "" };
 }

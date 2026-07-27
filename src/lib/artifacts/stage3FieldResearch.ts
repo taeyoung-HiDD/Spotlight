@@ -58,6 +58,7 @@ export function fieldResearchToSlots(data: FieldResearchData): ArtifactSlots {
         researchPrep: data.researchPrep,
         empathyMaps: data.empathyMaps,
         toKnowTable: data.toKnowTable,
+        toKnowTopicApplied: data.toKnowTopicApplied,
         // 레거시 호환(읽기 전용): 이전 버전이 이 키를 기대할 수 있어 함께 저장
         toKnowList: Array.isArray(data.toKnowTable)
           ? data.toKnowTable.map((r) => r.small).filter(Boolean)
@@ -101,6 +102,7 @@ function parseFieldResearch(slots: ArtifactSlots): FieldResearchData {
   let empathyMaps = [...DEFAULT_FIELD_RESEARCH.empathyMaps];
   let toKnowCoreQuestion = DEFAULT_FIELD_RESEARCH.toKnowCoreQuestion;
   let toKnowTable = [...DEFAULT_FIELD_RESEARCH.toKnowTable];
+  let toKnowTopicApplied = DEFAULT_FIELD_RESEARCH.toKnowTopicApplied;
   let researchMethods = [...DEFAULT_FIELD_RESEARCH.researchMethods];
   let researchProtocol = DEFAULT_FIELD_RESEARCH.researchProtocol;
   let prepConfirmed = DEFAULT_FIELD_RESEARCH.prepConfirmed;
@@ -146,6 +148,9 @@ function parseFieldResearch(slots: ArtifactSlots): FieldResearchData {
       toKnowCoreQuestion = finalized.toKnowCoreQuestion;
       toKnowTable = finalized.toKnowTable;
     }
+    if (typeof p.toKnowTopicApplied === "boolean") {
+      toKnowTopicApplied = p.toKnowTopicApplied;
+    }
     toKnowPrep = resolveToKnowPrepFromLoad(p.toKnowPrep, toKnowTable);
     if (Array.isArray(p.researchMethods)) {
       researchMethods = p.researchMethods as FieldResearchData["researchMethods"];
@@ -189,6 +194,7 @@ function parseFieldResearch(slots: ArtifactSlots): FieldResearchData {
     toKnowPrep,
     toKnowCoreQuestion,
     toKnowTable,
+    toKnowTopicApplied,
     researchMethods,
     researchProtocol,
     prepConfirmed,

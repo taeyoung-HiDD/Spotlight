@@ -1,17 +1,33 @@
 import type { Stage4PersonaEmpathyMap } from "@/lib/stages/stage4/types";
 import type { Stage3ResearchPrep } from "@/lib/stages/fieldResearch/stage3ResearchPrep";
+import type { SelectionCriterionDetail } from "@/lib/stages/fieldResearch/selectionProfile";
 
-export type RespondentRole = "heavy" | "light" | "control";
+export type RespondentRole = "heavy" | "light" | "control" | "secondary";
 export type RespondentRecruitStatus = "recruited" | "pending" | "open";
 
 export interface Respondent {
   id: string;
   shortLabel: string;
   name: string;
+  /** 특성 한 줄 (title 역할) */
   subtitle: string;
   role: RespondentRole;
   recruitStatus: RespondentRecruitStatus;
   consentReceived: boolean;
+  /** 이 유형에 배정된 조사 인원 */
+  participantCount: number;
+  /**
+   * 선정 기준 칩 — selectionProfile.selectionCriteria
+   * (segmentation_variables와 동일 스키마)
+   */
+  selectionCriteria: string[];
+  /** 칩별 「왜 이 대상에 이 기준인가」 */
+  criterionDetails: SelectionCriterionDetail[];
+  /**
+   * 선정 이유 — selectionProfile.reasoning
+   * (segment.reason / reasoning과 동일 스키마)
+   */
+  reasoning: string;
 }
 
 export type LogEntryKind = "behavior" | "quote" | "note";
@@ -151,6 +167,11 @@ export interface FieldResearchData {
   toKnowCoreQuestion: string;
   /** 사용자 조사 준비하기 — To-know Table (주제별 파악 정보 + 방법) */
   toKnowTable: ToKnowRow[];
+  /**
+   * 주제(문제 정의) 맞춤 질문(researchPrep.topicQuestions)으로 표를 교체했는지.
+   * true면 재진입 시 도메인 중립 템플릿 시드를 다시 병합하지 않음.
+   */
+  toKnowTopicApplied: boolean;
   /** 사용자 조사 준비하기 — 조사 계획(방법 + 간단 이유) */
   researchMethods: ResearchMethodPlan[];
   /** 리서치 진행을 위한 간단한 가이드(질문/관찰 포인트/금지사항 등) */

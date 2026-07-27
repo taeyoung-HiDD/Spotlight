@@ -146,10 +146,14 @@ export function hydrateFieldResearchFromPriorStages(
 ): FieldResearchData {
   const subjects = resolveResearchSubjects(ctx);
   const target = subjects[0] ?? ctx.personaName?.trim() ?? "목표 사용자";
-  const seeded = buildToKnowTable(ctx);
-  const merged = base.toKnowTable.length
-    ? mergeToKnowTableWithSeed(base.toKnowTable, seeded)
-    : seeded;
+  // 주제 맞춤 질문으로 교체된 표에는 도메인 중립 템플릿 시드를 다시 섞지 않음
+  const skipSeed = base.toKnowTopicApplied && base.toKnowTable.length > 0;
+  const seeded = skipSeed ? [] : buildToKnowTable(ctx);
+  const merged = skipSeed
+    ? base.toKnowTable
+    : base.toKnowTable.length
+      ? mergeToKnowTableWithSeed(base.toKnowTable, seeded)
+      : seeded;
   const remapped = remapToKnowInfoCategories(merged, subjects);
   const toKnowTable = sanitizeToKnowTableRows(
     remapped,

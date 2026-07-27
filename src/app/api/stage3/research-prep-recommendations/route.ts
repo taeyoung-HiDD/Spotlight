@@ -7,12 +7,23 @@ import {
   normalizeStage3ResearchPrep,
   parseResearchPrepJson,
 } from "@/lib/stages/fieldResearch/stage3ResearchPrep";
+import { heuristicTopicInterviewQuestions } from "@/lib/stages/fieldResearch/topicInterviewQuestions";
 import type { PrePmfOverviewData } from "@/lib/stages/stage2/prePmfOverview";
+
+function parseStringList(raw: unknown, max: number): string[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter((x): x is string => typeof x === "string")
+    .map((x) => x.trim())
+    .filter(Boolean)
+    .slice(0, max);
+}
 
 function parsePrePmfSummary(body: Record<string, unknown>): {
   problem: string;
   prePmfSummary: string;
   targetLabels: string[];
+  questionSubjects: string[];
   prePmf?: PrePmfOverviewData;
 } {
   const problem =
@@ -21,15 +32,9 @@ function parsePrePmfSummary(body: Record<string, unknown>): {
     typeof body.prePmfSummary === "string"
       ? body.prePmfSummary.trim().slice(0, 4000)
       : "";
-  const rawLabels = body.targetLabels;
-  const targetLabels = Array.isArray(rawLabels)
-    ? rawLabels
-        .filter((x): x is string => typeof x === "string")
-        .map((x) => x.trim())
-        .filter(Boolean)
-        .slice(0, 8)
-    : [];
-  return { problem, prePmfSummary, targetLabels };
+  const targetLabels = parseStringList(body.targetLabels, 8);
+  const questionSubjects = parseStringList(body.questionSubjects, 4);
+  return { problem, prePmfSummary, targetLabels, questionSubjects };
 }
 
 export async function POST(request: Request) {
@@ -41,7 +46,8 @@ export async function POST(request: Request) {
   }
 
   const o = body as Record<string, unknown>;
-  const { problem, prePmfSummary, targetLabels } = parsePrePmfSummary(o);
+  const { problem, prePmfSummary, targetLabels, questionSubjects } =
+    parsePrePmfSummary(o);
 
   const heuristicFallback = () => {
     const prep = heuristicResearchPrep(problem, {
@@ -60,7 +66,12 @@ export async function POST(request: Request) {
 
   try {
     const result = await groqComplete(
-      buildResearchPrepPrompt(problem, prePmfSummary, targetLabels),
+      buildResearchPrepPrompt(
+        problem,
+        prePmfSummary,
+        targetLabels,
+        questionSubjects,
+      ),
       {
         models: resolveGroqTextModels(),
         temperature: 0.45,
@@ -73,6 +84,10 @@ export async function POST(request: Request) {
         researchPrep: heuristicFallback(),
         source: "heuristic_fallback",
       });
+    }
+    // 모델이 topicQuestions를 빠뜨리면 주제 삽입형 폴백으로 채움
+    if (!parsed.topicQuestions?.length) {
+      parsed.topicQuestions = heuristicTopicInterviewQuestions(problem);
     }
     return NextResponse.json({
       researchPrep: normalizeStage3ResearchPrep({

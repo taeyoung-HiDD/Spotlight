@@ -2,7 +2,6 @@
 
 import { useMemo, useState } from "react";
 import { useUiLocale } from "@/hooks/useUiLocale";
-import { IconLetterS } from "@tabler/icons-react";
 import { ParkingLotTray } from "@/components/stage/shared/ParkingLotTray";
 import { IdeaGridBoard } from "@/components/stage/stage8/IdeaGridBoard";
 import { IdeaGridHmwSetupPanel } from "@/components/stage/stage8/IdeaGridHmwSetupPanel";
@@ -289,101 +288,49 @@ export function IdeaGridWorkPanel({
         />
       ) : (
         <div className="space-y-4">
-          <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_220px]">
-            <div className="min-w-0 space-y-3">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div className="min-w-0">
-                  {nextPull ? (
-                    <p className={stageCaption}>
-                      다음: {nextPull.label} · {nextPull.needs.length}개
-                    </p>
-                  ) : (
-                    <p className={stageCaption}>
-                      더 꺼낼 사분면 니즈가 없어요.
-                    </p>
-                  )}
-                </div>
-                <div className="flex flex-wrap gap-1.5">
-                  <button
-                    type="button"
-                    onClick={openAlternateView}
-                    className={stageBtnSecondary}
-                  >
-                    다른 관점이 필요해요
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => void onPullNextQuadrant()}
-                    disabled={!nextPull || pullingQuadrant || saving}
-                    className={stageBtnSecondary}
-                  >
-                    {pullingQuadrant
-                      ? "Kevin이 HMW 만드는 중…"
-                      : "다음 사분면에서 HMW 더 가져오기"}
-                  </button>
-                </div>
+          <div className="min-w-0 space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="min-w-0">
+                {nextPull ? (
+                  <p className={stageCaption}>
+                    다음: {nextPull.label} · {nextPull.needs.length}개
+                  </p>
+                ) : (
+                  <p className={stageCaption}>
+                    더 꺼낼 사분면 니즈가 없어요.
+                  </p>
+                )}
               </div>
-              {stimulusNote ? (
-                <p className="rounded-md bg-cream px-3 py-2 text-[13px] font-medium text-foreground break-keep">
-                  Kevin: {stimulusNote}
-                </p>
-              ) : null}
-              <IdeaGridBoard
-                data={data}
-                hmwQuestions={allQuestions}
-                onSelectCell={openCell}
-              />
+              <div className="flex flex-wrap gap-1.5">
+                <button
+                  type="button"
+                  onClick={openAlternateView}
+                  className={stageBtnSecondary}
+                >
+                  다른 관점이 필요해요
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void onPullNextQuadrant()}
+                  disabled={!nextPull || pullingQuadrant || saving}
+                  className={stageBtnSecondary}
+                >
+                  {pullingQuadrant
+                    ? "Kevin이 HMW 만드는 중…"
+                    : "다음 사분면에서 HMW 더 가져오기"}
+                </button>
+              </div>
             </div>
-            <aside className="rounded-xl border border-border-warm bg-cream/40 p-3">
-              <p className={`mb-2 ${stageLabel}`}>막힐 때 보강 도구</p>
-              <button
-                type="button"
-                onClick={openScamper}
-                className="mb-2 flex w-full items-center gap-2 rounded-lg border border-border-warm bg-panel px-3 py-2.5 text-left hover:border-spotlight/40"
-              >
-                <span className="flex size-7 items-center justify-center rounded-md border border-border-warm bg-cream text-sm font-bold">
-                  <IconLetterS className="size-4" stroke={2} />
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className="block text-sm font-medium text-foreground">
-                    SCAMPER
-                  </span>
-                  <span className={`${stageCaption} text-muted`}>
-                    7글자로 비틀어보기
-                  </span>
-                </span>
-              </button>
-              <button
-                type="button"
-                onClick={() =>
-                  onChange({
-                    ...data,
-                    activeView: "principle",
-                    selectedCellIndex: null,
-                  })
-                }
-                className="mb-2 w-full rounded-lg border border-border-warm bg-panel px-3 py-2 text-left text-[13px] font-semibold hover:border-spotlight/40"
-              >
-                원리 카드
-              </button>
-              <button
-                type="button"
-                onClick={() =>
-                  onChange({
-                    ...data,
-                    activeView: "team_persona",
-                    selectedCellIndex: null,
-                  })
-                }
-                className="w-full rounded-lg border border-border-warm bg-panel px-3 py-2 text-left text-[13px] font-semibold hover:border-spotlight/40"
-              >
-                팀 관점
-              </button>
-              <p className={`mt-3 ${stageCaption}`}>
-                먼저 스스로 펼치고, 막히면 「다른 관점이 필요해요」로 자극을
-                받아 보세요.
+            {stimulusNote ? (
+              <p className="rounded-md bg-cream px-3 py-2 text-[13px] font-medium text-foreground break-keep">
+                Kevin: {stimulusNote}
               </p>
-            </aside>
+            ) : null}
+            <IdeaGridBoard
+              data={data}
+              hmwQuestions={allQuestions}
+              onSelectCell={openCell}
+            />
           </div>
 
           <ParkingLotTray

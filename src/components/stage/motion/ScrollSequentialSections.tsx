@@ -37,8 +37,8 @@ const navBtnBase =
   "inline-flex min-w-0 flex-1 items-center gap-2 rounded-xl px-3.5 py-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-spotlight/50";
 
 /**
- * 같은 자리에서 클릭으로 다음 자식을 하나씩 보여 줌 (교체 표시).
- * 이전/다음 버튼에 목적지 제목을 함께 표시.
+ * 같은 자리에서 클릭으로 자식을 하나씩 보여 줌 (교체 표시).
+ * 하단에는 현재 외 모든 CORE로 바로 이동하는 버튼을 표시.
  */
 export function ClickSequentialSections({
   children,
@@ -60,27 +60,23 @@ export function ClickSequentialSections({
     setActiveIndex(0);
   }, [resetKey, items.length]);
 
-  const goPrev = useCallback(() => {
-    setActiveIndex((prev) => Math.max(0, prev - 1));
-  }, []);
-
-  const goNext = useCallback(() => {
-    setActiveIndex((prev) => Math.min(items.length - 1, prev + 1));
-  }, [items.length]);
+  const goTo = useCallback(
+    (index: number) => {
+      setActiveIndex(Math.max(0, Math.min(items.length - 1, index)));
+    },
+    [items.length],
+  );
 
   if (showAll) {
     return <div className={className}>{items}</div>;
   }
 
   const current = items[activeIndex];
-  const hasPrev = activeIndex > 0;
-  const hasMore = activeIndex < items.length - 1;
+  const isLast = activeIndex >= items.length - 1;
   const stepLabel = `${activeIndex + 1} / ${items.length}`;
-
-  const prevIndex = activeIndex - 1;
-  const nextIndex = activeIndex + 1;
-  const prevTitle = stepTitles[prevIndex]?.trim() ?? "";
-  const nextTitle = stepTitles[nextIndex]?.trim() ?? "";
+  const otherIndexes = items
+    .map((_, index) => index)
+    .filter((index) => index !== activeIndex);
 
   return (
     <div className={className}>
@@ -98,62 +94,60 @@ export function ClickSequentialSections({
         <p className="text-center text-[12px] font-medium text-muted">
           {stepPrefix} {stepLabel}
         </p>
-        <div className="flex flex-wrap gap-2">
-          {hasPrev ? (
-            <button
-              type="button"
-              onClick={goPrev}
-              className={[
-                navBtnBase,
-                "border border-border-warm bg-panel text-foreground hover:bg-cream",
-              ].join(" ")}
-            >
-              <IconChevronLeft
-                className="size-4 shrink-0"
-                stroke={2.25}
-                aria-hidden
-              />
-              <span className="min-w-0 flex-1">
-                <span className="block text-[12px] font-medium text-muted">
-                  {prevLabel} · {stepPrefix} {prevIndex + 1}
-                </span>
-                {prevTitle ? (
-                  <span className="mt-0.5 block text-[13.5px] font-semibold leading-snug break-keep">
-                    {prevTitle}
+        {otherIndexes.length > 0 ? (
+          <div className="flex flex-wrap gap-2">
+            {otherIndexes.map((index) => {
+              const isForward = index > activeIndex;
+              const title = stepTitles[index]?.trim() ?? "";
+              return (
+                <button
+                  key={`${stepPrefix}-${index}`}
+                  type="button"
+                  onClick={() => goTo(index)}
+                  className={[
+                    navBtnBase,
+                    otherIndexes.length === 1 ? "w-full" : "",
+                    isForward
+                      ? "border border-spotlight/50 bg-highlight text-foreground hover:bg-spotlight/15"
+                      : "border border-border-warm bg-panel text-foreground hover:bg-cream",
+                  ].join(" ")}
+                >
+                  {!isForward ? (
+                    <IconChevronLeft
+                      className="size-4 shrink-0"
+                      stroke={2.25}
+                      aria-hidden
+                    />
+                  ) : null}
+                  <span className="min-w-0 flex-1">
+                    <span
+                      className={[
+                        "block text-[12px] font-medium",
+                        isForward ? "text-gold" : "text-muted",
+                      ].join(" ")}
+                    >
+                      {isForward ? nextLabel : prevLabel} · {stepPrefix}{" "}
+                      {index + 1}
+                    </span>
+                    {title ? (
+                      <span className="mt-0.5 block text-[13.5px] font-semibold leading-snug break-keep">
+                        {title}
+                      </span>
+                    ) : null}
                   </span>
-                ) : null}
-              </span>
-            </button>
-          ) : null}
-          {hasMore ? (
-            <button
-              type="button"
-              onClick={goNext}
-              className={[
-                navBtnBase,
-                hasPrev ? "" : "w-full",
-                "border border-spotlight/50 bg-highlight text-foreground hover:bg-spotlight/15",
-              ].join(" ")}
-            >
-              <span className="min-w-0 flex-1">
-                <span className="block text-[12px] font-medium text-gold">
-                  {nextLabel} · {stepPrefix} {nextIndex + 1}
-                </span>
-                {nextTitle ? (
-                  <span className="mt-0.5 block text-[13.5px] font-semibold leading-snug break-keep">
-                    {nextTitle}
-                  </span>
-                ) : null}
-              </span>
-              <IconChevronRight
-                className="size-4 shrink-0"
-                stroke={2.25}
-                aria-hidden
-              />
-            </button>
-          ) : null}
-        </div>
-        {!hasMore && doneHint ? (
+                  {isForward ? (
+                    <IconChevronRight
+                      className="size-4 shrink-0"
+                      stroke={2.25}
+                      aria-hidden
+                    />
+                  ) : null}
+                </button>
+              );
+            })}
+          </div>
+        ) : null}
+        {isLast && doneHint ? (
           <p className="rounded-xl border border-border-warm bg-cream/50 px-4 py-3 text-center text-[13px] text-muted break-keep">
             {doneHint}
           </p>

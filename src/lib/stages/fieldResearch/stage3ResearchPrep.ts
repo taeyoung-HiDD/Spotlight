@@ -3,9 +3,19 @@ import {
   prePmfPersonDisplayName,
   prePmfPersonDisplayLabels,
 } from "@/lib/stages/stage2/prePmfOverview";
+import { COACH_KOREAN_LABEL_RULE, sanitizeCoachKoreanText } from "@/lib/coach/sanitizeCoachKorean";
+import { readSelectionProfile } from "@/lib/stages/fieldResearch/selectionProfile";
+import type { SelectionCriterionDetail } from "@/lib/stages/fieldResearch/selectionProfile";
+import { normalizeRespondentRole } from "@/lib/stages/fieldResearch/extremeUserRole";
+import {
+  heuristicTopicInterviewQuestions,
+  normalizeTopicInterviewQuestions,
+  type TopicInterviewQuestion,
+} from "@/lib/stages/fieldResearch/topicInterviewQuestions";
 import type {
   FieldResearchData,
   ResearchMethodId,
+  RespondentRole,
 } from "@/lib/stages/fieldResearch/types";
 import {
   getDtFieldResearchCatalog,
@@ -36,7 +46,7 @@ function normalizeMethodRationales(
     const id = key.trim() as ResearchMethodId;
     if (!isDtFieldResearchMethod(id)) continue;
     if (typeof value !== "string") continue;
-    const text = value.trim().slice(0, 240);
+    const text = sanitizeCoachKoreanText(value.trim()).slice(0, 240);
     if (text) out[id] = text;
   }
   return out;
@@ -47,7 +57,12 @@ export interface Stage3ResearchSegment {
   label: string;
   recommendedCount: number;
   selectedCount: number;
+  selectionCriteria: string[];
+  criterionDetails: SelectionCriterionDetail[];
+  reasoning: string;
+  /** @deprecated reasoning과 동일 — 하위 호환 */
   reason: string;
+  role?: RespondentRole;
 }
 
 export interface Stage3ResearchPrep {
@@ -65,6 +80,8 @@ export interface Stage3ResearchPrep {
   selectedParticipantCount: number;
   segments: Stage3ResearchSegment[];
   keyQuestionGuides: string[];
+  /** 주제(문제 정의)와 직결된 대상자별 확인 질문 — To-know 표에 반영 */
+  topicQuestions: TopicInterviewQuestion[];
   selectedPath: Stage3ResearchPath;
   activeGuideMethod: Stage3GuideMethodTab;
   recommendationsGenerated: boolean;
@@ -81,6 +98,7 @@ export function emptyStage3ResearchPrep(): Stage3ResearchPrep {
     selectedParticipantCount: 5,
     segments: [],
     keyQuestionGuides: [],
+    topicQuestions: [],
     selectedPath: "field_interview",
     activeGuideMethod: "shadowing",
     recommendationsGenerated: false,
@@ -88,13 +106,27 @@ export function emptyStage3ResearchPrep(): Stage3ResearchPrep {
 }
 
 function clip(value: unknown, max: number): string {
-  return typeof value === "string" ? value.trim().slice(0, max) : "";
+  if (typeof value !== "string") return "";
+  return sanitizeCoachKoreanText(value.trim()).slice(0, max);
+}
+
+function normalizeCriteria(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  const out: string[] = [];
+  for (const value of raw) {
+    if (typeof value !== "string") continue;
+    const text = sanitizeCoachKoreanText(value.trim()).slice(0, 40);
+    if (!text || out.includes(text)) continue;
+    out.push(text);
+    if (out.length >= 5) break;
+  }
+  return out;
 }
 
 function normalizeSegment(raw: unknown, index: number): Stage3ResearchSegment | null {
   if (!raw || typeof raw !== "object") return null;
-  const o = raw as Partial<Stage3ResearchSegment>;
-  const label = clip(o.label, 80);
+  const o = raw as Record<string, unknown>;
+  const label = clip(o.label, 100);
   if (!label) return null;
   const recommendedCount = Math.min(
     20,
@@ -104,13 +136,83 @@ function normalizeSegment(raw: unknown, index: number): Stage3ResearchSegment | 
     20,
     Math.max(0, Math.round(Number(o.selectedCount) || recommendedCount || 1)),
   );
+  const profile = readSelectionProfile(o);
+  const reasoning = profile.reasoning;
+  const role = normalizeRespondentRole(o.role) ?? undefined;
   return {
     id: clip(o.id, 40) || `seg-${index}-${label.slice(0, 8)}`,
     label,
     recommendedCount: recommendedCount || 1,
     selectedCount: selectedCount || recommendedCount || 1,
-    reason: clip(o.reason, 200),
+    selectionCriteria: profile.selectionCriteria,
+    criterionDetails: profile.criterionDetails,
+    reasoning,
+    reason: reasoning,
+    role,
   };
+}
+
+/** 세그먼트 간 선정 기준이 동일하면 역할을 기준으로 살짝 분화 (후처리) */
+function diversifyIdenticalCriteria(
+  segments: Stage3ResearchSegment[],
+): Stage3ResearchSegment[] {
+  if (segments.length < 2) return segments;
+  const key = (s: Stage3ResearchSegment) =>
+    [...s.selectionCriteria].sort().join("|");
+  const groups = new Map<string, number[]>();
+  segments.forEach((s, i) => {
+    const k = key(s);
+    if (!k) return;
+    const list = groups.get(k) ?? [];
+    list.push(i);
+    groups.set(k, list);
+  });
+  const next = segments.map((s) => ({ ...s }));
+  for (const indexes of groups.values()) {
+    if (indexes.length < 2) continue;
+    indexes.forEach((idx, order) => {
+      const seg = next[idx]!;
+      const role =
+        seg.role ??
+        (order === 0
+          ? "heavy"
+          : order === 1
+            ? "light"
+            : order === 2
+              ? "secondary"
+              : "control");
+      const suffix =
+        role === "heavy"
+          ? "경험 빈도(많음)"
+          : role === "light"
+            ? "경험 빈도(적음)"
+            : role === "secondary"
+              ? "2순위 보완"
+              : "중간 대비";
+      if (!seg.selectionCriteria.includes(suffix)) {
+        seg.selectionCriteria = [...seg.selectionCriteria, suffix].slice(0, 5);
+        seg.criterionDetails = [
+          ...seg.criterionDetails,
+          {
+            label: suffix,
+            why:
+              role === "heavy"
+                ? "같은 겉라벨이라도 경험 강도가 높은 쪽을 Heavy로 분리해요."
+                : role === "light"
+                  ? "같은 겉라벨이라도 경험이 적은 쪽을 Light로 분리해요."
+                  : role === "secondary"
+                    ? "양 극단 다음으로 면접 가치가 있어 2순위로 보완해요."
+                    : "양 끝과 비교할 중간 기준선이에요.",
+          },
+        ].slice(0, 5);
+      }
+      if (!seg.reasoning.trim()) {
+        seg.reasoning = `${seg.label}은(는) ${suffix} 관점에서 나눠 본 가설이에요.`;
+        seg.reason = seg.reasoning;
+      }
+    });
+  }
+  return next;
 }
 
 export function normalizeStage3ResearchPrep(
@@ -119,18 +221,21 @@ export function normalizeStage3ResearchPrep(
   const base = emptyStage3ResearchPrep();
   if (!raw || typeof raw !== "object") return base;
   const o = raw as Partial<Stage3ResearchPrep>;
-  const segments = Array.isArray(o.segments)
-    ? o.segments
-        .map((s, idx) => normalizeSegment(s, idx))
-        .filter((s): s is Stage3ResearchSegment => s !== null)
-        .slice(0, 6)
-    : [];
+  const segments = diversifyIdenticalCriteria(
+    Array.isArray(o.segments)
+      ? o.segments
+          .map((s, idx) => normalizeSegment(s, idx))
+          .filter((s): s is Stage3ResearchSegment => s !== null)
+          .slice(0, 6)
+      : [],
+  );
   const keyQuestionGuides = Array.isArray(o.keyQuestionGuides)
     ? o.keyQuestionGuides
         .filter((q): q is string => typeof q === "string" && q.trim().length > 0)
-        .map((q) => q.trim().slice(0, 240))
+        .map((q) => sanitizeCoachKoreanText(q.trim()).slice(0, 240))
         .slice(0, 6)
     : [];
+  const topicQuestions = normalizeTopicInterviewQuestions(o.topicQuestions);
   const recommendedParticipantCount = Math.min(
     30,
     Math.max(
@@ -170,6 +275,7 @@ export function normalizeStage3ResearchPrep(
     selectedParticipantCount,
     segments,
     keyQuestionGuides,
+    topicQuestions,
     selectedPath,
     activeGuideMethod,
     recommendationsGenerated: o.recommendationsGenerated === true,
@@ -212,45 +318,158 @@ export function heuristicResearchPrep(
   problem: string,
   pre: PrePmfOverviewData,
 ): Stage3ResearchPrep {
+  const problemLower = problem.toLowerCase();
+  const looksFinancial =
+    /금융|자산|저축|투자|돈|월급|경제|자취|사회\s*초년/.test(problem) ||
+    /finance|asset|money/.test(problemLower);
+
   const targets = pre.targetUsers.filter(
     (u, i) => prePmfPersonDisplayName(u, i, "타겟").trim() || u.reason.trim(),
   );
-  const segments: Stage3ResearchSegment[] = targets.slice(0, 4).map((user, idx) => {
+
+  const withProfile = (
+    seg: Omit<Stage3ResearchSegment, "reason" | "reasoning" | "criterionDetails"> & {
+      reason: string;
+      criterionDetails?: SelectionCriterionDetail[];
+    },
+  ): Stage3ResearchSegment => {
+    const criterionDetails =
+      seg.criterionDetails ??
+      seg.selectionCriteria.map((label) => ({ label, why: "" }));
+    return {
+      ...seg,
+      criterionDetails,
+      reasoning: seg.reason,
+      reason: seg.reason,
+    };
+  };
+
+  let segments: Stage3ResearchSegment[] = targets.slice(0, 4).map((user, idx) => {
     const label = prePmfPersonDisplayName(user, idx, "타겟");
     const count = idx === 0 ? 3 : idx === 1 ? 2 : 1;
-    return {
+    const fromReason = user.reason.trim();
+    const reason =
+      fromReason.slice(0, 280) ||
+      "2단계 사전 조사에서 정리한 타겟을, 문제와 맞닿는 생활·직업 맥락으로 나눠 조사해요.";
+    return withProfile({
       id: `seg-${idx}-${label.slice(0, 6)}`,
       label,
       recommendedCount: count,
       selectedCount: count,
-      reason:
-        user.reason.trim().slice(0, 120) ||
-        "2단계 사전 조사에서 정리한 타겟 유저예요.",
-    };
+      selectionCriteria: fromReason
+        ? ["사전 조사 타겟 구분"]
+        : ["직업", "생활 맥락"],
+      reason,
+      role: idx === 0 ? "heavy" : idx === 1 ? "light" : "control",
+    });
   });
-  if (!segments.length) {
-    segments.push({
-      id: "seg-default",
-      label: "핵심 타겟 유저",
-      recommendedCount: 3,
-      selectedCount: 3,
-      reason: "사전 조사에서 정의한 주요 이용자 그룹이에요.",
-    });
-    segments.push({
-      id: "seg-general",
-      label: "일반 이용자",
-      recommendedCount: 2,
-      selectedCount: 2,
-      reason: "비교·대조를 위해 넓은 범위의 이용자도 포함해요.",
-    });
+
+  type SegDraft = Omit<
+    Stage3ResearchSegment,
+    "reason" | "reasoning" | "criterionDetails"
+  > & { reason: string; reasoning?: string };
+
+  if (!segments.length && looksFinancial) {
+    const drafts: SegDraft[] = [
+      {
+        id: "seg-solo-no-support",
+        label: "자취 · 부모 경제 지원 거의 없는 사회 초년생",
+        recommendedCount: 2,
+        selectedCount: 2,
+        selectionCriteria: ["자취 유무", "부모 경제 지원", "직장 연차"],
+        reason:
+          "금융 자아·자산 관리는 주거비 부담과 부모 지원 여부에 따라 저축·소비 패턴이 크게 갈려요. 자취하면서 스스로 생활비를 꾸리는 쪽을 먼저 깊게 봐요.",
+        role: "heavy",
+      },
+      {
+        id: "seg-career-shift",
+        label: "이직·프리랜스 전환기 직장인",
+        recommendedCount: 2,
+        selectedCount: 2,
+        selectionCriteria: ["고용 형태", "소득 안정성", "금융 도구 사용"],
+        reason:
+          "소득이 불안정해지는 전환기는 금융 앱·가계부 습관이 깨지거나 새로 생기는 순간이에요. 극단 사례로 보편 패턴을 찾으려고 소수를 넣어요.",
+        role: "light",
+      },
+      {
+        id: "seg-peer-learn",
+        label: "또래 커뮤니티로 금융을 배우는 사회 초년생",
+        recommendedCount: 1,
+        selectedCount: 1,
+        selectionCriteria: ["또래 영향", "금융 학습 채널"],
+        reason:
+          "양 극단 다음으로, 사회적 학습이 저축·투자 시작을 미는 2순위 그룹이에요. 극단만큼 강하지 않아도 니즈가 잘 드러나요.",
+        role: "secondary",
+      },
+      {
+        id: "seg-family-support",
+        label: "가족과 동거 · 일부 지원을 받는 사회 초년생",
+        recommendedCount: 1,
+        selectedCount: 1,
+        selectionCriteria: ["동거 여부", "부모 경제 지원", "혼인 여부"],
+        reason:
+          "같은 연령·직장이라도 동거·지원이 있으면 위험 감수·투자 시작 시점이 달라져요. 양 끝과 비교할 대조군이에요.",
+        role: "control",
+      },
+    ];
+    segments = drafts.map((d) => withProfile(d));
+  } else if (!segments.length) {
+    const drafts: SegDraft[] = [
+      {
+        id: "seg-default",
+        label: "문제를 가장 자주 겪는 핵심 이용자",
+        recommendedCount: 2,
+        selectedCount: 2,
+        selectionCriteria: ["문제 경험 빈도", "직업·역할"],
+        reason:
+          "문제 정의와 가장 맞닿은 일상·역할을 기준으로 핵심 이용자를 먼저 깊이 조사해요.",
+        role: "heavy",
+      },
+      {
+        id: "seg-contrast-light",
+        label: "거의 안 겪거나 우회하는 이용자",
+        recommendedCount: 2,
+        selectedCount: 2,
+        selectionCriteria: ["문제 경험 빈도", "대안 행동"],
+        reason:
+          "Light 극단으로, 왜 덜 겪는지·어떻게 우회하는지를 봐요.",
+        role: "light",
+      },
+      {
+        id: "seg-secondary",
+        label: "가끔 겪지만 대안을 적극 찾는 이용자",
+        recommendedCount: 1,
+        selectedCount: 1,
+        selectionCriteria: ["대안 탐색", "문제 경험 빈도"],
+        reason:
+          "양 극단 다음 2순위 — 중간 빈도라도 해결을 찾는 행동이 활발한 그룹이에요.",
+        role: "secondary",
+      },
+    ];
+    segments = drafts.map((d) => withProfile(d));
   }
+
+  segments = segments.map((s) =>
+    withProfile({
+      ...s,
+      reason: s.reason || s.reasoning,
+      criterionDetails:
+        s.criterionDetails?.length
+          ? s.criterionDetails
+          : s.selectionCriteria.map((label) => ({
+              label,
+              why: `${s.label}에게 이 축이 행동을 가르는 이유로 보여요. (가설)`,
+            })),
+    }),
+  );
+
   const recommendedParticipantCount = Math.max(
     5,
     segments.reduce((sum, s) => sum + s.recommendedCount, 0),
   );
   const participantCountReason =
     segments.length > 1
-      ? `정성 조사는 5~8명이면 반복되는 행동 패턴이 드러나요. ${segments.length}개 세그먼트를 비교·대조하려고 세그먼트별 인원을 합쳐 총 ${recommendedParticipantCount}명을 권장해요.`
+      ? `정성 조사는 5~8명이면 반복되는 행동 패턴이 드러나요. ${segments.length}개 세그먼트를 선정 기준으로 비교·대조하려고 세그먼트별 인원을 합쳐 총 ${recommendedParticipantCount}명을 권장해요.`
       : `정성 조사는 5명 안팎이면 반복되는 행동 패턴이 충분히 드러나므로, 깊이 있는 인터뷰가 가능한 ${recommendedParticipantCount}명을 권장해요.`;
   const problemHint = problem.trim().slice(0, 80);
   const keyQuestionGuides = [
@@ -260,6 +479,7 @@ export function heuristicResearchPrep(
     "그 순간 가장 답답했던 점은 무엇이었나요?",
     "지금 쓰는 대안이나 우회 방법이 있다면, 왜 그걸 계속 쓰고 있나요?",
   ];
+  const topicQuestions = heuristicTopicInterviewQuestions(problem);
 
   const recommendedMethods: ResearchMethodId[] = [
     "home_visit_in_depth",
@@ -282,6 +502,7 @@ export function heuristicResearchPrep(
     selectedParticipantCount: recommendedParticipantCount,
     segments,
     keyQuestionGuides,
+    topicQuestions,
     selectedPath: "field_interview",
     activeGuideMethod: "home_visit_in_depth",
     recommendationsGenerated: true,
@@ -292,24 +513,45 @@ export function buildResearchPrepPrompt(
   problem: string,
   prePmfSummary: string,
   targetLabels: string[],
+  questionSubjects: string[] = [],
 ): string {
   const methodCatalog = getDtFieldResearchCatalog()
     .map((m) => `- ${m.id} (${m.label}): ${m.summary}`)
     .join("\n");
+
+  const subjects = questionSubjects.map((s) => s.trim()).filter(Boolean);
+  const subjectLine = subjects.length
+    ? subjects.map((s) => `「${s}」`).join(" · ")
+    : "(목록 없음 — subject 생략 가능)";
 
   return `
 당신은 사용자 조사 준비 코치입니다. 1·2단계 문제 정의와 사전 조사를 바탕으로, 문제에 맞는 리서치 방법·조사 대상·인원·핵심 질문 가이드를 한국어로 제안합니다.
 
 규칙:
 - 모든 내용은 **가설**이며 존댓말(~해요/~예요)로 씁니다.
+${COACH_KOREAN_LABEL_RULE}
 - recommendedMethods: 아래 **Design Thinking 공감(Empathize) 리서치 방법 id** 중 문제에 가장 적합한 1~3개만 고릅니다.
 - **설문(survey)·데스크리서치(desk_research)·FGD(fgd)·기타(other)는 절대 추천하지 않습니다.**
 - methodRecommendationReason: 왜 그 방법 조합이 이 문제에 맞는지 한 문장.
 - methodRationales: recommendedMethods **각각의 id를 키**로, "왜 이 방법이 이 문제·타겟에 적합한지"를 문제 맥락과 연결해 한 문장씩 씁니다.
 - recommendedParticipantCount: 총 권장 인원 (보통 5~8명, B2B는 3~6명도 가능)
 - participantCountReason: 왜 그 인원이 적정한지 한 문장 (정성 조사 특성·세그먼트 수·B2B 등 문제 맥락과 연결)
-- segments: 세그먼트별 label·recommendedCount·reason (합이 총 인원과 맞도록)
-- keyQuestionGuides: 과거 행동·맥락을 묻는 질문 3~4개 (미래 가정·솔루션 검증 질문 금지)
+- segments: 3~5개. Extreme User 스펙트럼으로 배치합니다. **나이대만으로 나누지 마세요.** (「20대 초반 직장인 / 20대 후반 직장인」처럼 연령 밴드만 다른 분할은 금지)
+  - label: 문제와 직결된 **구체적 속성 조합**(자취·부모 지원·혼인·소득 안정성 등). 연령만 바꾼 라벨 금지.
+  - role: "heavy" | "light" | "secondary" | "control".
+    - heavy·light: **1순위 양 극단** (필수, 각 최소 1개)
+    - secondary: **2순위 후보** — 극단 다음으로 면접·관찰 가치가 큰 그룹 (필수 1~2개)
+    - control: 대조군 기준선 (0~1개, 선택)
+  - selectionCriteria: 세그먼트마다 **서로 다른** 구분 축 2~4개. 두 세그먼트가 같은 칩 목록을 공유하면 안 됩니다.
+  - criterionDetails: selectionCriteria 각 항목에 대해 {label, why} — **이 대상에게 왜 이 기준이 붙는지** 한 문장. 유형 공통 문구 복붙 금지.
+  - recommendedCount: 세그먼트별 인원 (합 = recommendedParticipantCount). 1순위(heavy+light)에 더 많은 인원을 배분하고, secondary는 그보다 적게.
+  - reason / reasoning: 유형 전체 선정 이유 1~2문장 + 위 기준들과 연결. secondary에는 「왜 극단 다음 우선순위인지」를 명시.
+- keyQuestionGuides: 과거 행동·맥락을 묻는 질문 3~4개. **문제 정의 속 구체 소재(도메인 명사)를 질문 안에 직접 포함**합니다. (미래 가정·솔루션 검증 질문 금지)
+- topicQuestions: 실제로 물어볼 인터뷰 질문. **아래 조사 대상자 목록의 각 대상자마다 8~10개씩**, {subject, category, question} 형태로 만듭니다. subject는 조사 대상자 목록의 표기를 그대로 사용합니다. category는 "사용자" | "현재 문제" | "행동 & 맥락" | "기존 솔루션" | "동기 & 목표" 중 하나로, 대상자마다 카테고리를 고르게 배분합니다.
+  - **대상자마다 질문이 서로 달라야 합니다.** 같은 질문을 여러 대상자에게 복사 금지. 각 대상자의 역할·상황·경험 수준에 맞춰 소재와 표현을 바꿉니다. (예: 금융 초보자에게는 첫 시도·막막함, 숙련 사용자에게는 도구 조합·한계, 서비스/앱/경쟁사가 대상이라면 그 서비스를 실제로 쓰는 사용자에게 이용 경험·아쉬움을 묻는 질문으로)
+  - **모든 질문에 문제 정의 속 구체 소재(도메인 명사·상황)를 직접 넣습니다.** 예: 금융 주제라면 월급·저축·가계부·금융 앱 등. 「평소 하루를 어떻게 보내시나요?」 「일상에서 무엇을 가장 중요하게 여기시나요?」처럼 어느 주제에나 통하는 일반 질문은 금지.
+  - 과거의 실제 행동·경험·감정을 묻습니다(최근 언제·어떤 상황·어떻게). 미래 가정·솔루션 검증 질문 금지.
+  - 응답자에게 직접 존댓말로 묻는 문장으로, 물음표로 끝냅니다.
 - JSON만 출력
 
 Design Thinking 공감 리서치 방법 (이 목록만 사용):
@@ -323,8 +565,11 @@ ${prePmfSummary || "(없음)"}
 
 타겟 힌트: ${targetLabels.join(" · ") || "(없음)"}
 
+조사 대상자 목록 (topicQuestions의 subject로 이 표기를 그대로 사용):
+${subjectLine}
+
 출력 형식:
-{"recommendedMethods":["home_visit_in_depth","shadowing"],"methodRecommendationReason":"...","methodRationales":{"home_visit_in_depth":"...","shadowing":"..."},"recommendedParticipantCount":5,"participantCountReason":"...","segments":[{"label":"...","recommendedCount":3,"reason":"..."}],"keyQuestionGuides":["..."]}
+{"recommendedMethods":["home_visit_in_depth","shadowing"],"methodRecommendationReason":"...","methodRationales":{"home_visit_in_depth":"...","shadowing":"..."},"recommendedParticipantCount":6,"participantCountReason":"...","segments":[{"label":"자취·부모 지원 거의 없는 사회 초년생","role":"heavy","selectionCriteria":["자취 유무","부모 경제 지원","첫 월급·연차"],"criterionDetails":[{"label":"자취 유무","why":"주거비가 저축 여력을 바로 가릅니다."},{"label":"부모 경제 지원","why":"지원이 없으면 금융 도구를 생존형으로 씁니다."},{"label":"첫 월급·연차","why":"입사 초기는 금융 습관이 생기는 극단입니다."}],"recommendedCount":2,"reason":"...","reasoning":"..."},{"label":"소득 변동이 큰 이직·프리랜스 전환기","role":"light","selectionCriteria":["고용 형태","소득 안정성","이직 경험"],"criterionDetails":[{"label":"고용 형태","why":"고용 형태에 따라 금융 접근이 달라집니다."},{"label":"소득 안정성","why":"변동기에는 저축 루틴이 깨지거나 재정비됩니다."},{"label":"이직 경험","why":"경력 전환은 돈 관리를 다시 짜는 계기입니다."}],"recommendedCount":2,"reason":"...","reasoning":"..."},{"label":"또래 커뮤니티로 금융을 배우는 사회 초년생","role":"secondary","selectionCriteria":["또래 영향","금융 학습 채널"],"criterionDetails":[{"label":"또래 영향","why":"극단 다음으로 또래 규범이 행동을 밉니다."},{"label":"금융 학습 채널","why":"커뮤니티 학습은 양 끝과 다른 니즈를 보여 줍니다."}],"recommendedCount":1,"reason":"양 극단 다음 2순위 후보예요.","reasoning":"양 극단 다음 2순위 후보예요."},{"label":"가족과 동거·일부 지원을 받는 초년 직장인","role":"control","selectionCriteria":["동거 여부","부모 경제 지원","혼인 여부"],"criterionDetails":[{"label":"동거 여부","why":"주거비 부담이 낮아 Heavy와 대비됩니다."},{"label":"부모 경제 지원","why":"부분 지원이 자립·의존의 기준선이 됩니다."},{"label":"혼인 여부","why":"가계 단위 차이를 대조하는 데 필요합니다."}],"recommendedCount":1,"reason":"...","reasoning":"..."}],"keyQuestionGuides":["..."],"topicQuestions":[{"subject":"20대 직장인","category":"현재 문제","question":"가장 최근 월급을 받은 뒤 저축과 소비를 나누다가 막막했던 순간은 언제였고, 그때 어떻게 하셨나요?"},{"subject":"금융 초보자","category":"기존 솔루션","question":"돈 관리를 처음 시작하려고 가계부나 앱을 깔았다가 그만둔 적이 있다면, 어떤 순간에 왜 멈추셨나요?"},{"subject":"토스","category":"행동 & 맥락","question":"토스를 쓰면서 월급 관리·저축과 관련해 직접 만들어 쓰시는 사용 습관이 있다면 무엇인가요?"}]}
 `.trim();
 }
 
@@ -334,16 +579,19 @@ export function parseResearchPrepJson(text: string): Partial<Stage3ResearchPrep>
   if (!jsonMatch) return null;
   try {
     const parsed = JSON.parse(jsonMatch[0]) as Record<string, unknown>;
-    const segments = Array.isArray(parsed.segments)
-      ? parsed.segments
-          .map((s, idx) => normalizeSegment(s, idx))
-          .filter((s): s is Stage3ResearchSegment => s !== null)
-      : [];
+    const segments = diversifyIdenticalCriteria(
+      Array.isArray(parsed.segments)
+        ? parsed.segments
+            .map((s, idx) => normalizeSegment(s, idx))
+            .filter((s): s is Stage3ResearchSegment => s !== null)
+        : [],
+    );
     const keyQuestionGuides = Array.isArray(parsed.keyQuestionGuides)
       ? parsed.keyQuestionGuides
           .filter((q): q is string => typeof q === "string" && q.trim().length > 0)
-          .map((q) => q.trim())
+          .map((q) => sanitizeCoachKoreanText(q.trim()).slice(0, 240))
       : [];
+    const topicQuestions = normalizeTopicInterviewQuestions(parsed.topicQuestions);
     const recommendedParticipantCount = Math.round(
       Number(parsed.recommendedParticipantCount) || 5,
     );
@@ -358,6 +606,7 @@ export function parseResearchPrepJson(text: string): Partial<Stage3ResearchPrep>
       selectedParticipantCount: recommendedParticipantCount,
       segments: segments.map((s) => ({ ...s, selectedCount: s.recommendedCount })),
       keyQuestionGuides,
+      topicQuestions,
       recommendationsGenerated: true,
     };
   } catch {

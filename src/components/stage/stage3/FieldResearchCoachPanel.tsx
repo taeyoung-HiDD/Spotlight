@@ -31,7 +31,18 @@ import {
   buildDefaultToKnowCoreQuestion,
   sanitizeToKnowCoreQuestion,
 } from "@/lib/stages/fieldResearch/toKnowGuideCategories";
-import type { FieldResearchData } from "@/lib/stages/fieldResearch/types";
+import {
+  demographicSpecificityCoachPrompt,
+  extractSelectionProfileFromUtterance,
+  isDemographicOnlyLabel,
+} from "@/lib/stages/fieldResearch/selectionProfile";
+import {
+  mergeSessionsForRespondents,
+  normalizeRespondent,
+  segmentsFromRespondents,
+} from "@/lib/stages/fieldResearch/respondentNormalize";
+import type { FieldResearchData, Respondent } from "@/lib/stages/fieldResearch/types";
+import { normalizeStage3ResearchPrep } from "@/lib/stages/fieldResearch/stage3ResearchPrep";
 
 function purposeHighlight(
   baseline: Stage3BaselineContext,
@@ -51,19 +62,19 @@ const RESEARCH_PREP_COACH_TAIL: CoachDialogItem[] = [
   {
     type: "bubble",
     content:
-      "왼쪽에서 조사 대상·인원·핵심 질문 가이드를 확인한 뒤 To-know list로 이어가 주세요.",
+      "CORE 2에서는 극단 사용자(Heavy·Light)와 대조군을 스펙트럼에 올려요. 「20대 직장인」처럼만 적히면, 거주·지원·혼인 같은 환경 변수로 더 구체화해 볼게요.",
   },
   {
     type: "highlight",
     label: "디자인씽킹 정신",
     content:
-      "지금은 가설 상태예요. 실제 조사 후 들은 말·본 행동으로 검증해 나갈 거예요.",
+      "극단에서 보편을 본다 — 양 끝의 사용자가 잠재 니즈를 가장 잘 드러낸다. 지금은 가설 상태예요.",
   },
   {
     type: "bubble",
     variant: "secondary",
     content:
-      "조사 계획을 정한 뒤 To-know list로 넘어가 질문과 방법을 구체화할게요.",
+      "조사 계획(방법·인원·대상)을 정한 뒤 To-know list로 넘어가 질문을 구체화할게요.",
   },
 ];
 
@@ -97,10 +108,11 @@ const STAGE3_DISCOVERY_DIRECTIVE = `3단계 사용자 조사 준비하기(To-kno
 - 1단계 문제·2단계 사전 조사를 짚으며, 상황·이해관계·경쟁 환경을 순서대로 듣는다.
 - 사용자 답을 요약만 짧게 하고 다음 질문으로 넘긴다. 표·초안은 시스템이 채운다.`;
 
-const STAGE3_RESEARCH_PREP_DIRECTIVE = `3단계 사용자 조사 준비하기(조사 계획 · 사전 조사 기반):
-- 왼쪽은 조사 대상·권장 인원·핵심 질문 가이드·리서치 방법 선택 화면입니다.
-- 2단계 사전 조사·타겟 유저를 바탕으로 조사 인원·세그먼트·질문 방향을 (가설)로 제안합니다.
-- 실제 현장 인터뷰로 검증하는 흐름을 안내합니다.`;
+const STAGE3_RESEARCH_PREP_DIRECTIVE = `3단계 사용자 조사 준비하기(조사 계획 · Extreme User 선정):
+- 왼쪽 CORE 2는 Heavy·Light 극단 사용자와 대조군 스펙트럼입니다.
+- 사용자가 「20대 직장인」「30대 주부」처럼 인구통계만 말하면, 거주·경제 지원·혼인 등 환경 변수로 구체화하도록 한 가지만 묻습니다(묻는 중).
+- 사용자가 맥락을 설명하면 selectionCriteria(칩)·reasoning(선정 이유)으로 요약해 주되, 가설임을 밝힙니다.
+- 2단계 사전 조사·타겟을 바탕으로 인원·질문을 (가설)로 제안합니다.`;
 
 const STAGE3_REFINE_DIRECTIVE = `3단계 사용자 조사 준비하기(To-know 다듬기):
 - 왼쪽 표에 초안이 있다. To-know 질문·방법 편집을 돕는다.
@@ -315,37 +327,90 @@ export function FieldResearchCoachPanel({
       message: string,
       _history: CoachChatHistoryItem[],
     ): Promise<string | null | undefined> => {
-      if (!discoveryActive) return undefined;
+      if (discoveryActive) {
+        const result = advanceToKnowDiscovery(
+          message,
+          data.toKnowPrep,
+          baseline,
+        );
 
-      const result = advanceToKnowDiscovery(
-        message,
-        data.toKnowPrep,
-        baseline,
-      );
+        const next: FieldResearchData = {
+          ...data,
+          toKnowPrep: result.prep,
+          ...(result.draftTable ? { toKnowTable: result.draftTable } : {}),
+          toKnowCoreQuestion:
+            sanitizeToKnowCoreQuestion(
+              data.toKnowCoreQuestion,
+              baseline.startingPoint,
+            ) || buildDefaultToKnowCoreQuestion(baseline.startingPoint),
+        };
+        const endsDiscovery =
+          isToKnowDiscoveryActive(data.toKnowPrep) &&
+          !isToKnowDiscoveryActive(result.prep);
 
-      const next: FieldResearchData = {
-        ...data,
-        toKnowPrep: result.prep,
-        ...(result.draftTable ? { toKnowTable: result.draftTable } : {}),
-        toKnowCoreQuestion:
-          sanitizeToKnowCoreQuestion(
-            data.toKnowCoreQuestion,
-            baseline.startingPoint,
-          ) || buildDefaultToKnowCoreQuestion(baseline.startingPoint),
-      };
-      const endsDiscovery =
-        isToKnowDiscoveryActive(data.toKnowPrep) &&
-        !isToKnowDiscoveryActive(result.prep);
+        if (endsDiscovery) {
+          pendingDataPatchRef.current = next;
+        } else {
+          onDataChange(next);
+        }
 
-      if (endsDiscovery) {
-        pendingDataPatchRef.current = next;
-      } else {
-        onDataChange(next);
+        return result.coachReply;
       }
 
-      return result.coachReply;
+      if (!researchPrepPhase) return undefined;
+
+      const trimmed = message.trim();
+      if (isDemographicOnlyLabel(trimmed)) {
+        return demographicSpecificityCoachPrompt(baseline.startingPoint);
+      }
+
+      const extracted = extractSelectionProfileFromUtterance(trimmed);
+      if (!extracted) return undefined;
+
+      const respondents = (data.respondents ?? [])
+        .map((r, i) => normalizeRespondent(r, i))
+        .filter((r): r is Respondent => r !== null);
+      if (!respondents.length) return undefined;
+
+      const target =
+        respondents.find((r) => isDemographicOnlyLabel(r.subtitle || r.name)) ??
+        respondents.find((r) => r.role === "heavy") ??
+        respondents[0];
+      const nextRespondents = respondents.map((r) =>
+        r.id === target.id
+          ? {
+              ...r,
+              selectionCriteria: extracted.selectionCriteria,
+              criterionDetails: extracted.criterionDetails,
+              reasoning: extracted.reasoning,
+              subtitle:
+                r.subtitle && !isDemographicOnlyLabel(r.subtitle)
+                  ? r.subtitle
+                  : extracted.selectionCriteria.slice(0, 2).join(" · ") ||
+                    r.subtitle,
+            }
+          : r,
+      );
+      const prep = normalizeStage3ResearchPrep(data.researchPrep);
+      onDataChange({
+        ...data,
+        respondents: nextRespondents,
+        sessions: mergeSessionsForRespondents(nextRespondents, data.sessions),
+        researchPrep: {
+          ...data.researchPrep,
+          segments: segmentsFromRespondents(nextRespondents, prep.segments),
+        },
+      });
+
+      return `말씀하신 맥락을 선정 기준 칩으로 옮겨 뒀어요: ${extracted.selectionCriteria.join(" · ")}. 왼쪽 카드에서 이유를 확인해 주세요. (가설)`;
     },
-    [discoveryActive, data, baseline, onDataChange],
+    [
+      discoveryActive,
+      researchPrepPhase,
+      data,
+      baseline,
+      onDataChange,
+    ],
   );
 
   const handleCoachReply = useCallback(() => {
@@ -376,7 +441,9 @@ export function FieldResearchCoachPanel({
       chatContext={chatContext}
       inputGuide={coachInputGuide}
       onCoachMessage={
-        discoveryActive && !discoveryGatePending ? handleCoachMessage : undefined
+        (discoveryActive && !discoveryGatePending) || researchPrepPhase
+          ? handleCoachMessage
+          : undefined
       }
       onCoachReply={
         discoveryActive && onDiscoveryComplete ? handleCoachReply : undefined

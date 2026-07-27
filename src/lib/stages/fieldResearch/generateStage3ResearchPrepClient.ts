@@ -7,6 +7,8 @@ export async function generateStage3ResearchPrep(input: {
   problem: string;
   prePmfSummary?: string;
   targetLabels: string[];
+  /** 대상자별 확인 질문(topicQuestions)을 만들 조사 대상자 목록 */
+  questionSubjects?: string[];
 }): Promise<Stage3ResearchPrep> {
   const res = await fetch("/api/stage3/research-prep-recommendations", {
     method: "POST",

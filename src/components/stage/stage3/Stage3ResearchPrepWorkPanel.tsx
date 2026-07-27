@@ -8,6 +8,7 @@ import {
 } from "@tabler/icons-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Stage3ResearchGuideContent } from "@/components/stage/stage3/Stage3ResearchGuideContent";
+import { ExtremeUserSelectionBoard } from "@/components/stage/stage3/ExtremeUserSelectionBoard";
 import { SimulatedAsyncProgressPanel } from "@/components/stage/SimulatedAsyncProgressPanel";
 import { ClickSequentialSections } from "@/components/stage/motion/ScrollSequentialSections";
 import { WorkspaceBackButton } from "@/components/navigation/WorkspaceBackButton";
@@ -23,13 +24,29 @@ import {
 } from "@/lib/stages/fieldResearch/researchGuideExport";
 import { buildToKnowExportRows } from "@/lib/stages/fieldResearch/toKnowExport";
 import {
+  applyTopicQuestionsToToKnowTable,
+  hasSubjectSpecificQuestions,
+  resolveTopicQuestionSubjects,
+} from "@/lib/stages/fieldResearch/topicInterviewQuestions";
+import {
+  redistributeCounts,
+} from "@/lib/stages/fieldResearch/selectionProfile";
+import {
+  mergeSessionsForRespondents,
+  normalizeRespondent,
+  resolveExtremeRespondentsForPrep,
+  respondentsFromSegments,
+  segmentsFromRespondents,
+  isLegacyDemoRespondentSet,
+} from "@/lib/stages/fieldResearch/respondentNormalize";
+import {
   normalizeStage3ResearchPrep,
   participantCountReasonText,
   researchPrepGatePassed,
   totalSelectedFromSegments,
   type Stage3ResearchPrep,
 } from "@/lib/stages/fieldResearch/stage3ResearchPrep";
-import type { FieldResearchData } from "@/lib/stages/fieldResearch/types";
+import type { FieldResearchData, Respondent } from "@/lib/stages/fieldResearch/types";
 import {
   stageCaption,
   stageField,
@@ -77,7 +94,7 @@ export function Stage3ResearchPrepWorkPanel({
   saveError,
   lastSavedAt,
 }: Stage3ResearchPrepWorkPanelProps) {
-  const { projectTitle } = useProjectWorkspace();
+  const { projectTitle, coachingLevel } = useProjectWorkspace();
   const prep = useMemo(
     () => normalizeStage3ResearchPrep(data.researchPrep),
     [data.researchPrep],
@@ -88,8 +105,87 @@ export function Stage3ResearchPrepWorkPanel({
   const [expandedSubject, setExpandedSubject] = useState<string | null>(null);
   const [exporting, setExporting] = useState<"pdf" | "doc" | null>(null);
   const [exportError, setExportError] = useState<string | null>(null);
+  const [specificityNudge, setSpecificityNudge] = useState<string | null>(null);
   const generateStartedRef = useRef(false);
+  const topicRefreshRef = useRef(false);
+  const demoSyncRef = useRef(false);
   const ready = researchPrepGatePassed(prep);
+
+  const extremeRespondents = useMemo(() => {
+    const normalized = (data.respondents ?? [])
+      .map((r, i) => normalizeRespondent(r, i))
+      .filter((r): r is Respondent => r !== null);
+    return resolveExtremeRespondentsForPrep(normalized, prep.segments);
+  }, [data.respondents, prep.segments]);
+
+  const applyRespondents = useCallback(
+    (nextRespondents: Respondent[]) => {
+      const segments = segmentsFromRespondents(nextRespondents, prep.segments);
+      const sum = nextRespondents.reduce(
+        (acc, r) => acc + Math.max(0, r.participantCount || 0),
+        0,
+      );
+      onChange({
+        ...data,
+        respondents: nextRespondents,
+        sessions: mergeSessionsForRespondents(nextRespondents, data.sessions),
+        activeRespondentId:
+          nextRespondents.find((r) => r.id === data.activeRespondentId)?.id ??
+          nextRespondents[0]?.id ??
+          data.activeRespondentId,
+        researchPrep: {
+          ...data.researchPrep,
+          ...prep,
+          segments,
+          selectedParticipantCount: Math.max(1, sum),
+          recommendedParticipantCount: Math.max(
+            prep.recommendedParticipantCount,
+            sum,
+          ),
+        },
+      });
+    },
+    [data, onChange, prep],
+  );
+
+  const applyTotalParticipantCount = useCallback(
+    (total: number) => {
+      const n = Math.min(30, Math.max(1, total));
+      const list = extremeRespondents;
+      if (!list.length) {
+        onChange(updatePrep(data, { selectedParticipantCount: n }));
+        return;
+      }
+      const nextCounts = redistributeCounts(
+        list.map((r) => r.participantCount || 1),
+        n,
+      );
+      const nextRespondents = list.map((r, i) => ({
+        ...r,
+        participantCount: nextCounts[i] ?? 1,
+      }));
+      applyRespondents(nextRespondents);
+    },
+    [applyRespondents, data, extremeRespondents, onChange],
+  );
+
+  // 레거시 데모(식당·카페)가 남아 있으면 주제 세그먼트로 한 번 교체해 저장
+  useEffect(() => {
+    if (!editable || !prep.segments.length || demoSyncRef.current) return;
+    if (!isLegacyDemoRespondentSet(data.respondents ?? [])) return;
+    demoSyncRef.current = true;
+    const next = respondentsFromSegments(prep.segments);
+    onChange({
+      ...data,
+      respondents: next,
+      sessions: mergeSessionsForRespondents(next, data.sessions),
+      activeRespondentId: next[0]?.id ?? data.activeRespondentId,
+      researchPrep: {
+        ...data.researchPrep,
+        ...prep,
+      },
+    });
+  }, [editable, prep, data, onChange]);
 
   const toKnowRows = useMemo(
     () =>
@@ -180,13 +276,36 @@ export function Stage3ResearchPrepWorkPanel({
     setGenError(null);
     reset();
     try {
+      const subjects = resolveTopicQuestionSubjects(
+        data.toKnowTable,
+        targetLabels,
+      );
       const nextPrep = await generateStage3ResearchPrep({
         problem,
         prePmfSummary: prePmfSummary || undefined,
         targetLabels,
+        questionSubjects: subjects,
       });
       markComplete();
-      onChange(updatePrep(data, nextPrep));
+      const nextRespondents = respondentsFromSegments(nextPrep.segments);
+      const hasTopicQuestions = nextPrep.topicQuestions.length > 0;
+      const nextTable = hasTopicQuestions
+        ? applyTopicQuestionsToToKnowTable(
+            data.toKnowTable,
+            nextPrep.topicQuestions,
+            subjects,
+          )
+        : data.toKnowTable;
+      onChange({
+        ...data,
+        researchPrep: { ...data.researchPrep, ...nextPrep },
+        toKnowTable: nextTable,
+        toKnowTopicApplied: hasTopicQuestions || data.toKnowTopicApplied,
+        respondents: nextRespondents,
+        sessions: mergeSessionsForRespondents(nextRespondents, data.sessions),
+        activeRespondentId:
+          nextRespondents[0]?.id ?? data.activeRespondentId,
+      });
     } catch (e) {
       generateStartedRef.current = false;
       setGenError(
@@ -220,6 +339,66 @@ export function Stage3ResearchPrepWorkPanel({
     prePmfSummary,
     problem,
     runGenerate,
+  ]);
+
+  // 이미 추천을 받아 둔 프로젝트 — 도메인 중립 템플릿 질문 또는 대상자 공용 질문을
+  // 주제·대상자 맞춤 질문으로 1회 교체
+  useEffect(() => {
+    if (!editable || generating || topicRefreshRef.current) return;
+    if (!prep.recommendationsGenerated) return;
+    const subjects = resolveTopicQuestionSubjects(
+      data.toKnowTable,
+      targetLabels,
+    );
+    // 대상자가 2명 이상인데 질문이 대상자별로 나뉘어 있지 않으면 다시 생성
+    const needsSubjectSplit =
+      subjects.length >= 2 &&
+      prep.topicQuestions.length > 0 &&
+      !hasSubjectSpecificQuestions(prep.topicQuestions);
+    if (data.toKnowTopicApplied && !needsSubjectSplit) return;
+    if (!problem.trim() && !prePmfSummary?.trim()) return;
+    topicRefreshRef.current = true;
+    void (async () => {
+      try {
+        const refreshed = await generateStage3ResearchPrep({
+          problem,
+          prePmfSummary: prePmfSummary || undefined,
+          targetLabels,
+          questionSubjects: subjects,
+        });
+        if (!refreshed.topicQuestions.length) return;
+        if (needsSubjectSplit && !hasSubjectSpecificQuestions(refreshed.topicQuestions)) {
+          return;
+        }
+        const nextTable = applyTopicQuestionsToToKnowTable(
+          data.toKnowTable,
+          refreshed.topicQuestions,
+          subjects,
+        );
+        onChange({
+          ...data,
+          researchPrep: {
+            ...data.researchPrep,
+            topicQuestions: refreshed.topicQuestions,
+          },
+          toKnowTable: nextTable,
+          toKnowTopicApplied: true,
+        });
+      } catch {
+        // 기존 표 유지 — 다음 진입 때 다시 시도
+        topicRefreshRef.current = false;
+      }
+    })();
+  }, [
+    data,
+    editable,
+    generating,
+    onChange,
+    prePmfSummary,
+    prep.recommendationsGenerated,
+    prep.topicQuestions,
+    problem,
+    targetLabels,
   ]);
 
   const segmentTotal = totalSelectedFromSegments(prep);
@@ -379,6 +558,14 @@ export function Stage3ResearchPrepWorkPanel({
               <h3 className="mt-1 text-[18px] font-bold text-foreground break-keep">
                 누구에게, 얼마나 조사할까?
               </h3>
+              <p className="mt-2 text-[14px] leading-relaxed text-muted break-keep">
+                1순위로 양 극단(Heavy·Light)을 잡고, 그다음{" "}
+                <strong className="font-semibold text-foreground">
+                  2순위 후보 그룹
+                </strong>
+                과 대조군으로 패턴을 보완해요. 나이대가 아니라 생활·경제·역할
+                기준으로 선정합니다.
+              </p>
 
               <div className="mt-4 space-y-4">
                 <div>
@@ -405,7 +592,7 @@ export function Stage3ResearchPrepWorkPanel({
                   <div className="mt-3 flex flex-wrap items-end gap-3">
                     <label className="block">
                       <span className={`mb-1.5 block ${stageLabel}`}>
-                        최종 조사 인원
+                        권장 조사 인원
                       </span>
                       <input
                         type="number"
@@ -418,72 +605,32 @@ export function Stage3ResearchPrepWorkPanel({
                             30,
                             Math.max(1, Number.parseInt(e.target.value, 10) || 1),
                           );
-                          onChange(
-                            updatePrep(data, { selectedParticipantCount: n }),
-                          );
+                          applyTotalParticipantCount(n);
                         }}
                         className={`w-28 rounded-md border border-border-warm px-3 py-2 ${stageField} ${stageInput}`}
                       />
                     </label>
-                    {segmentTotal !== prep.selectedParticipantCount &&
-                    prep.segments.length ? (
-                      <p className={`pb-2 ${stageCaption} text-muted`}>
-                        세그먼트 합계 {segmentTotal}명
-                      </p>
-                    ) : null}
+                    <p className={`pb-2 ${stageCaption} text-muted`}>
+                      유형별 합계 {segmentTotal}명
+                      {segmentTotal !== prep.selectedParticipantCount
+                        ? " · 총 인원과 맞추는 중"
+                        : ""}
+                    </p>
                   </div>
-                  {prep.segments.length ? (
-                    <ul className="mt-3 space-y-2">
-                      {prep.segments.map((seg) => (
-                        <li
-                          key={seg.id}
-                          className="rounded-lg border border-border-warm bg-cream/40 px-3 py-2.5"
-                        >
-                          <div className="flex flex-wrap items-center justify-between gap-2">
-                            <span className="text-[14px] font-semibold text-foreground break-keep">
-                              {seg.label}
-                              <span className="ml-2 text-[12px] font-medium text-gold">
-                                AI 추천
-                              </span>
-                            </span>
-                            <label className="flex items-center gap-2 text-[13px] text-muted">
-                              인원
-                              <input
-                                type="number"
-                                min={0}
-                                max={20}
-                                value={seg.selectedCount}
-                                disabled={!editable}
-                                onChange={(e) => {
-                                  const n = Math.min(
-                                    20,
-                                    Math.max(
-                                      0,
-                                      Number.parseInt(e.target.value, 10) || 0,
-                                    ),
-                                  );
-                                  onChange(
-                                    updatePrep(data, {
-                                      segments: prep.segments.map((s) =>
-                                        s.id === seg.id
-                                          ? { ...s, selectedCount: n }
-                                          : s,
-                                      ),
-                                    }),
-                                  );
-                                }}
-                                className={`w-16 rounded-md border border-border-warm px-2 py-1 text-center ${stageInput}`}
-                              />
-                            </label>
-                          </div>
-                          {seg.reason ? (
-                            <p className="mt-1 text-[13px] leading-relaxed text-muted break-keep">
-                              {seg.reason}
-                            </p>
-                          ) : null}
-                        </li>
-                      ))}
-                    </ul>
+
+                  <ExtremeUserSelectionBoard
+                    respondents={extremeRespondents}
+                    problem={problem}
+                    coachingLevel={coachingLevel}
+                    editable={editable && !generating}
+                    onChange={applyRespondents}
+                    onCoachNudge={setSpecificityNudge}
+                  />
+                  {specificityNudge ? (
+                    <p className="mt-2 rounded-lg border border-spotlight/40 bg-[#FFFDF4] px-3 py-2 text-[13px] leading-relaxed text-foreground break-keep">
+                      <span className="font-semibold text-gold">Kevin · 묻는 중</span>{" "}
+                      {specificityNudge}
+                    </p>
                   ) : null}
                 </div>
 
