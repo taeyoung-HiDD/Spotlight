@@ -44,11 +44,37 @@ const GROUP_NAME_RULE = `
   나쁜 예: "위해서 싶다", "나중 큰일", "것이 생각" — 문장 조각·조사·어미 나열
 - 이름은 그 그룹을 처음 보는 사람이 무엇에 대한 니즈 묶음인지 즉시 이해할 수 있어야 합니다.`.trim();
 
+/** 한 그룹이 넘으면 안 되는 최대 크기 — 이 이상이면 소주제로 쪼갠다 */
+function oversizedLimit(total: number): number {
+  return Math.max(8, Math.ceil(total * 0.34));
+}
+
+function minGroupCount(total: number): number {
+  if (total >= 30) return 5;
+  if (total >= 12) return 4;
+  if (total >= 6) return 3;
+  return 2;
+}
+
 /** 번호 기반 분류 프롬프트 — 긴 id echo를 없애 JSON 실패율을 낮춘다 */
-function buildClusterPrompt(needs: NeedPayload[], retry: boolean): string {
+function buildClusterPrompt(
+  needs: NeedPayload[],
+  retry: boolean,
+  split: boolean,
+): string {
   const blocks = needs
     .map((n, i) => `[${i + 1}] ${n.text}`)
     .join("\n");
+  const minGroups = minGroupCount(needs.length);
+  const maxPerGroup = oversizedLimit(needs.length);
+
+  const balanceRule = split
+    ? `- 이 니즈들은 이미 한 그룹에 과도하게 뭉쳐 있던 것입니다. **반드시 서로 다른 소주제 ${minGroups}개 이상**으로 나누세요.
+  큰 주제(예: "자산 관리")를 그대로 두지 말고 그 안의 소주제(예: "지출 통제", "투자 판단 불안", "재정 목표 설정", "독립적 재정 계획")로 쪼갭니다.`
+    : `- 그룹은 최소 ${minGroups}개 이상 만듭니다. 한 그룹에 니즈를 ${maxPerGroup}개보다 많이 넣지 않습니다.
+  대부분의 니즈가 한 그룹에 몰리면 분류의 의미가 없습니다. 주제가 넓으면 소주제로 쪼개세요
+  (예: "자산 관리" 하나로 몰지 말고 "지출 통제", "투자 판단 불안", "재정 목표 설정" 등으로 구분).
+- 억지로 같은 크기로 맞출 필요는 없지만, 서로 다른 심리·상황·가치는 다른 그룹이어야 합니다.`;
 
   return `${COACH_SYSTEM_INSTRUCTION}
 
@@ -61,8 +87,8 @@ ${KOREAN_PRIMARY_OUTPUT_RULE}
 
 규칙:
 - 모든 번호(1~${needs.length})를 정확히 한 그룹에만 넣습니다. 빠뜨리거나 중복하지 않습니다.
+${balanceRule}
 ${GROUP_NAME_RULE}
-- 그룹 수는 니즈 개수에 맞게 적당히(보통 2~6개). 1개만이면 1그룹도 가능.
 - 결론·솔루션처럼 단정하지 말고, 니즈 묶음의 공통 주제를 이름으로 씁니다.
 - JSON만 출력. 마크다운·설명 없음.
 ${
@@ -158,14 +184,18 @@ function parseNamesJson(text: string, count: number): string[] | null {
 
 async function aiCluster(
   needs: NeedPayload[],
+  split = false,
 ): Promise<GroupResult[] | null> {
   for (const retry of [false, true]) {
     try {
-      const result = await groqComplete(buildClusterPrompt(needs, retry), {
-        models: resolveGroqTextModels(),
-        temperature: retry ? 0.5 : 0.35,
-        jsonMode: true,
-      });
+      const result = await groqComplete(
+        buildClusterPrompt(needs, retry, split),
+        {
+          models: resolveGroqTextModels(),
+          temperature: retry ? 0.5 : 0.35,
+          jsonMode: true,
+        },
+      );
       const parsed = parseClusterJson(result.text, needs);
       if (parsed) return parsed;
     } catch {
@@ -173,6 +203,48 @@ async function aiCluster(
     }
   }
   return null;
+}
+
+/**
+ * 한 그룹에 니즈가 과도하게 몰린 경우(전체의 1/3 초과) 그 그룹만 다시
+ * 소주제로 분할한다. AI 분할이 실패하면 휴리스틱 묶음으로 대체한다.
+ */
+async function splitOversizedGroups(
+  groups: GroupResult[],
+  needs: NeedPayload[],
+  useAi: boolean,
+): Promise<GroupResult[]> {
+  const limit = oversizedLimit(needs.length);
+  const textById = new Map(needs.map((n) => [n.id, n.text] as const));
+  const out: GroupResult[] = [];
+
+  for (const group of groups) {
+    if (group.needIds.length <= limit) {
+      out.push(group);
+      continue;
+    }
+    const subNeeds = group.needIds
+      .map((id) => ({ id, text: textById.get(id) ?? "" }))
+      .filter((n) => n.text);
+    if (subNeeds.length < 6) {
+      out.push(group);
+      continue;
+    }
+
+    let sub: GroupResult[] | null = null;
+    if (useAi) sub = await aiCluster(subNeeds, true);
+    if (!sub || sub.length <= 1) sub = heuristicClusterNeeds(subNeeds);
+
+    // 분할이 실제로 쪼개졌을 때만 채택 (여전히 한 덩어리면 원본 유지)
+    const largest = Math.max(...sub.map((g) => g.needIds.length));
+    if (sub.length > 1 && largest < group.needIds.length) {
+      out.push(...sub);
+    } else {
+      out.push(group);
+    }
+  }
+
+  return out;
 }
 
 async function aiNameClusters(clusters: string[][]): Promise<string[] | null> {
@@ -260,14 +332,15 @@ export async function POST(request: Request) {
   // 1차: AI가 묶음+이름을 한 번에 (번호 기반, 1회 재시도 포함)
   const clustered = await aiCluster(needs);
   if (clustered) {
+    const balanced = await splitOversizedGroups(clustered, needs, true);
     return NextResponse.json({
-      groups: normalizeGroups(clustered, needs),
+      groups: normalizeGroups(balanced, needs),
       source: "groq",
     });
   }
 
   // 2차: 묶음은 휴리스틱, 이름은 AI가 붙임
-  const fallback = heuristicGroups();
+  const fallback = await splitOversizedGroups(heuristicGroups(), needs, true);
   const textById = new Map(needs.map((n) => [n.id, n.text] as const));
   const clusterTexts = fallback.map((g) =>
     g.needIds.map((id) => textById.get(id) ?? "").filter(Boolean),
