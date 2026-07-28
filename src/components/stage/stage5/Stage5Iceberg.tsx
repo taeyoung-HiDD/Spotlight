@@ -8,7 +8,10 @@ import { WorkspaceForwardButton } from "@/components/navigation/WorkspaceForward
 import { LatentNeedsCoachPanel } from "@/components/stage/stage5/LatentNeedsCoachPanel";
 import { LatentNeedsWorkPanel } from "@/components/stage/stage5/LatentNeedsWorkPanel";
 import { withBootstrappedJourneyNeeds } from "@/components/stage/stage5/LatentNeedsJourneyBoard";
-import { getStagePageName } from "@/lib/navigation/stageNavLabels";import { fetchStage4Discoveries } from "@/lib/artifacts/stage4Discoveries";
+import { useDebouncedPersist } from "@/hooks/useDebouncedPersist";
+import { useUiLocale } from "@/hooks/useUiLocale";
+import { getStagePageName } from "@/lib/navigation/stageNavLabels";
+import { fetchStage4Discoveries } from "@/lib/artifacts/stage4Discoveries";
 import {
   fetchStage5LatentNeeds,
   saveStage5LatentNeeds,
@@ -36,7 +39,6 @@ import {
 } from "@/lib/stages/stage6/userJourneyTypes";
 import type { ArtifactSlots } from "@/types/database";
 import { stageCaption, stagePanel } from "@/lib/stages/ui";
-import { useDebouncedPersist } from "@/hooks/useDebouncedPersist";
 
 interface Stage5IcebergProps {
   projectId: string;
@@ -61,6 +63,7 @@ function hasSourceNotes(data: Stage5LatentNeedsData): boolean {
 
 export function Stage5Iceberg({ projectId }: Stage5IcebergProps) {
   const router = useRouter();
+  const locale = useUiLocale();
   const [data, setData] = useState<Stage5LatentNeedsData>(
     defaultStage5LatentNeeds(),
   );
@@ -133,6 +136,7 @@ export function Stage5Iceberg({ projectId }: Stage5IcebergProps) {
             const result = await requestLatentNeedsGeneration(
               projectId,
               inputs,
+              locale,
             );
             if (!cancelled) {
               const withNeeds = withBootstrappedJourneyNeeds(
@@ -176,7 +180,7 @@ export function Stage5Iceberg({ projectId }: Stage5IcebergProps) {
     return () => {
       cancelled = true;
     };
-  }, [projectId]);
+  }, [projectId, locale]);
 
   const saveArtifact = useCallback(
     async (next: Stage5LatentNeedsData) => {
@@ -226,7 +230,11 @@ export function Stage5Iceberg({ projectId }: Stage5IcebergProps) {
     setGenerating(true);
     setSaveError(null);
     try {
-      const result = await requestLatentNeedsGeneration(projectId, inputs);
+      const result = await requestLatentNeedsGeneration(
+        projectId,
+        inputs,
+        locale,
+      );
       if (result.needs.length === 0) {
         setSaveError(
           "AI 분석이 지금은 어려워요. 잠시 후 다시 시도해 주세요.",
@@ -253,7 +261,7 @@ export function Stage5Iceberg({ projectId }: Stage5IcebergProps) {
     } finally {
       setGenerating(false);
     }
-  }, [allSlots, artifactId, data, journey, projectId]);
+  }, [allSlots, artifactId, data, journey, locale, projectId]);
 
   if (loading) {
     return (

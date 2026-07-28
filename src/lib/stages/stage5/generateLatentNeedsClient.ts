@@ -6,6 +6,7 @@ import {
   createStage5BoardPostit,
   type Stage5SubjectRef,
 } from "@/lib/stages/stage5/latentNeedsTypes";
+import type { UiLocale } from "@/lib/i18n/uiLocale";
 
 export interface GenerateLatentNeedsSourceInput {
   sourceId: string;
@@ -23,11 +24,12 @@ export interface GenerateLatentNeedsResponse {
 export async function requestLatentNeedsGeneration(
   projectId: string,
   sources: GenerateLatentNeedsSourceInput[],
+  locale: UiLocale = "ko",
 ): Promise<GenerateLatentNeedsResponse> {
   const res = await fetch("/api/stage5/generate-latent-needs", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ projectId, sources }),
+    body: JSON.stringify({ projectId, sources, locale }),
   });
 
   const json = (await res.json()) as GenerateLatentNeedsResponse & {
@@ -63,7 +65,7 @@ export function buildSourceInputsFromBoard(
   });
 }
 
-/** 과거 폴백이 저장한 동일 템플릿 잠재 니즈가 보드에 남아 있는지 */
+/** 과거 폴백 템플릿·비허용 문자(키릴 등)로 작성된 Kevin 잠재 니즈가 보드에 남아 있는지 */
 export function boardHasTemplateLatentNeeds(
   data: Stage5LatentNeedsData,
 ): boolean {

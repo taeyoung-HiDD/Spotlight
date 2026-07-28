@@ -2,10 +2,15 @@ import { NextResponse } from "next/server";
 import { resolveGroqApiKey, resolveGroqTextModels } from "@/lib/ai/env";
 import { groqComplete } from "@/lib/ai/providers/groqText";
 import {
+  KOREAN_PRIMARY_OUTPUT_RULE,
+  shouldEnforceKoreanPrimaryOutput,
+} from "@/lib/coach/outputLanguage";
+import {
   COACH_KOREAN_LABEL_RULE,
   sanitizeCoachKoreanText,
 } from "@/lib/coach/sanitizeCoachKorean";
 import { COACH_SYSTEM_INSTRUCTION } from "@/lib/coach/systemInstruction";
+import type { UiLocale } from "@/lib/i18n/uiLocale";
 import { fetchProjectAccess } from "@/lib/projects/projectAccess";
 import { isTemplateLatentNeedText } from "@/lib/stages/stage5/generateLatentNeedsHeuristic";
 
@@ -21,6 +26,10 @@ const KIND_SET = new Set(["quote", "observation", "finding"]);
 
 /** 포스트잇이 많을 때 한 호출 실패로 전체가 비지 않도록 묶어서 요청 */
 const CHUNK_SIZE = 10;
+
+function parseLocale(raw: unknown): UiLocale {
+  return String(raw ?? "").trim().toLowerCase() === "en" ? "en" : "ko";
+}
 
 function parseSources(raw: unknown): SourcePayload[] {
   if (!Array.isArray(raw)) return [];
@@ -43,7 +52,11 @@ function parseSources(raw: unknown): SourcePayload[] {
     .filter((s) => s.sourceId && s.subjectId && s.text);
 }
 
-function buildPrompt(sources: SourcePayload[], retry: boolean): string {
+function buildPrompt(
+  sources: SourcePayload[],
+  retry: boolean,
+  enforceKoreanPrimary: boolean,
+): string {
   const blocks = sources.map((s, idx) => {
     const label = s.subjectName.trim() || `조사 대상`;
     const kindLabel =
@@ -75,6 +88,7 @@ function buildPrompt(sources: SourcePayload[], retry: boolean): string {
 절대 금지:
 - 위 형식 설명을 그대로 옮기거나 문장의 빈 자리를 채우지 않은 채 내보내는 것. "궁극적 이유", "얻으려는 가치", "가치 달성을 위한 행위" 같은 메타 설명 단어 자체를 답으로 쓰면 안 됩니다.
 - 꺾쇠(〈 〉, 《 》) 같은 빈칸 표기를 그대로 남기는 것. 반드시 실제 내용으로 완전히 채운 문장만 냅니다.
+- 러시아어·키릴 문자·중국어·일본어·한자 등 한국어·영어가 아닌 문자로 작성하는 것. 반드시 한글(또는 필요한 영어 용어)로만 씁니다.
 
 규칙:
 - 반드시 해당 포스트잇 내용에서 출발해, 그 사람의 상황에 맞는 구체적인 니즈를 씁니다. 포스트잇마다 내용이 서로 달라야 합니다.
@@ -83,11 +97,12 @@ function buildPrompt(sources: SourcePayload[], retry: boolean): string {
 - "아직 드러나지 않은 욕구가 있을 수 있어요" 같은 뭉뚱그린 문장은 금지합니다.
 - (가설) 같은 접두어는 쓰지 않고, 결론처럼 단정하지 않습니다.
 ${COACH_KOREAN_LABEL_RULE}
+${enforceKoreanPrimary ? `\n${KOREAN_PRIMARY_OUTPUT_RULE}\n` : ""}
 - sourceId를 그대로 반환해 어떤 조사 포스트잇에 붙일지 알 수 있게 합니다.
 - JSON만 출력합니다. 마크다운·설명 없음.
 ${
   retry
-    ? "\n[재시도] 이전 시도에서 형식 설명 문구나 빈칸 표기가 그대로 나왔습니다. 이번에는 예시처럼 실제 내용으로 완전히 채운 문장만 쓰세요.\n"
+    ? "\n[재시도] 이전 시도에서 형식 설명 문구·빈칸 표기·허용되지 않는 문자(키릴·한자 등)·영어만인 문장이 나왔습니다. 이번에는 예시처럼 **한글이 중심인** 문장으로, 실제 내용으로 완전히 채운 문장만 쓰세요.\n"
     : ""
 }
 출력 형식:
@@ -134,16 +149,20 @@ function parseNeedsJson(
 async function generateChunk(
   chunk: SourcePayload[],
   retry: boolean,
+  enforceKoreanPrimary: boolean,
 ): Promise<{
   parsed: Array<{ sourceId: string; subjectId: string; text: string }> | null;
   model?: string;
 }> {
   try {
-    const result = await groqComplete(buildPrompt(chunk, retry), {
-      models: resolveGroqTextModels(),
-      temperature: retry ? 0.65 : 0.5,
-      jsonMode: true,
-    });
+    const result = await groqComplete(
+      buildPrompt(chunk, retry, enforceKoreanPrimary),
+      {
+        models: resolveGroqTextModels(),
+        temperature: retry ? 0.65 : 0.5,
+        jsonMode: true,
+      },
+    );
     return { parsed: parseNeedsJson(result.text), model: result.model };
   } catch {
     return { parsed: null, model: undefined };
@@ -158,10 +177,14 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "잘못된 JSON입니다." }, { status: 400 });
   }
 
-  const projectId = String(
-    (body as { projectId?: string }).projectId ?? "",
-  ).trim();
-  const sources = parseSources((body as { sources?: unknown }).sources);
+  const record = body as {
+    projectId?: string;
+    sources?: unknown;
+    locale?: unknown;
+  };
+  const projectId = String(record.projectId ?? "").trim();
+  const sources = parseSources(record.sources);
+  const locale = parseLocale(record.locale);
 
   if (!projectId || sources.length === 0) {
     return NextResponse.json({ error: "필수 값이 없습니다." }, { status: 400 });
@@ -180,6 +203,20 @@ export async function POST(request: Request) {
     return NextResponse.json({ needs: [], source: "heuristic" });
   }
 
+  const subjectHints = [
+    ...new Map(
+      sources.map((s) => [
+        s.subjectId,
+        { name: s.subjectName, context: "" },
+      ]),
+    ).values(),
+  ];
+  const enforceKoreanPrimary = shouldEnforceKoreanPrimaryOutput({
+    locale,
+    subjects: subjectHints,
+    sampleTexts: sources.map((s) => s.text),
+  });
+
   const bySource = new Map(sources.map((s) => [s.sourceId, s]));
   const needs: Array<{ sourceId: string; subjectId: string; text: string }> =
     [];
@@ -191,7 +228,7 @@ export async function POST(request: Request) {
   }
 
   const settled = await Promise.all(
-    chunks.map((chunk) => generateChunk(chunk, false)),
+    chunks.map((chunk) => generateChunk(chunk, false, enforceKoreanPrimary)),
   );
 
   const coveredSourceIds = new Set<string>();
@@ -210,7 +247,7 @@ export async function POST(request: Request) {
     }
   }
 
-  // 형식 설명을 그대로 반환해 필터링된 포스트잇은 한 번 더 시도합니다.
+  // 형식 설명·비허용 언어로 필터링된 포스트잇은 한 번 더 시도합니다.
   const missing = sources.filter((s) => !coveredSourceIds.has(s.sourceId));
   if (missing.length > 0) {
     const retryChunks: SourcePayload[][] = [];
@@ -218,7 +255,9 @@ export async function POST(request: Request) {
       retryChunks.push(missing.slice(i, i + CHUNK_SIZE));
     }
     const retrySettled = await Promise.all(
-      retryChunks.map((chunk) => generateChunk(chunk, true)),
+      retryChunks.map((chunk) =>
+        generateChunk(chunk, true, enforceKoreanPrimary),
+      ),
     );
     for (const { parsed, model: chunkModel } of retrySettled) {
       if (!parsed) continue;

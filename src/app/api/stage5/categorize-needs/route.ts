@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server";
 import { resolveGroqApiKey, resolveGroqTextModels } from "@/lib/ai/env";
 import { groqComplete } from "@/lib/ai/providers/groqText";
+import { KOREAN_PRIMARY_OUTPUT_RULE } from "@/lib/coach/outputLanguage";
+import {
+  hasDisallowedForeignScript,
+  sanitizeCoachKoreanText,
+} from "@/lib/coach/sanitizeCoachKorean";
 import { COACH_SYSTEM_INSTRUCTION } from "@/lib/coach/systemInstruction";
 import { fetchProjectAccess } from "@/lib/projects/projectAccess";
 import {
@@ -39,6 +44,8 @@ function buildPrompt(needs: NeedPayload[]): string {
 [지시]
 아래는 잠재 니즈 목록입니다. **비슷한 내용끼리 모아 그룹으로 재분류**하고,
 각 그룹에 **짧은 한국어 이름**을 붙이세요.
+
+${KOREAN_PRIMARY_OUTPUT_RULE}
 
 규칙:
 - 모든 잠재 니즈 id를 정확히 한 그룹에만 넣습니다. 빠뜨리거나 중복하지 않습니다.
@@ -102,13 +109,16 @@ function normalizeGroups(
       return true;
     });
     if (needIds.length === 0) continue;
-    // AI가 "위해서·싶다" 같은 문형 연결어만으로 이름을 지으면 어피니티 그룹 텍스트 기반으로 재도출
+    const memberTexts = needIds.map((id) => textById.get(id) ?? "");
+    const sanitized = sanitizeCoachKoreanText(group.name.trim()).slice(0, 40);
+    // 문형 연결어·키릴·한글 없는 이름은 어피니티 텍스트 기반으로 재도출
     const name =
-      group.name.trim() && !isLowQualityGroupName(group.name)
-        ? group.name.slice(0, 40)
-        : deriveGroupNameFromTexts(
-            needIds.map((id) => textById.get(id) ?? ""),
-          );
+      sanitized &&
+      !isLowQualityGroupName(sanitized) &&
+      !hasDisallowedForeignScript(sanitized) &&
+      /[\uac00-\ud7a3]/.test(sanitized)
+        ? sanitized
+        : deriveGroupNameFromTexts(memberTexts);
     cleaned.push({
       name: name || `그룹 ${cleaned.length + 1}`,
       needIds,

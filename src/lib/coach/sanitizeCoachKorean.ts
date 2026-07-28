@@ -110,9 +110,9 @@ const HANJA_TO_HANGUL: [string, string][] = [
   ["自我", "자아"],
 ];
 
-/** 히라가나·가타카나·CJK 한자 (한글·영문·숫자·기본 문장부호는 유지) */
+/** 히라가나·가타카나·CJK 한자·키릴·아랍·그리스 등 (한글·영문·숫자·기본 문장부호는 유지) */
 const NON_KO_EN_SCRIPT =
-  /[\u3040-\u30FF\u3400-\u4DBF\u4E00-\u9FFF\uF900-\uFAFF]/g;
+  /[\u0370-\u03FF\u0400-\u04FF\u0500-\u052F\u0590-\u05FF\u0600-\u06FF\u0900-\u097F\u0E00-\u0E7F\u3040-\u30FF\u3400-\u4DBF\u4E00-\u9FFF\uF900-\uFAFF\u2DE0-\u2DFF\uA640-\uA69F]/g;
 
 const VALID_EMPATHY_QUADRANT_HEADER =
   /^(?:말함|생각함|행동함|느낌)\s*(?:\(\s*(?:Says|Thinks|Does|Feels)\s*\))?/i;
@@ -120,9 +120,16 @@ const VALID_EMPATHY_QUADRANT_HEADER =
 const INVALID_EMPATHY_QUADRANT_HEADER =
   /^(?:고민|희망|Pains?|Gains?|Jobs?(?:\s*to\s*be\s*done)?)\s*(?:\([^)]*\))?/i;
 
+/** 허용되지 않는 문자(한자·키릴 등)가 포함돼 있는지 — 잠재 니즈 재생성 판단용 */
+export function hasDisallowedForeignScript(text: string): boolean {
+  return /[\u0370-\u03FF\u0400-\u04FF\u0500-\u052F\u0590-\u05FF\u0600-\u06FF\u0900-\u097F\u0E00-\u0E7F\u3040-\u30FF\u3400-\u4DBF\u4E00-\u9FFF\uF900-\uFAFF\u2DE0-\u2DFF\uA640-\uA69F]/.test(
+    text,
+  );
+}
+
 /** 공감맵·Diary Studies 섹션 제목 — 한국어 + 영문 칩 */
 export const COACH_KOREAN_LABEL_RULE = `
-- 모든 문장·제목·불릿은 **한국어(한글) 또는 영어**만 사용하세요. 한자·중국어·일본어 문자(生活·思考·说话·感觉·行为 등)는 절대 쓰지 마세요. 예: 生活 → 생활, 環境 → 환경.
+- 모든 문장·제목·불릿은 **한국어(한글) 또는 영어**만 사용하세요. 한자·중국어·일본어·러시아어(키릴)·아랍어 등 다른 문자(生活·思考·говорить·финансовую 등)는 절대 쓰지 마세요. 예: 生活 → 생활, 環境 → 환경.
 - 공감맵 예시 섹션 제목은 반드시 아래 네 가지만 사용하세요:
   말함(Says) · 생각함(Thinks) · 행동함(Does) · 느낌(Feels)
 - 고민(Pain)·희망(Gain)·감정(Feeling)·행동(Doing) 등 다른 프레임워크 제목은 금지입니다.`.trim();
