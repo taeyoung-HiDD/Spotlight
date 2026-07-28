@@ -87,6 +87,7 @@ ${KOREAN_PRIMARY_OUTPUT_RULE}
 
 규칙:
 - 모든 번호(1~${needs.length})를 정확히 한 그룹에만 넣습니다. 빠뜨리거나 중복하지 않습니다.
+  일부만 분류하고 나머지를 남기는 것은 실패입니다. 마지막 번호까지 반드시 배정하세요.
 ${balanceRule}
 ${GROUP_NAME_RULE}
 - 결론·솔루션처럼 단정하지 말고, 니즈 묶음의 공통 주제를 이름으로 씁니다.
@@ -182,10 +183,20 @@ function parseNamesJson(text: string, count: number): string[] | null {
   return names.length >= count ? names.slice(0, count) : null;
 }
 
+function uniqueAssignedCount(groups: GroupResult[]): number {
+  return new Set(groups.flatMap((g) => g.needIds)).size;
+}
+
+/**
+ * 번호 기반 AI 분류. 배정 커버리지가 95% 미만이면 재시도하고,
+ * 두 시도 중 커버리지가 높은 결과를 채택한다.
+ */
 async function aiCluster(
   needs: NeedPayload[],
   split = false,
 ): Promise<GroupResult[] | null> {
+  let best: GroupResult[] | null = null;
+  let bestCount = 0;
   for (const retry of [false, true]) {
     try {
       const result = await groqComplete(
@@ -197,12 +208,79 @@ async function aiCluster(
         },
       );
       const parsed = parseClusterJson(result.text, needs);
-      if (parsed) return parsed;
+      if (parsed) {
+        const count = uniqueAssignedCount(parsed);
+        if (count > bestCount) {
+          best = parsed;
+          bestCount = count;
+        }
+        if (count >= Math.ceil(needs.length * 0.95)) return best;
+      }
     } catch {
       // 다음 시도로
     }
   }
-  return null;
+  return best;
+}
+
+function unassignedNeeds(
+  groups: GroupResult[],
+  needs: NeedPayload[],
+): NeedPayload[] {
+  const assigned = new Set(groups.flatMap((g) => g.needIds));
+  return needs.filter((n) => !assigned.has(n.id));
+}
+
+function mergeGroupsByName(
+  base: GroupResult[],
+  extra: GroupResult[],
+): GroupResult[] {
+  const out = base.map((g) => ({ ...g, needIds: [...g.needIds] }));
+  for (const group of extra) {
+    const key = group.name.trim();
+    const existing = out.find((g) => g.name.trim() === key);
+    if (existing) {
+      existing.needIds.push(...group.needIds);
+    } else {
+      out.push({ name: group.name, needIds: [...group.needIds] });
+    }
+  }
+  return out;
+}
+
+/**
+ * AI가 일부만 분류하고 남긴 니즈를 추가 패스로 마저 분류한다.
+ * AI 패스로도 남으면 휴리스틱 묶음 + AI 이름으로 마무리해
+ * "미분류"에는 소수만 남게 한다.
+ */
+async function clusterRemainder(
+  groups: GroupResult[],
+  needs: NeedPayload[],
+): Promise<GroupResult[]> {
+  let out = groups;
+  for (let pass = 0; pass < 2; pass += 1) {
+    const remaining = unassignedNeeds(out, needs);
+    if (remaining.length < 4) return out;
+    const sub = await aiCluster(remaining);
+    if (!sub) break;
+    out = mergeGroupsByName(out, sub);
+  }
+
+  const remaining = unassignedNeeds(out, needs);
+  if (remaining.length >= 6) {
+    const clusters = heuristicClusterNeeds(remaining);
+    const textById = new Map(remaining.map((n) => [n.id, n.text] as const));
+    const names = await aiNameClusters(
+      clusters.map((g) =>
+        g.needIds.map((id) => textById.get(id) ?? "").filter(Boolean),
+      ),
+    );
+    const named = names
+      ? clusters.map((g, i) => ({ name: names[i] ?? g.name, needIds: g.needIds }))
+      : clusters;
+    out = mergeGroupsByName(out, named);
+  }
+  return out;
 }
 
 /**
@@ -329,10 +407,11 @@ export async function POST(request: Request) {
     });
   }
 
-  // 1차: AI가 묶음+이름을 한 번에 (번호 기반, 1회 재시도 포함)
+  // 1차: AI가 묶음+이름을 한 번에 (번호 기반, 커버리지 미달 시 재시도)
   const clustered = await aiCluster(needs);
   if (clustered) {
-    const balanced = await splitOversizedGroups(clustered, needs, true);
+    const completed = await clusterRemainder(clustered, needs);
+    const balanced = await splitOversizedGroups(completed, needs, true);
     return NextResponse.json({
       groups: normalizeGroups(balanced, needs),
       source: "groq",

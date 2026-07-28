@@ -72,11 +72,10 @@ export function ProjectSwitcher({
         <div className="flex size-[26px] items-center justify-center rounded-md border border-badge-fill-ring bg-badge-fill text-[11px] font-bold text-badge-on-fill">
           {projectInitial(projectTitle)}
         </div>
-        <div className="flex items-baseline gap-1.5">
+        <div className="flex items-baseline">
           <span className="text-[12.5px] font-semibold text-foreground">
             {projectTitle}
           </span>
-          <span className="text-[10px] text-muted">· Spotlight</span>
         </div>
         <IconChevronDown
           className={[

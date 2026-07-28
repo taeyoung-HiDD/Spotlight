@@ -338,8 +338,6 @@ interface LatentNeedsJourneyBoardProps {
   onJourneySubjectChange: (journey: UserJourneyMapData) => void;
   needs: Stage5LatentNeedsData;
   onNeedsChange: (needs: Stage5LatentNeedsData) => void;
-  onGenerate: () => void;
-  generating: boolean;
 }
 
 export function LatentNeedsJourneyBoard({
@@ -348,8 +346,6 @@ export function LatentNeedsJourneyBoard({
   onJourneySubjectChange,
   needs,
   onNeedsChange,
-  onGenerate,
-  generating,
 }: LatentNeedsJourneyBoardProps) {
   const subjectId = journey.activeSubjectId;
   const persona = getActivePersonaMap(journey);
@@ -761,23 +757,13 @@ export function LatentNeedsJourneyBoard({
       >
         <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
           <p className={stageLabel}>{personaLabel} · 배치 전 잠재 니즈</p>
-          <div className="flex flex-wrap gap-1.5">
-            <button
-              type="button"
-              onClick={addManualLatentNeed}
-              className="rounded-md border border-dashed border-border-warm bg-panel/80 px-2.5 py-1.5 text-[13px] font-semibold text-foreground transition-colors hover:border-spotlight/50 hover:bg-highlight/40"
-            >
-              + 잠재 니즈 추가
-            </button>
-            <button
-              type="button"
-              onClick={onGenerate}
-              disabled={generating}
-              className={stageBtnSecondary}
-            >
-              {generating ? "도출 중…" : "AI로 잠재 니즈 도출"}
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={addManualLatentNeed}
+            className="rounded-md border border-dashed border-border-warm bg-panel/80 px-2.5 py-1.5 text-[13px] font-semibold text-foreground transition-colors hover:border-spotlight/50 hover:bg-highlight/40"
+          >
+            + 잠재 니즈 추가
+          </button>
         </div>
         <p className={`mb-3 ${stageCaption}`}>
           카드를 클릭하면 편집할 수 있어요. 작성 후 끌어다 여정 단계의 잠재 니즈
@@ -785,8 +771,7 @@ export function LatentNeedsJourneyBoard({
         </p>
         {poolNeeds.length === 0 ? (
           <p className={stageCaption}>
-            아직 배치 전 카드가 없어요. 「+ 잠재 니즈 추가」로 직접 적거나 AI로
-            도출해 보세요.
+            아직 배치 전 카드가 없어요. 「+ 잠재 니즈 추가」로 직접 적어 보세요.
           </p>
         ) : (
           <div className="flex flex-wrap gap-2">

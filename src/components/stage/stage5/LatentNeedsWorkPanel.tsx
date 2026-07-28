@@ -140,8 +140,6 @@ export function LatentNeedsWorkPanel({
           onJourneySubjectChange={onJourneyChange}
           needs={data}
           onNeedsChange={onChange}
-          onGenerate={onGenerate}
-          generating={generating}
         />
       )}
 

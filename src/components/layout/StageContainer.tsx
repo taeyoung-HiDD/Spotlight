@@ -14,7 +14,9 @@ import {
   getStageConfig,
   type InteractionMode,
 } from "@/config/stageConfig";
+import { useOptionalProjectWorkspace } from "@/components/project/ProjectWorkspaceContext";
 import { StageIntroGateProvider } from "@/components/layout/StageIntroGate";
+import { isTaskFocusedProjectState } from "@/lib/stages/stage1/guidanceStyle";
 import { useWorkspaceScrollOnEnter } from "@/lib/motion/pageEnterScroll";
 import {
   stageCoachBtnPrimary,
@@ -51,15 +53,24 @@ export function StageContainer({
 }: StageContainerProps) {
   const config = getStageConfig(stageNumber);
   const archiveView = useArchiveView();
+  const workspace = useOptionalProjectWorkspace();
+  const taskFocused = workspace
+    ? isTaskFocusedProjectState({
+        guidanceStyle: workspace.guidanceStyle,
+        userLevel: workspace.coachingLevel,
+      })
+    : false;
   const [interactionMode, setInteractionMode] = useState<InteractionMode>(() =>
     getInitialInteractionMode(stageNumber),
   );
   const [introDialogDone, setIntroDialogDone] = useState(false);
 
   useEffect(() => {
-    setInteractionMode(getInitialInteractionMode(stageNumber));
-    setIntroDialogDone(false);
-  }, [stageNumber, sceneKey]);
+    setInteractionMode(
+      taskFocused ? "work" : getInitialInteractionMode(stageNumber),
+    );
+    setIntroDialogDone(taskFocused);
+  }, [stageNumber, sceneKey, taskFocused]);
 
   const enterWork = useCallback(() => {
     setInteractionMode("work");
@@ -78,7 +89,7 @@ export function StageContainer({
     );
   }
 
-  if (!config.isConversationalInput || interactionMode === "work") {
+  if (!config.isConversationalInput || taskFocused || interactionMode === "work") {
     return (
       <StageRevealGroup>
         <div key="work" className="coach-page-enter">
