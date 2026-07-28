@@ -3,7 +3,11 @@ import { resolveGroqApiKey, resolveGroqTextModels } from "@/lib/ai/env";
 import { groqComplete } from "@/lib/ai/providers/groqText";
 import { COACH_SYSTEM_INSTRUCTION } from "@/lib/coach/systemInstruction";
 import { fetchProjectAccess } from "@/lib/projects/projectAccess";
-import { heuristicClusterNeeds } from "@/lib/stages/stage5/categorizeNeedsHeuristic";
+import {
+  deriveGroupNameFromTexts,
+  heuristicClusterNeeds,
+  isLowQualityGroupName,
+} from "@/lib/stages/stage5/categorizeNeedsHeuristic";
 
 interface NeedPayload {
   id: string;
@@ -38,7 +42,12 @@ function buildPrompt(needs: NeedPayload[]): string {
 
 규칙:
 - 모든 잠재 니즈 id를 정확히 한 그룹에만 넣습니다. 빠뜨리거나 중복하지 않습니다.
-- 그룹 이름은 2~6단어의 일상어(예: 시간 압박, 정보 불확실).
+- 그룹 이름은 어피니티 다이어그램(스탠퍼드 d.school·닐슨노먼 그룹 방식) 클러스터 라벨처럼,
+  묶인 니즈들에 공통된 근본 주제·심리를 1~4개 명사(구)로 표현합니다.
+  좋은 예: 시간 압박, 정보 신뢰 부족, 자율성 욕구, 사회적 인정 욕구, 선택 피로, 보상 심리
+- 니즈 문장에서 그대로 뽑은 단어를 이름으로 쓰지 않습니다. 특히 "위해서·하기 위해·싶다·하고·때문에"처럼
+  Need Statement 문형을 이루는 연결어·어미는 이름에 절대 포함하지 않습니다.
+  나쁜 예: "위해서 싶다", "하고 이렇게", "때문에 그런데" — 문장 조각·조사·어미 나열
 - 그룹 수는 니즈 개수에 맞게 적당히(보통 2~6개). 1개만이면 1그룹도 가능.
 - 결론·솔루션처럼 단정하지 말고, 니즈 묶음의 공통 주제를 이름으로 씁니다.
 - JSON만 출력. 마크다운·설명 없음.
@@ -82,6 +91,7 @@ function normalizeGroups(
   needs: NeedPayload[],
 ): Array<{ name: string; needIds: string[] }> {
   const validIds = new Set(needs.map((n) => n.id));
+  const textById = new Map(needs.map((n) => [n.id, n.text] as const));
   const used = new Set<string>();
   const cleaned: Array<{ name: string; needIds: string[] }> = [];
 
@@ -92,8 +102,15 @@ function normalizeGroups(
       return true;
     });
     if (needIds.length === 0) continue;
+    // AI가 "위해서·싶다" 같은 문형 연결어만으로 이름을 지으면 어피니티 그룹 텍스트 기반으로 재도출
+    const name =
+      group.name.trim() && !isLowQualityGroupName(group.name)
+        ? group.name.slice(0, 40)
+        : deriveGroupNameFromTexts(
+            needIds.map((id) => textById.get(id) ?? ""),
+          );
     cleaned.push({
-      name: group.name.slice(0, 40) || `그룹 ${cleaned.length + 1}`,
+      name: name || `그룹 ${cleaned.length + 1}`,
       needIds,
     });
   }
