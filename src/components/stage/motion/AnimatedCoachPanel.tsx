@@ -135,7 +135,7 @@ export function AnimatedCoachPanel({
       })
     : false;
   const resolvedIntroMessages = useMemo(
-    () => briefCoachIntroForTaskFocus(messages, taskFocused),
+    () => (taskFocused ? [] : briefCoachIntroForTaskFocus(messages, false)),
     [messages, taskFocused],
   );
   const [introMessages, setIntroMessages] = useState(resolvedIntroMessages);
@@ -174,11 +174,11 @@ export function AnimatedCoachPanel({
     setLiveTurns([]);
     setExchangeBusy(false);
     setChatLoading(false);
-    setIntroDialogDone(false);
+    setIntroDialogDone(taskFocused || resolvedIntroMessages.length === 0);
     setActiveExpertStatus(null);
     sendLockRef.current = false;
     revealDoneRef.current = null;
-  }, [sceneKey, resolvedIntroMessages]);
+  }, [sceneKey, resolvedIntroMessages, taskFocused]);
 
   const waitForReveal = useCallback(async () => {
     await new Promise<void>((resolve) => {

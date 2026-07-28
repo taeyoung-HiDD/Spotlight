@@ -74,6 +74,7 @@ const MACRO_MESSAGE_KEYS: Record<string, MessageKey> = {
 
 function ProjectStageShellHeader({ stageNum }: { stageNum: number }) {
   const { guideReady, isBlocking, openGuide } = useStageGuide();
+  const { coachingLevel, guidanceStyle } = useProjectWorkspace();
   const locale = useUiLocale();
   const t = useT();
   const title = archiveStageNavLabel(stageNum, locale);
@@ -85,6 +86,9 @@ function ProjectStageShellHeader({ stageNum }: { stageNum: number }) {
     : (STAGE_META[stageNum]?.macro ?? "");
   const subtitle =
     (locale === "en" ? STAGE_SUBTITLES_EN : STAGE_SUBTITLES_KO)[stageNum] ?? "";
+  const taskFocused =
+    guidanceStyle === "task_focused" ||
+    (guidanceStyle == null && coachingLevel === "expert");
 
   return (
     <StageRevealItem index={0}>
@@ -114,6 +118,7 @@ function ProjectStageShellHeader({ stageNum }: { stageNum: number }) {
           </h1>
           {guideReady &&
           !isBlocking &&
+          !taskFocused &&
           isStageActivityGuideEnabled(stageNum) ? (
             <button
               type="button"

@@ -82,7 +82,10 @@ export function StageGuideProvider({
     setGuideReady(true);
   }, [stageNumber, taskFocused, coachingLevelReady]);
 
-  const openGuide = useCallback(() => setManualOpen(true), []);
+  const openGuide = useCallback(() => {
+    if (taskFocused) return;
+    setManualOpen(true);
+  }, [taskFocused]);
   const closeGuide = useCallback(() => setManualOpen(false), []);
 
   const completeGuide = useCallback(
@@ -152,7 +155,8 @@ export function StageGuideBody({ children }: StageGuideBodyProps) {
 
   const guideEnabled = isStageActivityGuideEnabled(stageNumber);
   const showGate = guideReady && guideEnabled && isBlocking;
-  const showDialog = guideReady && guideEnabled && manualOpen && !isBlocking;
+  const showDialog =
+    guideReady && guideEnabled && manualOpen && !isBlocking && !taskFocused;
 
   if (!guideReady) {
     if (coachingLevelReady && taskFocused) {
