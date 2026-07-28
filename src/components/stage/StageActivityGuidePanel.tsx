@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { IconBook2, IconX } from "@tabler/icons-react";
 import { LocalizedText } from "@/components/i18n/LocalizedText";
+import { StageGuideTextExample } from "@/components/stage/StageGuideTextExample";
 import { StageGuideLatentNeedsExample } from "@/components/stage/stage5/StageGuideLatentNeedsExample";
 import { StageGuideUserJourneyExample } from "@/components/stage/stage6/StageGuideUserJourneyExample";
 import { StageGuideHmwExample } from "@/components/stage/stage7/StageGuideHmwExample";
@@ -180,11 +181,10 @@ export function StageActivityGuidePanel({
                 ) : null}
               </>
             ) : (
-              <div className="rounded-xl border border-gold/35 bg-highlight px-4 py-3.5">
-                <p className={`${stageBody} break-keep`}>
-                  <LocalizedText>{guide.example.content}</LocalizedText>
-                </p>
-              </div>
+              <StageGuideTextExample
+                key={stageNumber}
+                content={guide.example.content}
+              />
             )}
           </div>
 
