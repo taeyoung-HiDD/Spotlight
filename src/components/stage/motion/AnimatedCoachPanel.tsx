@@ -30,7 +30,6 @@ import { useStageIntroGate } from "@/components/layout/StageIntroGate";
 import { useLocalizedContent } from "@/hooks/useLocalizedContent";
 import { useT } from "@/hooks/useT";
 import { useUiLocale } from "@/hooks/useUiLocale";
-import { briefCoachIntroForTaskFocus } from "@/lib/coach/coachIntroBrief";
 import { withCoachingLevelHint } from "@/lib/coach/coachingLevelContext";
 import { localizeCoachStatus } from "@/lib/i18n/localizeCoachStatus";
 import { isTaskFocusedProjectState } from "@/lib/stages/stage1/guidanceStyle";
@@ -134,8 +133,9 @@ export function AnimatedCoachPanel({
         userLevel: workspace.coachingLevel,
       })
     : false;
+  // 혼자 조절: 단계 진입 긴 설명 생략. 따라가기: 전체 인트로 유지.
   const resolvedIntroMessages = useMemo(
-    () => (taskFocused ? [] : briefCoachIntroForTaskFocus(messages, false)),
+    () => (taskFocused ? [] : messages),
     [messages, taskFocused],
   );
   const [introMessages, setIntroMessages] = useState(resolvedIntroMessages);

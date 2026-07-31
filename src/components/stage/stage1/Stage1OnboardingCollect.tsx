@@ -11,7 +11,10 @@ import {
   buildOnboardingResult,
   type Stage1OnboardingResult,
 } from "@/lib/stages/stage1/onboardingFlow";
-import type { GuidanceStyle } from "@/lib/stages/stage1/guidanceStyle";
+import {
+  writeStoredGuidanceStyle,
+  type GuidanceStyle,
+} from "@/lib/stages/stage1/guidanceStyle";
 
 interface Stage1OnboardingCollectProps {
   projectId: string;
@@ -64,6 +67,7 @@ export function Stage1OnboardingCollect({
       const result = buildOnboardingResult(displayName, style);
       setPendingResult(result);
       setOnboardingDone(true);
+      writeStoredGuidanceStyle(projectId, style);
 
       void (async () => {
         try {
@@ -82,7 +86,7 @@ export function Stage1OnboardingCollect({
           );
           setArtifactId(nextId);
         } catch {
-          /* 다음 저장 시 재시도 */
+          /* 로컬 백업은 이미 저장됨 — 다음 저장 시 artifact 재시도 */
         }
       })();
     },

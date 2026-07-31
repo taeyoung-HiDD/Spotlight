@@ -76,6 +76,40 @@ export function guidanceStyleLabel(style: GuidanceStyle): string {
   );
 }
 
+function isGuidanceStyle(value: string): value is GuidanceStyle {
+  return value === "task_focused" || value === "full_guidance";
+}
+
+/** artifact 저장 실패·지연 대비 — 프로젝트별 가이드 방식 로컬 백업 */
+export function guidanceStyleStorageKey(projectId: string): string {
+  return `spotlight:guidanceStyle:${projectId}`;
+}
+
+export function readStoredGuidanceStyle(
+  projectId: string,
+): GuidanceStyle | undefined {
+  if (typeof window === "undefined") return undefined;
+  try {
+    const raw = window.localStorage.getItem(guidanceStyleStorageKey(projectId));
+    if (raw && isGuidanceStyle(raw)) return raw;
+  } catch {
+    /* ignore */
+  }
+  return undefined;
+}
+
+export function writeStoredGuidanceStyle(
+  projectId: string,
+  style: GuidanceStyle,
+): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(guidanceStyleStorageKey(projectId), style);
+  } catch {
+    /* ignore */
+  }
+}
+
 /** 코치 — 각 방식이 어울리는 사람 (선택 전·후 안내) */
 export const GUIDANCE_STYLE_SUITABILITY: Record<
   GuidanceStyle,

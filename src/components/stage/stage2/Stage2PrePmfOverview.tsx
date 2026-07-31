@@ -64,6 +64,7 @@ import {
   type SimilarServiceItem,
 } from "@/lib/stages/stage2/prePmfOverview";
 import { resolveStage1StartingPoint } from "@/lib/stages/stage1/resolveStartingPoint";
+import { isTaskFocusedProjectState } from "@/lib/stages/stage1/guidanceStyle";
 import {
   stageCaption,
   stageCoachEmphasisGold,
@@ -1145,8 +1146,11 @@ export function Stage2PrePmfOverview({ projectId }: Stage2PrePmfOverviewProps) {
   const locale = useUiLocale();
   const router = useRouter();
   const archiveView = useArchiveView();
-  const { coachingLevel } = useProjectWorkspace();
-  const taskFocused = coachingLevel === "expert";
+  const { coachingLevel, guidanceStyle } = useProjectWorkspace();
+  const taskFocused = isTaskFocusedProjectState({
+    guidanceStyle,
+    userLevel: coachingLevel,
+  });
   const [artifactId, setArtifactId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);

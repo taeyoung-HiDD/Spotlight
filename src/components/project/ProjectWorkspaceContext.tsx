@@ -11,7 +11,9 @@ import {
 } from "react";
 import type { UserCoachingLevel } from "@/lib/stages/stage1/levelDiagnostic";
 import {
+  readStoredGuidanceStyle,
   resolveCoachingLevel,
+  writeStoredGuidanceStyle,
   type GuidanceStyle,
 } from "@/lib/stages/stage1/guidanceStyle";
 import { fetchStage1CollectState } from "@/lib/artifacts/stage1Collect";
@@ -59,19 +61,32 @@ export function ProjectWorkspaceProvider({
   useEffect(() => {
     let cancelled = false;
     setCoachingLevelReady(false);
+    setGuidanceStyleState(undefined);
     void (async () => {
       try {
         const { state } = await fetchStage1CollectState(projectId);
         if (cancelled) return;
-        if (state.guidanceStyle) {
-          setGuidanceStyleState(state.guidanceStyle);
+        const storedStyle = readStoredGuidanceStyle(projectId);
+        const style = state.guidanceStyle ?? storedStyle;
+        if (style) {
+          setGuidanceStyleState(style);
+          writeStoredGuidanceStyle(projectId, style);
         }
-        const level = resolveCoachingLevel(state);
+        const level = resolveCoachingLevel({
+          ...state,
+          guidanceStyle: style ?? state.guidanceStyle,
+        });
         if (level) {
           setCoachingLevelState(level);
         }
       } catch {
-        /* 기본 beginner */
+        const storedStyle = readStoredGuidanceStyle(projectId);
+        if (!cancelled && storedStyle) {
+          setGuidanceStyleState(storedStyle);
+          setCoachingLevelState(
+            resolveCoachingLevel({ guidanceStyle: storedStyle }) ?? "beginner",
+          );
+        }
       } finally {
         if (!cancelled) {
           setCoachingLevelReady(true);
@@ -111,10 +126,16 @@ export function ProjectWorkspaceProvider({
     setCoachingLevelReady(true);
   }, []);
 
-  const setGuidanceStyle = useCallback((style: GuidanceStyle) => {
-    setGuidanceStyleState(style);
-    setCoachingLevelReady(true);
-  }, []);
+  const setGuidanceStyle = useCallback(
+    (style: GuidanceStyle) => {
+      setGuidanceStyleState(style);
+      writeStoredGuidanceStyle(projectId, style);
+      const level = resolveCoachingLevel({ guidanceStyle: style });
+      if (level) setCoachingLevelState(level);
+      setCoachingLevelReady(true);
+    },
+    [projectId],
+  );
 
   const value = useMemo(
     () => ({

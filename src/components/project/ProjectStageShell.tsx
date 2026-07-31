@@ -34,6 +34,7 @@ import { Suspense, useEffect, useMemo, useState, type ReactNode } from "react";
 import { RecordWorkspaceVisit } from "@/components/navigation/RecordWorkspaceVisit";
 import { writeClientMaxStage } from "@/lib/navigation/projectMaxStage";
 import { isStageActivityGuideEnabled } from "@/lib/stages/stageGuideDismissal";
+import { isTaskFocusedProjectState } from "@/lib/stages/stage1/guidanceStyle";
 import {
   completedStagesUpTo,
   resolveMaxReachedStage,
@@ -74,7 +75,8 @@ const MACRO_MESSAGE_KEYS: Record<string, MessageKey> = {
 
 function ProjectStageShellHeader({ stageNum }: { stageNum: number }) {
   const { guideReady, isBlocking, openGuide } = useStageGuide();
-  const { coachingLevel, guidanceStyle } = useProjectWorkspace();
+  const { coachingLevel, guidanceStyle, coachingLevelReady } =
+    useProjectWorkspace();
   const locale = useUiLocale();
   const t = useT();
   const title = archiveStageNavLabel(stageNum, locale);
@@ -86,9 +88,10 @@ function ProjectStageShellHeader({ stageNum }: { stageNum: number }) {
     : (STAGE_META[stageNum]?.macro ?? "");
   const subtitle =
     (locale === "en" ? STAGE_SUBTITLES_EN : STAGE_SUBTITLES_KO)[stageNum] ?? "";
-  const taskFocused =
-    guidanceStyle === "task_focused" ||
-    (guidanceStyle == null && coachingLevel === "expert");
+  const taskFocused = isTaskFocusedProjectState({
+    guidanceStyle,
+    userLevel: coachingLevel,
+  });
 
   return (
     <StageRevealItem index={0}>
@@ -116,7 +119,8 @@ function ProjectStageShellHeader({ stageNum }: { stageNum: number }) {
             {title}
             {stageNum === 6 ? t("guide.stage5TitleSuffix") : ""}
           </h1>
-          {guideReady &&
+          {coachingLevelReady &&
+          guideReady &&
           !isBlocking &&
           !taskFocused &&
           isStageActivityGuideEnabled(stageNum) ? (

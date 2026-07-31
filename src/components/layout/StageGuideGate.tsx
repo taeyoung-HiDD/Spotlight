@@ -67,6 +67,15 @@ export function StageGuideProvider({
       return;
     }
 
+    // 혼자 조절 방식 — 단계 가이드 게이트·수동 열기 모두 비활성
+    if (taskFocused) {
+      setIsDismissed(true);
+      setIsBlocking(false);
+      setManualOpen(false);
+      setGuideReady(true);
+      return;
+    }
+
     if (!isStageActivityGuideEnabled(stageNumber)) {
       setIsDismissed(true);
       setIsBlocking(false);
@@ -77,7 +86,7 @@ export function StageGuideProvider({
 
     const dismissed = isStageGuideDismissed(stageNumber);
     setIsDismissed(dismissed);
-    setIsBlocking(!taskFocused && !dismissed);
+    setIsBlocking(!dismissed);
     setManualOpen(false);
     setGuideReady(true);
   }, [stageNumber, taskFocused, coachingLevelReady]);

@@ -42,6 +42,7 @@ interface StageContainerProps {
  * 단계 마스터 프레임 — isConversationalInput에 따라 intro / work 모드 분기.
  * - 대화형: 중앙 인트로 → CTA 후 좌우 분할
  * - 직접 작업형: 진입 즉시 좌우 분할 (인트로 생략)
+ * - 혼자 조절(task_focused): 가이드·인트로 없이 즉시 work
  */
 export function StageContainer({
   stageNumber,
@@ -54,23 +55,39 @@ export function StageContainer({
   const config = getStageConfig(stageNumber);
   const archiveView = useArchiveView();
   const workspace = useOptionalProjectWorkspace();
+  const levelReady = workspace?.coachingLevelReady ?? true;
   const taskFocused = workspace
     ? isTaskFocusedProjectState({
         guidanceStyle: workspace.guidanceStyle,
         userLevel: workspace.coachingLevel,
       })
     : false;
-  const [interactionMode, setInteractionMode] = useState<InteractionMode>(() =>
-    getInitialInteractionMode(stageNumber),
-  );
+  /** 선호 로드 전에는 intro를 띄우지 않음 — 기본 work */
+  const [interactionMode, setInteractionMode] =
+    useState<InteractionMode>("work");
   const [introDialogDone, setIntroDialogDone] = useState(false);
 
   useEffect(() => {
-    setInteractionMode(
-      taskFocused ? "work" : getInitialInteractionMode(stageNumber),
-    );
-    setIntroDialogDone(taskFocused);
-  }, [stageNumber, sceneKey, taskFocused]);
+    if (workspace && !levelReady) {
+      setInteractionMode("work");
+      setIntroDialogDone(false);
+      return;
+    }
+    if (taskFocused || !config.isConversationalInput) {
+      setInteractionMode("work");
+      setIntroDialogDone(true);
+      return;
+    }
+    setInteractionMode(getInitialInteractionMode(stageNumber));
+    setIntroDialogDone(false);
+  }, [
+    stageNumber,
+    sceneKey,
+    taskFocused,
+    levelReady,
+    workspace,
+    config.isConversationalInput,
+  ]);
 
   const enterWork = useCallback(() => {
     setInteractionMode("work");
@@ -89,7 +106,13 @@ export function StageContainer({
     );
   }
 
-  if (!config.isConversationalInput || taskFocused || interactionMode === "work") {
+  const showWork =
+    !config.isConversationalInput ||
+    !levelReady ||
+    taskFocused ||
+    interactionMode === "work";
+
+  if (showWork) {
     return (
       <StageRevealGroup>
         <div key="work" className="coach-page-enter">
