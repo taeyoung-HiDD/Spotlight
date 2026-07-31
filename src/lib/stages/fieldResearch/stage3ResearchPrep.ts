@@ -22,6 +22,21 @@ import {
   getDtFieldResearchCatalog,
   isDtFieldResearchMethod,
 } from "@/lib/stages/fieldResearch/researchMethodCatalog";
+import {
+  buildHeuristicMethodRecommendationReason,
+  buildHeuristicMethodRationales,
+  ensureSpecificMethodRationales,
+} from "@/lib/stages/fieldResearch/methodRationales";
+import {
+  buildHeuristicMethodParticipantRecommendations,
+  ensureMethodParticipantRecommendations,
+  hasMissingMethodParticipantRecommendations,
+  normalizeMethodParticipantRecommendations,
+  type MethodParticipantRecommendations,
+} from "@/lib/stages/fieldResearch/methodParticipantRecommendations";
+
+export type { MethodParticipantRecommendation, MethodParticipantRecommendations } from "@/lib/stages/fieldResearch/methodParticipantRecommendations";
+export { hasMissingMethodParticipantRecommendations };
 
 export type Stage3ResearchPath = "field_interview";
 export type Stage3GuideMethodTab = "shadowing" | "home_visit_in_depth";
@@ -47,7 +62,7 @@ function normalizeMethodRationales(
     const id = key.trim() as ResearchMethodId;
     if (!isDtFieldResearchMethod(id)) continue;
     if (typeof value !== "string") continue;
-    const text = sanitizeCoachKoreanText(value.trim()).slice(0, 240);
+    const text = sanitizeCoachKoreanText(value.trim()).slice(0, 280);
     if (text) out[id] = text;
   }
   return out;
@@ -75,8 +90,11 @@ export interface Stage3ResearchPrep {
   methodRecommendationReason: string;
   /** 방법별 적합 이유 — 왜 이 방법이 이 문제에 맞는지(방법 id → 한 문장) */
   methodRationales: Partial<Record<ResearchMethodId, string>>;
+  /** 방법별 권장 조사 인원·이유 (CORE 2) */
+  methodParticipantRecommendations: MethodParticipantRecommendations;
+  /** 모집 목표(Extreme User 스펙트럼) — 보통 방법별 권장 중 최댓값 */
   recommendedParticipantCount: number;
-  /** 권장 인원이 이렇게 결정된 이유(코치 한 줄) */
+  /** 모집 목표가 이렇게 잡힌 이유(코치 한 줄) */
   participantCountReason: string;
   selectedParticipantCount: number;
   segments: Stage3ResearchSegment[];
@@ -94,6 +112,7 @@ export function emptyStage3ResearchPrep(): Stage3ResearchPrep {
     selectedMethods: [],
     methodRecommendationReason: "",
     methodRationales: {},
+    methodParticipantRecommendations: {},
     recommendedParticipantCount: 5,
     participantCountReason: "",
     selectedParticipantCount: 5,
@@ -259,18 +278,30 @@ export function normalizeStage3ResearchPrep(
     recommendedMethods = ["home_visit_in_depth", "shadowing"];
   }
   const selectedMethods = normalizeMethodIds(o.selectedMethods);
+  const methodsForRec =
+    selectedMethods.length > 0
+      ? selectedMethods
+      : recommendedMethods.length > 0
+        ? recommendedMethods
+        : [];
   const rationales = normalizeMethodRationales(o.methodRationales);
   const filteredRationales: Partial<Record<ResearchMethodId, string>> = {};
   for (const id of recommendedMethods) {
     if (rationales[id]) filteredRationales[id] = rationales[id];
   }
+  const methodParticipantRecommendations =
+    normalizeMethodParticipantRecommendations(
+      o.methodParticipantRecommendations,
+      methodsForRec,
+    );
 
   return {
     recommendedMethods,
     // 추천 방법만 사용 — 선택은 항상 추천 방법과 동일하게 유지
     selectedMethods: selectedMethods.length ? selectedMethods : recommendedMethods,
-    methodRecommendationReason: clip(o.methodRecommendationReason, 240),
+    methodRecommendationReason: clip(o.methodRecommendationReason, 280),
     methodRationales: filteredRationales,
+    methodParticipantRecommendations,
     recommendedParticipantCount,
     participantCountReason: clip(o.participantCountReason, 240),
     selectedParticipantCount,
@@ -298,16 +329,23 @@ export function researchPrepGatePassed(prep: Stage3ResearchPrep): boolean {
   );
 }
 
-/** 권장 인원 결정 이유 — AI/휴리스틱 값이 없으면 인원·세그먼트 기반 기본 문구 */
+/** 모집 목표 결정 이유 — AI/휴리스틱 값이 없으면 방법별·세그먼트 기반 기본 문구 */
 export function participantCountReasonText(prep: Stage3ResearchPrep): string {
   const reason = prep.participantCountReason?.trim() ?? "";
   if (reason) return reason;
-  const count = prep.recommendedParticipantCount ?? 5;
-  const segCount = prep.segments?.length ?? 0;
-  if (segCount > 1) {
-    return `정성 조사는 5~8명이면 반복되는 행동 패턴이 드러나요. ${segCount}개 세그먼트를 비교·대조하려고 세그먼트별 인원을 합쳐 총 ${count}명을 권장해요.`;
-  }
-  return `정성 조사는 5명 안팎이면 반복되는 행동 패턴이 충분히 드러나므로, 깊이 있는 인터뷰가 가능한 ${count}명을 권장해요.`;
+  const methods =
+    prep.selectedMethods.length > 0
+      ? prep.selectedMethods
+      : prep.recommendedMethods;
+  const ensured = ensureMethodParticipantRecommendations(
+    methods,
+    prep.methodParticipantRecommendations,
+    {
+      segmentTotal: prep.segments.reduce((s, seg) => s + seg.recommendedCount, 0),
+      segmentCount: prep.segments.length,
+    },
+  );
+  return ensured.participantCountReason;
 }
 
 export function totalSelectedFromSegments(prep: Stage3ResearchPrep): number {
@@ -464,14 +502,7 @@ export function heuristicResearchPrep(
     }),
   );
 
-  const recommendedParticipantCount = Math.max(
-    5,
-    segments.reduce((sum, s) => sum + s.recommendedCount, 0),
-  );
-  const participantCountReason =
-    segments.length > 1
-      ? `정성 조사는 5~8명이면 반복되는 행동 패턴이 드러나요. ${segments.length}개 세그먼트를 선정 기준으로 비교·대조하려고 세그먼트별 인원을 합쳐 총 ${recommendedParticipantCount}명을 권장해요.`
-      : `정성 조사는 5명 안팎이면 반복되는 행동 패턴이 충분히 드러나므로, 깊이 있는 인터뷰가 가능한 ${recommendedParticipantCount}명을 권장해요.`;
+  const segmentTotal = segments.reduce((sum, s) => sum + s.recommendedCount, 0);
   const problemHint = problem.trim().slice(0, 80);
   const keyQuestionGuides = [
     problemHint
@@ -489,21 +520,34 @@ export function heuristicResearchPrep(
     "home_visit_in_depth",
     "shadowing",
   ];
+  const methodParticipantRecommendations =
+    buildHeuristicMethodParticipantRecommendations(recommendedMethods, {
+      segmentTotal: Math.max(5, segmentTotal),
+      segmentCount: segments.length,
+    });
+  const ensuredCounts = ensureMethodParticipantRecommendations(
+    recommendedMethods,
+    methodParticipantRecommendations,
+    {
+      segmentTotal: Math.max(5, segmentTotal),
+      segmentCount: segments.length,
+    },
+  );
 
   return {
     recommendedMethods,
     selectedMethods: recommendedMethods,
     methodRecommendationReason:
-      "사용자 환경·도구·행동을 함께 봐야 하므로, 직접 찾아가 대화하는 인뎁스 인터뷰와 행동을 관찰하는 섀도잉 조합을 추천해요.",
-    methodRationales: {
-      home_visit_in_depth:
-        "사용자의 실제 환경에서 1:1로 깊게 대화해야 맥락·습관·감정을 함께 들으며 문제의 근본 원인(Why)을 파악할 수 있어요.",
-      shadowing:
-        "말로는 설명하지 못하는 행동과 우회 방식을 직접 관찰해, 겉으로 드러나지 않는 잠재 니즈의 단서를 잡을 수 있어요.",
-    },
-    recommendedParticipantCount,
-    participantCountReason,
-    selectedParticipantCount: recommendedParticipantCount,
+      buildHeuristicMethodRecommendationReason(problem),
+    methodRationales: buildHeuristicMethodRationales(
+      problem,
+      recommendedMethods,
+    ),
+    methodParticipantRecommendations:
+      ensuredCounts.methodParticipantRecommendations,
+    recommendedParticipantCount: ensuredCounts.recommendedParticipantCount,
+    participantCountReason: ensuredCounts.participantCountReason,
+    selectedParticipantCount: ensuredCounts.recommendedParticipantCount,
     segments,
     keyQuestionGuides,
     topicQuestions,
@@ -530,10 +574,22 @@ export function buildResearchPrepPrompt(
 ${COACH_KOREAN_LABEL_RULE}
 - recommendedMethods: 아래 **Design Thinking 공감(Empathize) 리서치 방법 id** 중 문제에 가장 적합한 1~3개만 고릅니다.
 - **설문(survey)·데스크리서치(desk_research)·FGD(fgd)·기타(other)는 절대 추천하지 않습니다.**
-- methodRecommendationReason: 왜 그 방법 조합이 이 문제에 맞는지 한 문장.
-- methodRationales: recommendedMethods **각각의 id를 키**로, "왜 이 방법이 이 문제·타겟에 적합한지"를 문제 맥락과 연결해 한 문장씩 씁니다.
-- recommendedParticipantCount: 총 권장 인원 (보통 5~8명, B2B는 3~6명도 가능)
-- participantCountReason: 왜 그 인원이 적정한지 한 문장 (정성 조사 특성·세그먼트 수·B2B 등 문제 맥락과 연결)
+- methodRecommendationReason: 왜 그 방법 **조합**이 이 문제의 도메인(구체 소재)에 맞는지 한 문장. 문제 정의 속 명사(예: 저축·가계부·결제)를 직접 넣습니다.
+- methodRationales: recommendedMethods **각각의 id를 키**로, 그 방법이 **이 문제에서만 특별히 유리한 점**을 1~2문장으로 씁니다.
+  - **필수**: 문제 정의의 구체 소재(도메인 명사·상황)를 문장에 직접 넣고, 그 방법으로만 잡을 수 있는 단서(도구·장면·자기보고 갭 등)를 명시합니다.
+  - **금지**: 방법 카탈로그 요약(「맥락·습관·감정」「말과 행동의 차이」「공간에서 1:1」)을 되풀이하거나, 도메인 명사만 끼워 넣은 일반론.
+  - 좋은 예(금융): home_visit_in_depth → "가계부·뱅킹 앱·현금 봉투처럼 돈 관리에 쓰는 물건과 자리를 직접 보면, 인터뷰에서 빠뜨리기 쉬운 실제 돈 나누기 습관을 확인할 수 있어요."
+  - 좋은 예(금융): shadowing → "월급일·결제 순간을 따라가면 「아끼는 편」 같은 자기보고와 실제 소비·저축 행동의 갭을 잡을 수 있어요."
+  - 나쁜 예: "사용자의 실제 생활 공간에서 인터뷰하면 자산·금융 관리의 맥락과 습관을 들을 수 있어요." (방법 정의 + 주제 단어만 붙임)
+  - 나쁜 예: "사용자의 실제 행동을 관찰해 말과 행동의 차이를 볼 수 있어요." (어느 주제에나 통하는 일반론)
+- methodParticipantRecommendations: recommendedMethods **각각의 id**에 대해 {count, reason}.
+  - **방법마다 다른 인원**을 제시합니다. 모든 방법에 같은 숫자를 넣지 마세요.
+  - home_visit_in_depth: 보통 5~8명 (세그먼트 비교·패턴 포화)
+  - shadowing: 보통 3~5명 (회차당 시간이 길어 인터뷰보다 적게 · 인터뷰 풀의 일부여도 됨)
+  - be_the_customer: count 1 (조사자 직접 체험 · 모집 인원 아님을 reason에 명시)
+  - reason: 왜 그 방법에서 그 인원인지를 방법 특성(시간·깊이·포화)과 연결한 한 문장
+- recommendedParticipantCount: **모집 목표** — 사용자 모집이 필요한 방법(인터뷰·섀도잉)의 count 중 **최댓값**
+- participantCountReason: 방법별 인원이 다르다는 점과, 모집 목표를 최댓값으로 잡은 이유를 한 문장
 - segments: 3~5개. Extreme User 스펙트럼으로 배치합니다. **나이대만으로 나누지 마세요.** (「20대 초반 직장인 / 20대 후반 직장인」처럼 연령 밴드만 다른 분할은 금지)
   - label: 문제와 직결된 **구체적 속성 조합**(자취·부모 지원·혼인·소득 안정성 등). 연령만 바꾼 라벨 금지.
   - role: "heavy" | "light" | "secondary" | "control".
@@ -542,11 +598,11 @@ ${COACH_KOREAN_LABEL_RULE}
     - control: 대조군 기준선 (0~1개, 선택)
   - selectionCriteria: 세그먼트마다 **서로 다른** 구분 축 2~4개. 두 세그먼트가 같은 칩 목록을 공유하면 안 됩니다.
   - criterionDetails: selectionCriteria 각 항목에 대해 {label, why} — **이 대상에게 왜 이 기준이 붙는지** 한 문장. 유형 공통 문구 복붙 금지.
-  - recommendedCount: 세그먼트별 인원 (합 = recommendedParticipantCount). 1순위(heavy+light)에 더 많은 인원을 배분하고, secondary는 그보다 적게.
+  - recommendedCount: 세그먼트별 인원 (합 ≈ home_visit_in_depth count 또는 recommendedParticipantCount). 1순위(heavy+light)에 더 많은 인원을 배분하고, secondary는 그보다 적게.
   - reason / reasoning: 유형 전체 선정 이유 1~2문장 + 위 기준들과 연결. secondary에는 「왜 극단 다음 우선순위인지」를 명시.
 - keyQuestionGuides: 과거 행동·맥락을 묻는 질문 3~4개. **문제 정의 속 구체 소재(도메인 명사)를 질문 안에 직접 포함**합니다. (미래 가정·솔루션 검증 질문 금지)
-- topicQuestions: 실제로 물어볼 인터뷰 질문 가이드. {category, question} 형태로 **15~18개** 만듭니다. 조사 대상 모두에게 동일하게 묻고 극단 사용자 간 답변을 비교하는 단일 가이드이므로, 대상별로 나누지 않습니다 (subject 필드 없음).
-  - category는 "사용자" | "현재 문제" | "행동 & 맥락" | "기존 솔루션" | "동기 & 목표". **5개 카테고리를 모두 쓰고, 카테고리당 3~4개**를 배분합니다.
+- topicQuestions: 실제로 물어볼 인터뷰 질문 가이드. {category, question} 형태로 **20~25개** 만듭니다. 조사 대상 모두에게 동일하게 묻고 극단 사용자 간 답변을 비교하는 단일 가이드이므로, 대상별로 나누지 않습니다 (subject 필드 없음).
+  - category는 "사용자" | "현재 문제" | "행동 & 맥락" | "기존 솔루션" | "동기 & 목표". **5개 카테고리를 모두 쓰고, 카테고리당 최대 5개(권장 5개)**를 배분합니다. 한 카테고리에 5개를 넘는 질문은 넣지 마세요.
   - **모든 질문에 문제 정의 속 구체 소재(도메인 명사·상황)를 직접 넣습니다.** 예: 금융 주제라면 월급·저축·가계부·금융 앱 등. 「평소 하루를 어떻게 보내시나요?」 「일상에서 무엇을 가장 중요하게 여기시나요?」처럼 어느 주제에나 통하는 일반 질문은 금지.
   - 과거의 실제 행동·경험·감정을 묻습니다(최근 언제·어떤 상황·어떻게). 미래 가정·솔루션 검증 질문 금지.
   - 경험이 적은 응답자(라이트·초보)도, 많은 응답자(헤비)도 답할 수 있게 특정 서비스·경력을 전제하지 않는 표현을 씁니다.
@@ -565,7 +621,7 @@ ${prePmfSummary || "(없음)"}
 타겟 힌트: ${targetLabels.join(" · ") || "(없음)"}
 
 출력 형식:
-{"recommendedMethods":["home_visit_in_depth","shadowing"],"methodRecommendationReason":"...","methodRationales":{"home_visit_in_depth":"...","shadowing":"..."},"recommendedParticipantCount":6,"participantCountReason":"...","segments":[{"label":"자취·부모 지원 거의 없는 사회 초년생","role":"heavy","selectionCriteria":["자취 유무","부모 경제 지원","첫 월급·연차"],"criterionDetails":[{"label":"자취 유무","why":"주거비가 저축 여력을 바로 가릅니다."},{"label":"부모 경제 지원","why":"지원이 없으면 금융 도구를 생존형으로 씁니다."},{"label":"첫 월급·연차","why":"입사 초기는 금융 습관이 생기는 극단입니다."}],"recommendedCount":2,"reason":"...","reasoning":"..."},{"label":"소득 변동이 큰 이직·프리랜스 전환기","role":"light","selectionCriteria":["고용 형태","소득 안정성","이직 경험"],"criterionDetails":[{"label":"고용 형태","why":"고용 형태에 따라 금융 접근이 달라집니다."},{"label":"소득 안정성","why":"변동기에는 저축 루틴이 깨지거나 재정비됩니다."},{"label":"이직 경험","why":"경력 전환은 돈 관리를 다시 짜는 계기입니다."}],"recommendedCount":2,"reason":"...","reasoning":"..."},{"label":"또래 커뮤니티로 금융을 배우는 사회 초년생","role":"secondary","selectionCriteria":["또래 영향","금융 학습 채널"],"criterionDetails":[{"label":"또래 영향","why":"극단 다음으로 또래 규범이 행동을 밉니다."},{"label":"금융 학습 채널","why":"커뮤니티 학습은 양 끝과 다른 니즈를 보여 줍니다."}],"recommendedCount":1,"reason":"양 극단 다음 2순위 후보예요.","reasoning":"양 극단 다음 2순위 후보예요."},{"label":"가족과 동거·일부 지원을 받는 초년 직장인","role":"control","selectionCriteria":["동거 여부","부모 경제 지원","혼인 여부"],"criterionDetails":[{"label":"동거 여부","why":"주거비 부담이 낮아 Heavy와 대비됩니다."},{"label":"부모 경제 지원","why":"부분 지원이 자립·의존의 기준선이 됩니다."},{"label":"혼인 여부","why":"가계 단위 차이를 대조하는 데 필요합니다."}],"recommendedCount":1,"reason":"...","reasoning":"..."}],"keyQuestionGuides":["..."],"topicQuestions":[{"category":"사용자","question":"월급이 들어온 날 가장 먼저 하시는 일과 그다음 순서는 무엇인가요?"},{"category":"사용자","question":"금융 관련 정보는 주로 어디서, 어떤 계기로 찾아보시나요? 최근 사례를 들어 주실 수 있나요?"},{"category":"사용자","question":"한 달 생활비 중 가장 먼저 빠져나가는 항목은 무엇이고, 그다음 우선순위는 어떻게 정하시나요?"},{"category":"현재 문제","question":"가장 최근 월급을 받은 뒤 저축과 소비를 나누다가 막막했던 순간은 언제였고, 그때 어떻게 하셨나요?"},{"category":"현재 문제","question":"저축이나 투자를 시작해야겠다고 느꼈지만 실제로 못 했던 경험이 있다면, 무엇이 발목을 잡았나요?"},{"category":"현재 문제","question":"돈 관리와 관련해 최근 한 달 동안 가장 신경 쓰였던 일은 무엇이었나요?"},{"category":"행동 & 맥락","question":"월급일부터 다음 월급 전까지 돈과 관련해 실제로 하시는 행동을 순서대로 들려주실 수 있나요?"},{"category":"행동 & 맥락","question":"가계부·뱅킹 앱·엑셀 등 직접 만들어 쓰시는 돈 관리 방법이 있다면 어떻게 쓰고 계신가요?"},{"category":"행동 & 맥락","question":"돈 이야기를 주로 누구와 나누시나요? 최근에는 어떤 이야기를 하셨나요?"},{"category":"기존 솔루션","question":"지금 쓰시는 가계부·금융 앱은 무엇이고, 계속 쓰는 이유와 아쉬운 점은 각각 무엇인가요?"},{"category":"기존 솔루션","question":"예전에 가계부나 저축 챌린지 등을 시도했다 그만두신 적이 있다면, 어떤 순간에 왜 그만두셨나요?"},{"category":"기존 솔루션","question":"저축·소비 결정을 내리기 직전에 마지막으로 참고하는 정보나 기준은 무엇인가요?"},{"category":"동기 & 목표","question":"자산 관리가 자리 잡으면 1년 뒤 어떤 모습이길 바라시나요? 그게 왜 중요한가요?"},{"category":"동기 & 목표","question":"부모님이나 또래와 돈 이야기를 할 때, 말로는 안 꺼내지만 속으로 바라시는 것이 있다면 무엇인가요?"},{"category":"동기 & 목표","question":"돈 관리에서 「이것만은 지키고 싶다」 하는 본인만의 원칙이 있다면 무엇인가요?"}]}
+{"recommendedMethods":["home_visit_in_depth","shadowing"],"methodRecommendationReason":"자산·금융 관리는 말로는 정리해도 실제 습관·도구·결제 순간이 달라서, 현장 대화와 행동 관찰을 함께 쓰는 편이 원인(Why)에 가까워져요.","methodRationales":{"home_visit_in_depth":"가계부·뱅킹 앱·현금 봉투처럼 돈 관리에 쓰는 물건과 자리를 직접 보면, 인터뷰에서 빠뜨리기 쉬운 실제 돈 나누기·기록 습관을 함께 확인할 수 있어요.","shadowing":"월급일·결제·이체처럼 금융 결정이 순간적으로 일어나는 장면을 따라가면, 「아끼는 편」 같은 자기보고와 실제 소비·저축 행동의 갭을 잡을 수 있어요."},"methodParticipantRecommendations":{"home_visit_in_depth":{"count":6,"reason":"1:1 홈비짓은 세그먼트를 비교하려면 5~8명이 적당해요. 극단·대조를 나눠 6명을 권장해요."},"shadowing":{"count":4,"reason":"섀도잉은 회차당 시간이 길어 3~5명이면 충분해요. 인터뷰 대상 중 극단 4명에 집중해도 돼요."}},"recommendedParticipantCount":6,"participantCountReason":"방법별로 권장 인원이 달라요(인터뷰 6명 · 섀도잉 4명). 같은 대상을 여러 방법에 쓸 수 있으니 모집 목표는 최댓값인 6명이에요.","segments":[{"label":"자취·부모 지원 거의 없는 사회 초년생","role":"heavy","selectionCriteria":["자취 유무","부모 경제 지원","첫 월급·연차"],"criterionDetails":[{"label":"자취 유무","why":"주거비가 저축 여력을 바로 가릅니다."},{"label":"부모 경제 지원","why":"지원이 없으면 금융 도구를 생존형으로 씁니다."},{"label":"첫 월급·연차","why":"입사 초기는 금융 습관이 생기는 극단입니다."}],"recommendedCount":2,"reason":"...","reasoning":"..."},{"label":"소득 변동이 큰 이직·프리랜스 전환기","role":"light","selectionCriteria":["고용 형태","소득 안정성","이직 경험"],"criterionDetails":[{"label":"고용 형태","why":"고용 형태에 따라 금융 접근이 달라집니다."},{"label":"소득 안정성","why":"변동기에는 저축 루틴이 깨지거나 재정비됩니다."},{"label":"이직 경험","why":"경력 전환은 돈 관리를 다시 짜는 계기입니다."}],"recommendedCount":2,"reason":"...","reasoning":"..."},{"label":"또래 커뮤니티로 금융을 배우는 사회 초년생","role":"secondary","selectionCriteria":["또래 영향","금융 학습 채널"],"criterionDetails":[{"label":"또래 영향","why":"극단 다음으로 또래 규범이 행동을 밉니다."},{"label":"금융 학습 채널","why":"커뮤니티 학습은 양 끝과 다른 니즈를 보여 줍니다."}],"recommendedCount":1,"reason":"양 극단 다음 2순위 후보예요.","reasoning":"양 극단 다음 2순위 후보예요."},{"label":"가족과 동거·일부 지원을 받는 초년 직장인","role":"control","selectionCriteria":["동거 여부","부모 경제 지원","혼인 여부"],"criterionDetails":[{"label":"동거 여부","why":"주거비 부담이 낮아 Heavy와 대비됩니다."},{"label":"부모 경제 지원","why":"부분 지원이 자립·의존의 기준선이 됩니다."},{"label":"혼인 여부","why":"가계 단위 차이를 대조하는 데 필요합니다."}],"recommendedCount":1,"reason":"...","reasoning":"..."}],"keyQuestionGuides":["..."],"topicQuestions":[{"category":"사용자","question":"월급이 들어온 날 가장 먼저 하시는 일과 그다음 순서는 무엇인가요?"},{"category":"사용자","question":"금융 관련 정보는 주로 어디서, 어떤 계기로 찾아보시나요? 최근 사례를 들어 주실 수 있나요?"},{"category":"사용자","question":"한 달 생활비 중 가장 먼저 빠져나가는 항목은 무엇이고, 그다음 우선순위는 어떻게 정하시나요?"},{"category":"현재 문제","question":"가장 최근 월급을 받은 뒤 저축과 소비를 나누다가 막막했던 순간은 언제였고, 그때 어떻게 하셨나요?"},{"category":"현재 문제","question":"저축이나 투자를 시작해야겠다고 느꼈지만 실제로 못 했던 경험이 있다면, 무엇이 발목을 잡았나요?"},{"category":"현재 문제","question":"돈 관리와 관련해 최근 한 달 동안 가장 신경 쓰였던 일은 무엇이었나요?"},{"category":"행동 & 맥락","question":"월급일부터 다음 월급 전까지 돈과 관련해 실제로 하시는 행동을 순서대로 들려주실 수 있나요?"},{"category":"행동 & 맥락","question":"가계부·뱅킹 앱·엑셀 등 직접 만들어 쓰시는 돈 관리 방법이 있다면 어떻게 쓰고 계신가요?"},{"category":"행동 & 맥락","question":"돈 이야기를 주로 누구와 나누시나요? 최근에는 어떤 이야기를 하셨나요?"},{"category":"기존 솔루션","question":"지금 쓰시는 가계부·금융 앱은 무엇이고, 계속 쓰는 이유와 아쉬운 점은 각각 무엇인가요?"},{"category":"기존 솔루션","question":"예전에 가계부나 저축 챌린지 등을 시도했다 그만두신 적이 있다면, 어떤 순간에 왜 그만두셨나요?"},{"category":"기존 솔루션","question":"저축·소비 결정을 내리기 직전에 마지막으로 참고하는 정보나 기준은 무엇인가요?"},{"category":"동기 & 목표","question":"자산 관리가 자리 잡으면 1년 뒤 어떤 모습이길 바라시나요? 그게 왜 중요한가요?"},{"category":"동기 & 목표","question":"부모님이나 또래와 돈 이야기를 할 때, 말로는 안 꺼내지만 속으로 바라시는 것이 있다면 무엇인가요?"},{"category":"동기 & 목표","question":"돈 관리에서 「이것만은 지키고 싶다」 하는 본인만의 원칙이 있다면 무엇인가요?"}]}
 `.trim();
 }
 
@@ -588,18 +644,50 @@ export function parseResearchPrepJson(text: string): Partial<Stage3ResearchPrep>
           .map((q) => sanitizeCoachKoreanText(q.trim()).slice(0, 240))
       : [];
     const topicQuestions = normalizeTopicInterviewQuestions(parsed.topicQuestions);
-    const recommendedParticipantCount = Math.round(
-      Number(parsed.recommendedParticipantCount) || 5,
-    );
     const recommendedMethods = normalizeMethodIds(parsed.recommendedMethods);
+    const methods =
+      recommendedMethods.length > 0
+        ? recommendedMethods
+        : (["home_visit_in_depth", "shadowing"] as ResearchMethodId[]);
+    const methodParticipantRecommendations =
+      normalizeMethodParticipantRecommendations(
+        parsed.methodParticipantRecommendations,
+        methods,
+      );
+    const segmentTotal = segments.reduce(
+      (sum, s) => sum + s.recommendedCount,
+      0,
+    );
+    const ensured = ensureMethodParticipantRecommendations(
+      methods,
+      methodParticipantRecommendations,
+      {
+        segmentTotal: Math.max(5, segmentTotal),
+        segmentCount: segments.length,
+      },
+    );
+    const recommendedParticipantCount = Math.round(
+      Number(parsed.recommendedParticipantCount) ||
+        ensured.recommendedParticipantCount,
+    );
     return {
       recommendedMethods,
       selectedMethods: recommendedMethods,
-      methodRecommendationReason: clip(parsed.methodRecommendationReason, 240),
+      methodRecommendationReason: clip(parsed.methodRecommendationReason, 280),
       methodRationales: normalizeMethodRationales(parsed.methodRationales),
-      recommendedParticipantCount,
-      participantCountReason: clip(parsed.participantCountReason, 240),
-      selectedParticipantCount: recommendedParticipantCount,
+      methodParticipantRecommendations:
+        ensured.methodParticipantRecommendations,
+      recommendedParticipantCount: Math.min(
+        30,
+        Math.max(1, recommendedParticipantCount),
+      ),
+      participantCountReason:
+        clip(parsed.participantCountReason, 240) ||
+        ensured.participantCountReason,
+      selectedParticipantCount: Math.min(
+        30,
+        Math.max(1, recommendedParticipantCount),
+      ),
       segments: segments.map((s) => ({ ...s, selectedCount: s.recommendedCount })),
       keyQuestionGuides,
       topicQuestions,
@@ -608,6 +696,98 @@ export function parseResearchPrepJson(text: string): Partial<Stage3ResearchPrep>
   } catch {
     return null;
   }
+}
+
+/** AI/저장본의 방법 이유가 일반론이면 문제 맞춤 문구로 교체 */
+export function refineResearchPrepMethodRationales(
+  problem: string,
+  prep: Stage3ResearchPrep,
+): Stage3ResearchPrep {
+  const methods =
+    prep.recommendedMethods.length > 0
+      ? prep.recommendedMethods
+      : (["home_visit_in_depth", "shadowing"] as ResearchMethodId[]);
+  const { methodRationales, methodRecommendationReason } =
+    ensureSpecificMethodRationales(
+      problem,
+      methods,
+      prep.methodRationales,
+      prep.methodRecommendationReason,
+    );
+  const segmentTotal = prep.segments.reduce(
+    (sum, s) => sum + s.recommendedCount,
+    0,
+  );
+  const ensuredCounts = ensureMethodParticipantRecommendations(
+    methods,
+    prep.methodParticipantRecommendations,
+    {
+      segmentTotal: Math.max(5, segmentTotal || prep.recommendedParticipantCount),
+      segmentCount: prep.segments.length,
+    },
+  );
+  const keepSelected =
+    prep.selectedParticipantCount > 0 &&
+    prep.selectedParticipantCount !== prep.recommendedParticipantCount
+      ? prep.selectedParticipantCount
+      : ensuredCounts.recommendedParticipantCount;
+
+  return {
+    ...prep,
+    methodRationales,
+    methodRecommendationReason,
+    methodParticipantRecommendations:
+      ensuredCounts.methodParticipantRecommendations,
+    recommendedParticipantCount: ensuredCounts.recommendedParticipantCount,
+    participantCountReason:
+      prep.participantCountReason?.trim() &&
+      !hasMissingMethodParticipantRecommendations(
+        methods,
+        prep.methodParticipantRecommendations,
+      )
+        ? prep.participantCountReason
+        : ensuredCounts.participantCountReason,
+    // 사용자가 이미 총원을 바꿔 둔 경우는 유지, 아니면 모집 목표에 맞춤
+    selectedParticipantCount: keepSelected,
+  };
+}
+
+/** 방법별 권장 인원만 보강 (레거시 저장본 1회 업그레이드용) */
+export function refineResearchPrepParticipantCounts(
+  prep: Stage3ResearchPrep,
+): Stage3ResearchPrep {
+  const methods =
+    prep.selectedMethods.length > 0
+      ? prep.selectedMethods
+      : prep.recommendedMethods.length > 0
+        ? prep.recommendedMethods
+        : (["home_visit_in_depth", "shadowing"] as ResearchMethodId[]);
+  if (
+    !hasMissingMethodParticipantRecommendations(
+      methods,
+      prep.methodParticipantRecommendations,
+    )
+  ) {
+    return prep;
+  }
+  const segmentTotal = prep.segments.reduce(
+    (sum, s) => sum + s.recommendedCount,
+    0,
+  );
+  const ensured = ensureMethodParticipantRecommendations(
+    methods,
+    prep.methodParticipantRecommendations,
+    {
+      segmentTotal: Math.max(5, segmentTotal || prep.recommendedParticipantCount),
+      segmentCount: prep.segments.length,
+    },
+  );
+  return {
+    ...prep,
+    methodParticipantRecommendations: ensured.methodParticipantRecommendations,
+    recommendedParticipantCount: ensured.recommendedParticipantCount,
+    participantCountReason: ensured.participantCountReason,
+  };
 }
 
 export const STAGE3_RESEARCH_GUIDE_INTRO =

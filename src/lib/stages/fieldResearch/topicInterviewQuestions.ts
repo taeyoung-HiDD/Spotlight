@@ -21,13 +21,17 @@ export interface TopicInterviewQuestion {
   subject?: string;
 }
 
-const MAX_PER_KEY_CATEGORY = 5;
-const MAX_PER_KEY = 25;
+/** 테마(카테고리)당 최대 질문 수 */
+export const MAX_TOPIC_QUESTIONS_PER_CATEGORY = 5;
+const MAX_PER_KEY_CATEGORY = MAX_TOPIC_QUESTIONS_PER_CATEGORY;
+/** 5개 테마 × 최대 5개 */
+const MAX_PER_KEY = MAX_TOPIC_QUESTIONS_PER_CATEGORY * 5;
 const MAX_TOTAL = 80;
-/** 가이드 전체 최소 질문 수 (AI가 적게 내면 휴리스틱으로 보충) */
-export const MIN_TOPIC_QUESTIONS_TOTAL = 15;
-/** 테마(카테고리)당 최소 질문 수 */
-const MIN_PER_CATEGORY = 2;
+/** 가이드 전체 목표 질문 수 (카테고리당 최대 5 × 5테마) */
+export const MIN_TOPIC_QUESTIONS_TOTAL =
+  MAX_TOPIC_QUESTIONS_PER_CATEGORY * TO_KNOW_GUIDE_CATEGORY_ORDER.length;
+/** 테마(카테고리)당 목표·상한 — 최대 5개까지 채움 */
+const MIN_PER_CATEGORY = MAX_TOPIC_QUESTIONS_PER_CATEGORY;
 /** 생성된 질문 행의 infoCategory — 모든 조사 대상에게 동일하게 묻는 가이드 */
 export const TOPIC_QUESTION_SUBJECT_LABEL = "공통";
 
@@ -185,6 +189,16 @@ function baseHeuristicPool(problem: string): TopicInterviewQuestion[] {
           "금융 관련 정보는 주로 어디서, 어떤 계기로 찾아보나요? 최근 사례를 들어 주실 수 있나요?",
       },
       {
+        category: "사용자",
+        question:
+          "월급·보너스·용돈 등 돈이 들어오는 경로를 최근 한 달 기준으로 어떻게 구분해서 쓰고 계신가요?",
+      },
+      {
+        category: "사용자",
+        question:
+          "돈 관리를 도와주는 사람(가족·친구·동료)이 있다면, 그 사람과 어떤 역할을 나누고 계신가요?",
+      },
+      {
         category: "현재 문제",
         question:
           "돈 관리 때문에 가장 막막했던 최근 순간은 언제였나요? 그때 어떤 감정이 들었나요?",
@@ -198,6 +212,16 @@ function baseHeuristicPool(problem: string): TopicInterviewQuestion[] {
         category: "현재 문제",
         question:
           "월급을 받은 뒤 저축과 소비를 나누다가 가장 최근에 막혔던 순간은 언제, 어떻게 넘기셨나요?",
+      },
+      {
+        category: "현재 문제",
+        question:
+          "예상치 못한 지출이 생겼을 때 가장 최근에 어떻게 대처하셨나요? 그때 무엇이 가장 어려웠나요?",
+      },
+      {
+        category: "현재 문제",
+        question:
+          "통장·카드·앱 잔액을 확인하다가 불안하거나 피하고 싶었던 최근 순간이 있다면 언제였나요?",
       },
       {
         category: "행동 & 맥락",
@@ -215,6 +239,16 @@ function baseHeuristicPool(problem: string): TopicInterviewQuestion[] {
           "돈 이야기를 주로 누구와 나누시나요? 최근에는 어떤 이야기를 하셨나요?",
       },
       {
+        category: "행동 & 맥락",
+        question:
+          "결제·이체 직전에 멈추거나 다시 생각하는 습관이 있다면, 최근에는 어떤 상황에서 그렇게 하셨나요?",
+      },
+      {
+        category: "행동 & 맥락",
+        question:
+          "현금·카드·간편결제 중 어디에 돈을 두고 쓰시나요? 장소·상황마다 다르게 쓰시는 방식이 있나요?",
+      },
+      {
         category: "기존 솔루션",
         question:
           "지금 쓰시는 금융 앱·서비스는 무엇이고, 계속 쓰는 이유와 아쉬운 점은 각각 무엇인가요?",
@@ -230,6 +264,16 @@ function baseHeuristicPool(problem: string): TopicInterviewQuestion[] {
           "저축·소비 결정을 내리기 직전에 마지막으로 참고하는 정보나 기준은 무엇인가요?",
       },
       {
+        category: "기존 솔루션",
+        question:
+          "자동이체·알림·예산 설정처럼 지금도 켜 둔 기능이 있다면 무엇이고, 왜 그걸 유지하시나요?",
+      },
+      {
+        category: "기존 솔루션",
+        question:
+          "주변에서 추천받아 써 본 돈 관리 방법 중, 본인에게는 잘 안 맞았던 것이 있다면 무엇이었나요?",
+      },
+      {
         category: "동기 & 목표",
         question:
           "돈 관리가 자리 잡는다면 1년 뒤 어떤 모습이길 바라시나요? 그게 왜 중요한가요?",
@@ -243,6 +287,16 @@ function baseHeuristicPool(problem: string): TopicInterviewQuestion[] {
         category: "동기 & 목표",
         question:
           "돈 관리에서 「이것만은 지키고 싶다」 하는 본인만의 원칙이 있다면 무엇인가요?",
+      },
+      {
+        category: "동기 & 목표",
+        question:
+          "최근 저축·투자·소비 중 하나를 미룬 적이 있다면, 그때 진짜로 지키고 싶었던 목표는 무엇이었나요?",
+      },
+      {
+        category: "동기 & 목표",
+        question:
+          "돈 걱정이 덜해졌다고 느끼는 순간이 있다면, 그때 무엇이 달라져 있었나요?",
       },
     ];
   }
@@ -261,6 +315,14 @@ function baseHeuristicPool(problem: string): TopicInterviewQuestion[] {
       question: `「${p}」 상황을 얼마나 자주 겪으시나요? 가장 최근은 언제였나요?`,
     },
     {
+      category: "사용자",
+      question: `「${p}」와 관련해 주로 함께하는 사람이나 역할(가족·동료·서비스)이 있다면 누구인가요?`,
+    },
+    {
+      category: "사용자",
+      question: `「${p}」를 겪을 때 본인을 어떤 유형의 사람이라고 느끼시나요? 최근 예로 말씀해 주실 수 있나요?`,
+    },
+    {
       category: "현재 문제",
       question: `「${p}」 문제를 처음 겪으셨던 계기나 상황은 어떤 모습이었나요?`,
     },
@@ -271,6 +333,14 @@ function baseHeuristicPool(problem: string): TopicInterviewQuestion[] {
     {
       category: "현재 문제",
       question: `「${p}」를 평소 어떤 말이나 표현으로 이야기하시나요? 최근 누구에게 어떻게 말했나요?`,
+    },
+    {
+      category: "현재 문제",
+      question: `「${p}」가 반복될 때 가장 먼저 포기하거나 미루게 되는 부분은 무엇인가요?`,
+    },
+    {
+      category: "현재 문제",
+      question: `「${p}」 때문에 예상과 달랐던 최근 결과는 무엇이었고, 그때 어떻게 받아들이셨나요?`,
     },
     {
       category: "행동 & 맥락",
@@ -285,6 +355,14 @@ function baseHeuristicPool(problem: string): TopicInterviewQuestion[] {
       question: `「${p}」 전·중·후로 곁에 있는 사람·도구·환경은 어떻게 달라지나요?`,
     },
     {
+      category: "행동 & 맥락",
+      question: `「${p}」 직전에 습관적으로 확인하는 정보나 화면·메모가 있다면 무엇인가요?`,
+    },
+    {
+      category: "행동 & 맥락",
+      question: `「${p}」가 일어나는 장소·시간대는 보통 언제이고, 그때 주변 상황은 어떤가요?`,
+    },
+    {
       category: "기존 솔루션",
       question: `「${p}」를 해결하려고 지금 쓰시는 방법·서비스는 무엇이고, 계속 쓰시는 이유는 무엇인가요?`,
     },
@@ -295,6 +373,14 @@ function baseHeuristicPool(problem: string): TopicInterviewQuestion[] {
     {
       category: "기존 솔루션",
       question: `「${p}」와 관련한 선택을 하기 직전에 마지막으로 참고하는 정보나 기준은 무엇인가요?`,
+    },
+    {
+      category: "기존 솔루션",
+      question: `「${p}」를 위해 예전에 시도했다가 그만둔 방법이 있다면, 어떤 순간에 왜 그만두셨나요?`,
+    },
+    {
+      category: "기존 솔루션",
+      question: `주변에서 추천받은 「${p}」 관련 방법 중 본인에게 안 맞았던 것이 있다면 무엇이었나요?`,
     },
     {
       category: "동기 & 목표",
@@ -308,10 +394,18 @@ function baseHeuristicPool(problem: string): TopicInterviewQuestion[] {
       category: "동기 & 목표",
       question: `「${p}」에서 「이것만은 지키고 싶다」 하는 본인만의 원칙이 있다면 무엇인가요?`,
     },
+    {
+      category: "동기 & 목표",
+      question: `「${p}」를 미뤘던 최근 경험이 있다면, 그때 진짜로 지키고 싶었던 목표는 무엇이었나요?`,
+    },
+    {
+      category: "동기 & 목표",
+      question: `「${p}」 걱정이 덜해졌다고 느낀 순간이 있다면, 그때 무엇이 달라져 있었나요?`,
+    },
   ];
 }
 
-/** AI 없이도 주제 소재가 질문 안에 들어가도록 하는 테마별 폴백 (카테고리당 3개) */
+/** AI 없이도 주제 소재가 질문 안에 들어가도록 하는 테마별 폴백 (카테고리당 최대 5개) */
 export function heuristicTopicInterviewQuestions(
   problem: string,
 ): TopicInterviewQuestion[] {
@@ -319,7 +413,7 @@ export function heuristicTopicInterviewQuestions(
 }
 
 /**
- * AI가 적게 낸 질문을 테마별 최소 개수까지 보충.
+ * AI가 적게 낸 질문을 테마별 최대(5개)까지 보충.
  * 기존(AI) 질문은 유지하고, 모자란 테마 위주로 휴리스틱을 채운다.
  * 결과는 항상 subject 없는 테마형 단일 가이드가 된다.
  */
@@ -335,7 +429,7 @@ export function ensureTopicQuestionsCoverage(
   const fillers = heuristicTopicInterviewQuestions(problem);
   const seen = new Set(merged.map((q) => q.question.replace(/\s+/g, "")));
 
-  // 부족한 테마 우선으로 보충
+  // 부족한 테마 우선으로 최대 개수까지 보충
   const ordered = [...fillers].sort((a, b) => {
     const counts = categoryCounts(merged);
     return (counts.get(a.category) ?? 0) - (counts.get(b.category) ?? 0);
@@ -346,11 +440,11 @@ export function ensureTopicQuestionsCoverage(
     const key = filler.question.replace(/\s+/g, "");
     if (seen.has(key)) continue;
     const counts = categoryCounts(merged);
-    const needsCategory =
-      (counts.get(filler.category) ?? 0) < MIN_PER_CATEGORY;
+    const current = counts.get(filler.category) ?? 0;
+    if (current >= MAX_PER_KEY_CATEGORY) continue;
+    const needsCategory = current < MIN_PER_CATEGORY;
     const needsTotal = merged.length < MIN_TOPIC_QUESTIONS_TOTAL;
     if (!needsCategory && !needsTotal) continue;
-    if ((counts.get(filler.category) ?? 0) >= MAX_PER_KEY_CATEGORY) continue;
     seen.add(key);
     merged = [...merged, filler];
   }

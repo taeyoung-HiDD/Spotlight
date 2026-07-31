@@ -17,7 +17,10 @@ import { summarizeStage3Artifact } from "@/lib/coach/artifactSummary";
 import type { CoachChatHistoryItem } from "@/lib/coach/chatClient";
 import { getStageWorkInputGuide } from "@/lib/coach/inputGuidance";
 import { stageChatTitle } from "@/lib/coach/chatClient";
-import { formatResearchMethodsForCoach } from "@/lib/stages/fieldResearch/researchMethodCatalog";
+import {
+  formatResearchMethodsForCoach,
+  getResearchMethodEntry,
+} from "@/lib/stages/fieldResearch/researchMethodCatalog";
 import {
   advanceToKnowDiscovery,
   buildDiscoveryKickoff,
@@ -283,7 +286,19 @@ export function FieldResearchCoachPanel({
       const prep = data.researchPrep;
       lines.push(
         [
-          `[조사 계획] 권장 ${prep.recommendedParticipantCount}명 · 선택 ${prep.selectedParticipantCount}명 · 현장 인터뷰`,
+          `[조사 계획] 모집 목표 ${prep.recommendedParticipantCount}명 · 선택 ${prep.selectedParticipantCount}명 · 방법별 권장 ${
+            (prep.selectedMethods.length
+              ? prep.selectedMethods
+              : prep.recommendedMethods
+            )
+              .map((id) => {
+                const n = prep.methodParticipantRecommendations?.[id]?.count;
+                const label = getResearchMethodEntry(id)?.label ?? id;
+                return n != null ? `${label} ${n}명` : null;
+              })
+              .filter(Boolean)
+              .join(" · ") || "—"
+          } · 현장 인터뷰`,
           prep.segments.length
             ? `[세그먼트] ${prep.segments.map((s) => `${s.label} ${s.selectedCount}명`).join(" · ")}`
             : "",

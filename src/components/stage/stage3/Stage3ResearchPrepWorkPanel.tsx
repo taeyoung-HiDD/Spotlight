@@ -17,6 +17,10 @@ import { useProjectWorkspace } from "@/components/project/ProjectWorkspaceContex
 import { useSimulatedAsyncProgress } from "@/hooks/useSimulatedAsyncProgress";
 import { getStagePageName } from "@/lib/navigation/stageNavLabels";
 import { generateStage3ResearchPrep } from "@/lib/stages/fieldResearch/generateStage3ResearchPrepClient";
+import {
+  buildHeuristicMethodRationale,
+  hasGenericMethodRationales,
+} from "@/lib/stages/fieldResearch/methodRationales";
 import { getResearchMethodEntry } from "@/lib/stages/fieldResearch/researchMethodCatalog";
 import {
   downloadResearchGuideDoc,
@@ -41,8 +45,11 @@ import {
   isLegacyDemoRespondentSet,
 } from "@/lib/stages/fieldResearch/respondentNormalize";
 import {
+  hasMissingMethodParticipantRecommendations,
   normalizeStage3ResearchPrep,
   participantCountReasonText,
+  refineResearchPrepMethodRationales,
+  refineResearchPrepParticipantCounts,
   researchPrepGatePassed,
   totalSelectedFromSegments,
   type Stage3ResearchPrep,
@@ -109,6 +116,8 @@ export function Stage3ResearchPrepWorkPanel({
   const [specificityNudge, setSpecificityNudge] = useState<string | null>(null);
   const generateStartedRef = useRef(false);
   const topicRefreshRef = useRef(false);
+  const rationaleRefreshRef = useRef(false);
+  const participantRecRefreshRef = useRef(false);
   const demoSyncRef = useRef(false);
   const ready = researchPrepGatePassed(prep);
 
@@ -347,6 +356,74 @@ export function Stage3ResearchPrepWorkPanel({
     runGenerate,
   ]);
 
+  // 이미 저장된 CORE 1 이유가 방법 정의 수준 일반론이면 문제 맞춤 문구로 1회 교체
+  useEffect(() => {
+    if (!editable || generating || rationaleRefreshRef.current) return;
+    if (!prep.recommendationsGenerated || !prep.recommendedMethods.length) {
+      return;
+    }
+    if (!problem.trim()) return;
+    if (
+      !hasGenericMethodRationales(
+        problem,
+        prep.recommendedMethods,
+        prep.methodRationales,
+      )
+    ) {
+      return;
+    }
+    rationaleRefreshRef.current = true;
+    const refined = refineResearchPrepMethodRationales(problem, prep);
+    onChange({
+      ...data,
+      researchPrep: {
+        ...data.researchPrep,
+        ...prep,
+        methodRationales: refined.methodRationales,
+        methodRecommendationReason: refined.methodRecommendationReason,
+      },
+    });
+  }, [
+    data,
+    editable,
+    generating,
+    onChange,
+    prep,
+    problem,
+  ]);
+
+  // 레거시: 방법별 권장 인원이 없으면 1회 보강 (총 선택 인원은 유지)
+  useEffect(() => {
+    if (!editable || generating || participantRecRefreshRef.current) return;
+    if (!prep.recommendationsGenerated) return;
+    const methods =
+      prep.selectedMethods.length > 0
+        ? prep.selectedMethods
+        : prep.recommendedMethods;
+    if (!methods.length) return;
+    if (
+      !hasMissingMethodParticipantRecommendations(
+        methods,
+        prep.methodParticipantRecommendations,
+      )
+    ) {
+      return;
+    }
+    participantRecRefreshRef.current = true;
+    const refined = refineResearchPrepParticipantCounts(prep);
+    onChange({
+      ...data,
+      researchPrep: {
+        ...data.researchPrep,
+        ...prep,
+        methodParticipantRecommendations:
+          refined.methodParticipantRecommendations,
+        recommendedParticipantCount: refined.recommendedParticipantCount,
+        participantCountReason: refined.participantCountReason,
+      },
+    });
+  }, [data, editable, generating, onChange, prep]);
+
   // 이미 추천을 받아 둔 프로젝트 — 템플릿 질문 또는 레거시 대상자별 질문을
   // 테마별 단일 가이드로 1회 교체
   useEffect(() => {
@@ -543,7 +620,9 @@ export function Stage3ResearchPrepWorkPanel({
                   {prep.recommendedMethods.map((methodId) => {
                     const entry = getResearchMethodEntry(methodId);
                     if (!entry) return null;
-                    const rationale = prep.methodRationales[methodId]?.trim();
+                    const rationale =
+                      prep.methodRationales[methodId]?.trim() ||
+                      buildHeuristicMethodRationale(methodId, problem);
                     return (
                       <div
                         key={methodId}
@@ -566,7 +645,7 @@ export function Stage3ResearchPrepWorkPanel({
                           />
                           <p className="text-[13.5px] leading-relaxed text-foreground break-keep">
                             <span className="font-semibold">이 문제에 적합한 이유</span>{" "}
-                            · {rationale || `${entry.summary}`}
+                            · {rationale}
                           </p>
                         </div>
                       </div>
@@ -601,53 +680,108 @@ export function Stage3ResearchPrepWorkPanel({
 
               <div className="mt-4 space-y-4">
                 <div>
-                  <p className={stageLabel}>조사 대상 · 권장 인원</p>
-                  <p className="mt-1 text-[14px] text-muted break-keep">
-                    권장 인원: 최소{" "}
-                    <span className="font-semibold text-foreground">
-                      {prep.recommendedParticipantCount}명
-                    </span>
-                    {prep.segments.length ? (
-                      <>
-                        {" "}
-                        · 세그먼트별{" "}
-                        {prep.segments
-                          .map((s) => `${s.label} ${s.recommendedCount}명`)
-                          .join(" · ")}
-                      </>
-                    ) : null}
+                  <p className={stageLabel}>리서치 방법별 권장 인원</p>
+                  <p className="mt-1 text-[13.5px] leading-relaxed text-muted break-keep">
+                    방법마다 시간·깊이가 달라 권장 인원이 달라요. 같은 대상을
+                    여러 방법에 쓸 수 있어요.
                   </p>
-                  <p className="mt-1.5 rounded-lg bg-cream/50 px-3 py-2 text-[13px] leading-relaxed text-muted break-keep">
-                    <span className="font-medium text-gold">왜 이 인원일까요?</span>{" "}
-                    {participantCountReasonText(prep)}
-                  </p>
-                  <div className="mt-3 flex flex-wrap items-end gap-3">
-                    <label className="block">
-                      <span className={`mb-1.5 block ${stageLabel}`}>
-                        권장 조사 인원
+                  {(
+                    prep.selectedMethods.length
+                      ? prep.selectedMethods
+                      : prep.recommendedMethods
+                  ).length ? (
+                    <div className="mt-3 space-y-2.5">
+                      {(prep.selectedMethods.length
+                        ? prep.selectedMethods
+                        : prep.recommendedMethods
+                      ).map((methodId) => {
+                        const entry = getResearchMethodEntry(methodId);
+                        const rec =
+                          prep.methodParticipantRecommendations[methodId];
+                        if (!entry) return null;
+                        const countLabel =
+                          methodId === "be_the_customer"
+                            ? "직접 체험 1회"
+                            : `권장 ${rec?.count ?? "—"}명`;
+                        return (
+                          <div
+                            key={methodId}
+                            className="rounded-xl border border-border-warm bg-cream/40 px-3.5 py-3"
+                          >
+                            <div className="flex flex-wrap items-baseline justify-between gap-2">
+                              <p className="text-[14px] font-bold text-foreground break-keep">
+                                {entry.label}
+                              </p>
+                              <p className="text-[13px] font-semibold text-gold break-keep">
+                                {countLabel}
+                              </p>
+                            </div>
+                            {rec?.reason ? (
+                              <p className="mt-1.5 text-[13px] leading-relaxed text-muted break-keep">
+                                <span className="font-medium text-gold">
+                                  왜 이 인원일까요?
+                                </span>{" "}
+                                {rec.reason}
+                              </p>
+                            ) : null}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : null}
+
+                  <div className="mt-4 rounded-xl border border-spotlight/40 bg-highlight/40 px-3.5 py-3">
+                    <p className={stageLabel}>모집 목표 · Extreme User 스펙트럼</p>
+                    <p className="mt-1 text-[14px] text-muted break-keep">
+                      모집 목표: 최소{" "}
+                      <span className="font-semibold text-foreground">
+                        {prep.recommendedParticipantCount}명
                       </span>
-                      <input
-                        type="number"
-                        min={1}
-                        max={30}
-                        value={prep.selectedParticipantCount}
-                        disabled={!editable || generating}
-                        onChange={(e) => {
-                          const n = Math.min(
-                            30,
-                            Math.max(1, Number.parseInt(e.target.value, 10) || 1),
-                          );
-                          applyTotalParticipantCount(n);
-                        }}
-                        className={`w-28 rounded-md border border-border-warm px-3 py-2 ${stageField} ${stageInput}`}
-                      />
-                    </label>
-                    <p className={`pb-2 ${stageCaption} text-muted`}>
-                      유형별 합계 {segmentTotal}명
-                      {segmentTotal !== prep.selectedParticipantCount
-                        ? " · 총 인원과 맞추는 중"
-                        : ""}
+                      {prep.segments.length ? (
+                        <>
+                          {" "}
+                          · 세그먼트별{" "}
+                          {prep.segments
+                            .map((s) => `${s.label} ${s.recommendedCount}명`)
+                            .join(" · ")}
+                        </>
+                      ) : null}
                     </p>
+                    <p className="mt-1.5 text-[13px] leading-relaxed text-muted break-keep">
+                      <span className="font-medium text-gold">왜 이 목표일까요?</span>{" "}
+                      {participantCountReasonText(prep)}
+                    </p>
+                    <div className="mt-3 flex flex-wrap items-end gap-3">
+                      <label className="block">
+                        <span className={`mb-1.5 block ${stageLabel}`}>
+                          실제 모집 인원
+                        </span>
+                        <input
+                          type="number"
+                          min={1}
+                          max={30}
+                          value={prep.selectedParticipantCount}
+                          disabled={!editable || generating}
+                          onChange={(e) => {
+                            const n = Math.min(
+                              30,
+                              Math.max(
+                                1,
+                                Number.parseInt(e.target.value, 10) || 1,
+                              ),
+                            );
+                            applyTotalParticipantCount(n);
+                          }}
+                          className={`w-28 rounded-md border border-border-warm px-3 py-2 ${stageField} ${stageInput}`}
+                        />
+                      </label>
+                      <p className={`pb-2 ${stageCaption} text-muted`}>
+                        유형별 합계 {segmentTotal}명
+                        {segmentTotal !== prep.selectedParticipantCount
+                          ? " · 총 인원과 맞추는 중"
+                          : ""}
+                      </p>
+                    </div>
                   </div>
 
                   <ExtremeUserSelectionBoard

@@ -6,6 +6,7 @@ import {
   heuristicResearchPrep,
   normalizeStage3ResearchPrep,
   parseResearchPrepJson,
+  refineResearchPrepMethodRationales,
 } from "@/lib/stages/fieldResearch/stage3ResearchPrep";
 import {
   ensureTopicQuestionsCoverage,
@@ -54,7 +55,10 @@ export async function POST(request: Request) {
       problemStatement: problem,
       targetUsers: targetLabels.map((name) => ({ name, reason: "" })),
     } as PrePmfOverviewData);
-    return normalizeStage3ResearchPrep(prep);
+    return refineResearchPrepMethodRationales(
+      problem,
+      normalizeStage3ResearchPrep(prep),
+    );
   };
 
   if (!resolveGroqApiKey()) {
@@ -88,10 +92,13 @@ export async function POST(request: Request) {
         : heuristicTopicInterviewQuestions(problem),
     );
     return NextResponse.json({
-      researchPrep: normalizeStage3ResearchPrep({
-        ...parsed,
-        recommendationsGenerated: true,
-      }),
+      researchPrep: refineResearchPrepMethodRationales(
+        problem,
+        normalizeStage3ResearchPrep({
+          ...parsed,
+          recommendationsGenerated: true,
+        }),
+      ),
       source: "groq",
     });
   } catch (error) {

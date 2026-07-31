@@ -254,16 +254,23 @@ export function ResearchSubjectMediaPanel({
   const videoRef = useRef<HTMLInputElement>(null);
   const audioRef = useRef<HTMLInputElement>(null);
   const docRef = useRef<HTMLInputElement>(null);
+  /** 발견 정리 진입·대상 전환 시 기본 펼침. 자료가 없을 때는 접어도 업로드가 보이도록 강제 펼침 */
   const [expanded, setExpanded] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [urls, setUrls] = useState<Record<string, string>>({});
   const [previewMediaId, setPreviewMediaId] = useState<string | null>(null);
   const bodyId = useId();
+  const hasMedia = mediaFiles.length > 0;
+  const panelOpen = !hasMedia || expanded;
 
   useEffect(() => {
     setExpanded(true);
   }, [subjectId]);
+
+  useEffect(() => {
+    if (!hasMedia) setExpanded(true);
+  }, [hasMedia]);
 
   const previewMedia = previewMediaId
     ? mediaFiles.find((m) => m.id === previewMediaId) ?? null
@@ -347,36 +354,49 @@ export function ResearchSubjectMediaPanel({
 
   return (
     <>
-    <section className="rounded-xl border border-border-warm bg-cream/40 p-4">
-      <button
-        type="button"
-        className="flex w-full items-start justify-between gap-3 text-left"
-        onClick={() => setExpanded((prev) => !prev)}
-        aria-expanded={expanded}
-        aria-controls={bodyId}
-      >
+    <section
+      className={[
+        "rounded-xl border bg-cream/40 p-4",
+        hasMedia ? "border-border-warm" : "border-spotlight/50",
+      ].join(" ")}
+    >
+      {hasMedia ? (
+        <button
+          type="button"
+          className="flex w-full items-start justify-between gap-3 text-left"
+          onClick={() => setExpanded((prev) => !prev)}
+          aria-expanded={panelOpen}
+          aria-controls={bodyId}
+        >
+          <div className="min-w-0">
+            <p className={stageLabel}>리서치 자료</p>
+            <p className={`mt-1 ${stageCaption}`}>
+              {panelOpen
+                ? "조사 중 기록한 사진·영상·음성·문서를 올려 두세요. 팀과 Kevin이 함께 볼 수 있어요."
+                : `자료 ${mediaFiles.length}개 · 펼치면 업로드·미리보기`}
+            </p>
+          </div>
+          <span
+            className={[
+              "mt-0.5 inline-flex size-7 shrink-0 items-center justify-center rounded-md border border-border-warm bg-panel text-muted transition-transform",
+              panelOpen ? "rotate-180" : "",
+            ].join(" ")}
+            aria-hidden
+          >
+            <IconChevronDown className="size-4" stroke={2} />
+          </span>
+        </button>
+      ) : (
         <div className="min-w-0">
           <p className={stageLabel}>리서치 자료</p>
           <p className={`mt-1 ${stageCaption}`}>
-            {expanded
-              ? "조사 중 기록한 사진·영상·음성·문서를 올려 두세요. 팀과 Kevin이 함께 볼 수 있어요."
-              : mediaFiles.length > 0
-                ? `자료 ${mediaFiles.length}개 · 펼치면 업로드·미리보기`
-                : "자료 없음 · 펼치면 업로드"}
+            조사 중 기록한 사진·영상·음성·문서를 올려 두세요. 팀과 Kevin이 함께
+            볼 수 있어요.
           </p>
         </div>
-        <span
-          className={[
-            "mt-0.5 inline-flex size-7 shrink-0 items-center justify-center rounded-md border border-border-warm bg-panel text-muted transition-transform",
-            expanded ? "rotate-180" : "",
-          ].join(" ")}
-          aria-hidden
-        >
-          <IconChevronDown className="size-4" stroke={2} />
-        </span>
-      </button>
+      )}
 
-      {expanded ? (
+      {panelOpen ? (
       <div id={bodyId} className="mt-3">
       <div className="flex flex-wrap gap-2">
         <input

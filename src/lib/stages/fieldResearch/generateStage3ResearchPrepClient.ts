@@ -1,5 +1,6 @@
 import {
   normalizeStage3ResearchPrep,
+  refineResearchPrepMethodRationales,
   type Stage3ResearchPrep,
 } from "@/lib/stages/fieldResearch/stage3ResearchPrep";
 
@@ -20,9 +21,15 @@ export async function generateStage3ResearchPrep(input: {
     error?: string;
   };
 
+  const finalize = (raw: unknown): Stage3ResearchPrep =>
+    refineResearchPrepMethodRationales(
+      input.problem,
+      normalizeStage3ResearchPrep(raw),
+    );
+
   if (!res.ok) {
     if (data.researchPrep) {
-      return normalizeStage3ResearchPrep(data.researchPrep);
+      return finalize(data.researchPrep);
     }
     throw new Error(data.error ?? "조사 준비 추천 생성에 실패했습니다.");
   }
@@ -31,5 +38,5 @@ export async function generateStage3ResearchPrep(input: {
     throw new Error(data.error ?? "조사 준비 추천을 받지 못했습니다.");
   }
 
-  return normalizeStage3ResearchPrep(data.researchPrep);
+  return finalize(data.researchPrep);
 }
