@@ -42,12 +42,14 @@ function parseNeeds(raw: unknown): NeedPayload[] {
 
 const GROUP_NAME_RULE = `
 - 그룹 이름은 어피니티 다이어그램(스탠퍼드 d.school·닐슨노먼 그룹 방식) 클러스터 라벨처럼,
-  묶인 니즈들에 공통된 근본 주제·심리를 1~4개 명사(구)로 표현합니다.
-  좋은 예: 시간 압박, 정보 신뢰 부족, 자율성 욕구, 사회적 인정 욕구, 선택 피로, 보상 심리, 경제적 독립
-- 니즈 문장에서 그대로 뽑은 단어 조각을 이름으로 쓰지 않습니다.
-  나쁜 예: "정체성 요구받", "파악하고자 월말", "돌아서면 마음대", "000 3년", "현실적인 깨달았",
-  "주체로서 부모님", "요약하면 한마디" — 잘린 어미·문장 조각·숫자 자리표시
-- 이름은 그 그룹을 처음 보는 사람이 무엇에 대한 니즈 묶음인지 즉시 이해할 수 있어야 합니다.`.trim();
+  묶인 니즈들에 공통된 근본 주제·심리를 **짧은 한국어 명사(구) 1~4어절**로 표현합니다.
+  좋은 예: 시간 압박, 정보 신뢰 부족, 자율성 욕구, 사회적 인정 욕구, 선택 피로, 보상 심리, 경제적 독립, 투자 판단, 지출 부담, 재정 불안
+- 니즈 문장에서 앞부분·중간 단어를 그대로 잘라 이름으로 쓰지 않습니다.
+  나쁜 예: "많이 것에", "recent years", "허탈감 돈이", "정체성 요구받", "파악하고자 월말",
+  "돌아서면 마음대", "000 3년", "Career change salary", "Monthly credit card bill"
+  — 조사·어미로 끝난 조각, 영어 단어, 문장 앞머리 복사
+- 이름은 그 그룹을 처음 보는 사람이 무엇에 대한 니즈 묶음인지 즉시 이해할 수 있어야 합니다.
+- 반드시 한글 주제 라벨만 씁니다. 영어 라벨·영한 혼용 금지.`.trim();
 
 function oversizedLimit(total: number): number {
   return Math.max(8, Math.ceil(total * 0.34));
@@ -147,6 +149,8 @@ function acceptableName(raw: string): string | null {
   if (isLowQualityGroupName(sanitized)) return null;
   if (hasDisallowedForeignScript(sanitized)) return null;
   if (!/[\uac00-\ud7a3]/.test(sanitized)) return null;
+  // 영어가 섞이거나 조사로 끝나면 거부
+  if (/[a-zA-Z]{2,}/.test(sanitized)) return null;
   return sanitized;
 }
 

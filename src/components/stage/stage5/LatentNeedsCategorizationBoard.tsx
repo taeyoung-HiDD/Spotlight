@@ -13,7 +13,11 @@ import {
   applyCategorizedNeedGroups,
   requestNeedsCategorization,
 } from "@/lib/stages/stage5/categorizeNeedsClient";
-import { UNCLASSIFIED_RECLUSTER_MIN } from "@/lib/stages/stage5/categorizeNeedsHeuristic";
+import {
+  deriveGroupNameFromTexts,
+  isLowQualityGroupName,
+  UNCLASSIFIED_RECLUSTER_MIN,
+} from "@/lib/stages/stage5/categorizeNeedsHeuristic";
 import {
   addNeedGroup,
   assignNeedToGroup,
@@ -95,12 +99,35 @@ export function LatentNeedsCategorizationBoard({
   const [error, setError] = useState<string | null>(null);
   const { expandedPostitId, onExpandedChange } = useJourneyPostitExpansion();
   const autoRecategorizeRef = useRef(false);
+  const polishedNamesRef = useRef(false);
 
   const unclassifiedCount = useMemo(() => {
     const unc = groups.find((g) => g.name === "미분류");
     if (!unc) return 0;
     return groupLatentNeeds(data, unc.id).length;
   }, [data, groups]);
+
+  // 이미 저장된 저품질·조각 그룹 이름을 멤버 니즈 기준으로 즉시 교정
+  useEffect(() => {
+    if (polishedNamesRef.current) return;
+    const bad = groups.filter(
+      (g) => g.name !== "미분류" && isLowQualityGroupName(g.name),
+    );
+    if (bad.length === 0) {
+      polishedNamesRef.current = true;
+      return;
+    }
+    polishedNamesRef.current = true;
+    let next = data;
+    for (const g of bad) {
+      const texts = groupLatentNeeds(next, g.id).map((p) => p.text);
+      const derived = deriveGroupNameFromTexts(texts);
+      if (derived && derived !== g.name && !isLowQualityGroupName(derived)) {
+        next = renameNeedGroup(next, g.id, derived);
+      }
+    }
+    if (next !== data) onChange(next);
+  }, [data, groups, onChange]);
 
   const handleDragStart = useCallback((needId: string) => {
     return (e: React.DragEvent) => {
