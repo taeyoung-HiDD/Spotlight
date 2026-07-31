@@ -306,7 +306,7 @@ const GUIDE_OVERRIDES: Partial<Record<number, Omit<StageActivityGuideContent, "s
     7: {
       headline: "잠재 니즈를 HMW 질문으로 바꿔요",
       summary:
-        "진짜 필요 찾기에서 선별한 핵심 잠재 니즈를 How Might We 질문으로 바꿔, 아이디어를 펼칠 출발점을 만듭니다. Kevin이 세 변주 초안을 만들고 품질 체크 후 하나를 채워 두었어요.",
+        "진짜 필요 찾기에서 선별한 핵심 잠재 니즈를 How Might We 질문으로 바꿔, 아이디어를 펼칠 출발점을 만듭니다. Kevin이 세 변주 초안을 만들고 그중 하나를 채워 두었어요.",
       activities: [
         {
           title: "니즈 → HMW 변환",

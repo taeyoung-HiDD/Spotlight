@@ -338,6 +338,8 @@ interface LatentNeedsJourneyBoardProps {
   onJourneySubjectChange: (journey: UserJourneyMapData) => void;
   needs: Stage5LatentNeedsData;
   onNeedsChange: (needs: Stage5LatentNeedsData) => void;
+  generating?: boolean;
+  onGenerate?: () => void;
 }
 
 export function LatentNeedsJourneyBoard({
@@ -346,6 +348,8 @@ export function LatentNeedsJourneyBoard({
   onJourneySubjectChange,
   needs,
   onNeedsChange,
+  generating = false,
+  onGenerate,
 }: LatentNeedsJourneyBoardProps) {
   const subjectId = journey.activeSubjectId;
   const persona = getActivePersonaMap(journey);
@@ -757,21 +761,39 @@ export function LatentNeedsJourneyBoard({
       >
         <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
           <p className={stageLabel}>{personaLabel} · 배치 전 잠재 니즈</p>
-          <button
-            type="button"
-            onClick={addManualLatentNeed}
-            className="rounded-md border border-dashed border-border-warm bg-panel/80 px-2.5 py-1.5 text-[13px] font-semibold text-foreground transition-colors hover:border-spotlight/50 hover:bg-highlight/40"
-          >
-            + 잠재 니즈 추가
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            {onGenerate ? (
+              <button
+                type="button"
+                onClick={onGenerate}
+                disabled={generating}
+                className={`${stageBtnSecondary} disabled:cursor-not-allowed disabled:opacity-50`}
+              >
+                {generating
+                  ? "Kevin이 잠재 니즈 도출 중…"
+                  : "AI로 잠재 니즈 도출하기"}
+              </button>
+            ) : null}
+            <button
+              type="button"
+              onClick={addManualLatentNeed}
+              disabled={generating}
+              className="rounded-md border border-dashed border-border-warm bg-panel/80 px-2.5 py-1.5 text-[13px] font-semibold text-foreground transition-colors hover:border-spotlight/50 hover:bg-highlight/40 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              + 잠재 니즈 추가
+            </button>
+          </div>
         </div>
         <p className={`mb-3 ${stageCaption}`}>
-          카드를 클릭하면 편집할 수 있어요. 작성 후 끌어다 여정 단계의 잠재 니즈
-          행에 올려 주세요. 단계에서 빼려면 여기로 다시 놓으면 됩니다.
+          {generating
+            ? "조사 언급·관찰을 바탕으로 잠재 니즈 초안을 만들고, 여정 단계에 올려 둘게요."
+            : "카드를 클릭하면 편집할 수 있어요. 작성 후 끌어다 여정 단계의 잠재 니즈 행에 올려 주세요. 단계에서 빼려면 여기로 다시 놓으면 됩니다."}
         </p>
         {poolNeeds.length === 0 ? (
           <p className={stageCaption}>
-            아직 배치 전 카드가 없어요. 「+ 잠재 니즈 추가」로 직접 적어 보세요.
+            {generating
+              ? "곧 여기에 초안이 나타나요…"
+              : "아직 배치 전 카드가 없어요. 「AI로 잠재 니즈 도출하기」또는 「+ 잠재 니즈 추가」로 채워 보세요."}
           </p>
         ) : (
           <div className="flex flex-wrap gap-2">

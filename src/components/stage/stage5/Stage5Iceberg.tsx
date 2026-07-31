@@ -19,14 +19,14 @@ import {
 import { fetchStage6UserJourney } from "@/lib/artifacts/stage6UserJourney";
 import { touchProjectPhase } from "@/lib/artifacts/stage5Iceberg";
 import {
-  isStage5SourcePostitKind,
   mergeStage4DiscoveriesIntoLatentNeeds,
   stage4HasResearchContent,
 } from "@/lib/stages/stage5/bootstrapLatentNeedsFromStage4";
 import {
   applyGeneratedLatentNeeds,
-  boardHasTemplateLatentNeeds,
+  boardNeedsLatentNeedsGeneration,
   buildSourceInputsFromBoard,
+  buildUncoveredSourceInputsFromBoard,
   requestLatentNeedsGeneration,
 } from "@/lib/stages/stage5/generateLatentNeedsClient";
 import {
@@ -53,12 +53,6 @@ function formatSavedTime(iso: string) {
   } catch {
     return "";
   }
-}
-
-function hasSourceNotes(data: Stage5LatentNeedsData): boolean {
-  return data.postits.some(
-    (p) => isStage5SourcePostitKind(p.kind) && p.text.trim(),
-  );
 }
 
 export function Stage5Iceberg({ projectId }: Stage5IcebergProps) {
@@ -107,13 +101,9 @@ export function Stage5Iceberg({ projectId }: Stage5IcebergProps) {
         setArtifactId(needsResult.artifactId);
         setAllSlots(needsResult.allSlots);
 
-        // 잠재 니즈가 아예 없거나, 과거 폴백이 남긴 동일 템플릿 문구뿐이면
-        // Need Statement 형식으로 (다시) 생성합니다.
-        const needsKevin =
-          hasSourceNotes(next) &&
-          ((!next.kevinGeneratedAt &&
-            !next.postits.some((p) => p.kind === "latent_need")) ||
-            boardHasTemplateLatentNeeds(next));
+        // 조사 포스트잇마다 잠재 니즈가 없으면(또는 템플릿뿐이면) 생성.
+        // kevinGeneratedAt만 있고 일부만 채워진 경우도 나머지를 이어서 채웁니다.
+        const needsKevin = boardNeedsLatentNeedsGeneration(next);
 
         if (shouldSyncStage4 && !needsKevin) {
           const { artifactId: syncedId } = await saveStage5LatentNeeds({
@@ -132,30 +122,43 @@ export function Stage5Iceberg({ projectId }: Stage5IcebergProps) {
           bootstrapRef.current = true;
           setGenerating(true);
           try {
-            const inputs = buildSourceInputsFromBoard(next);
-            const result = await requestLatentNeedsGeneration(
-              projectId,
-              inputs,
-              locale,
-            );
-            if (!cancelled) {
-              const withNeeds = withBootstrappedJourneyNeeds(
-                applyGeneratedLatentNeeds(next, result),
-                journeyData,
-              );
-              setData(withNeeds);
-              const { artifactId: id } = await saveStage5LatentNeeds({
+            let inputs = buildUncoveredSourceInputsFromBoard(next);
+            // 템플릿만 남아 미커버가 비면 전체 소스로 재생성
+            if (inputs.length === 0) {
+              inputs = buildSourceInputsFromBoard(next);
+            }
+            if (inputs.length === 0) {
+              bootstrapRef.current = false;
+            } else {
+              const result = await requestLatentNeedsGeneration(
                 projectId,
-                artifactId: needsResult.artifactId,
-                data: withNeeds,
-                existingSlots: needsResult.allSlots,
-              });
+                inputs,
+                locale,
+              );
               if (!cancelled) {
-                setArtifactId(id);
-                setLastSavedAt(formatSavedTime(new Date().toISOString()));
+                const withNeeds = withBootstrappedJourneyNeeds(
+                  applyGeneratedLatentNeeds(next, result),
+                  journeyData,
+                );
+                setData(withNeeds);
+                // 아직 비어 있으면 다음 진입에서 재시도
+                if (boardNeedsLatentNeedsGeneration(withNeeds)) {
+                  bootstrapRef.current = false;
+                }
+                const { artifactId: id } = await saveStage5LatentNeeds({
+                  projectId,
+                  artifactId: needsResult.artifactId,
+                  data: withNeeds,
+                  existingSlots: needsResult.allSlots,
+                });
+                if (!cancelled) {
+                  setArtifactId(id);
+                  setLastSavedAt(formatSavedTime(new Date().toISOString()));
+                }
               }
             }
           } catch (e) {
+            bootstrapRef.current = false;
             if (!cancelled) {
               setSaveError(
                 e instanceof Error
@@ -221,7 +224,10 @@ export function Stage5Iceberg({ projectId }: Stage5IcebergProps) {
   }, []);
 
   const handleGenerateLatentNeeds = useCallback(async () => {
-    const inputs = buildSourceInputsFromBoard(data);
+    let inputs = buildUncoveredSourceInputsFromBoard(data);
+    if (inputs.length === 0) {
+      inputs = buildSourceInputsFromBoard(data);
+    }
     if (inputs.length === 0) {
       setSaveError("잠재 니즈를 만들 조사 결과 포스트잇이 없어요.");
       return;

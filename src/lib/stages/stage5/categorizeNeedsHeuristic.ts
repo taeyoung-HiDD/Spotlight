@@ -4,6 +4,10 @@
  * 니즈 문장의 공통 주제를 나타내는 명사(구)여야 하며, "위해서·싶다·하고" 같은
  * Need Statement 문형 연결어는 이름 후보에서 제외한다.
  */
+
+/** 미분류가 이 개수 이상이면 재분류 패스를 돌린다 */
+export const UNCLASSIFIED_RECLUSTER_MIN = 10;
+
 export type NeedClusterInput = {
   id: string;
   text: string;

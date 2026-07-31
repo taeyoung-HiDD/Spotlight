@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { LocalizedText } from "@/components/i18n/LocalizedText";
 import {
   LocalizedEditableInput,
@@ -13,6 +13,7 @@ import {
   applyCategorizedNeedGroups,
   requestNeedsCategorization,
 } from "@/lib/stages/stage5/categorizeNeedsClient";
+import { UNCLASSIFIED_RECLUSTER_MIN } from "@/lib/stages/stage5/categorizeNeedsHeuristic";
 import {
   addNeedGroup,
   assignNeedToGroup,
@@ -93,6 +94,13 @@ export function LatentNeedsCategorizationBoard({
   const [recategorizing, setRecategorizing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { expandedPostitId, onExpandedChange } = useJourneyPostitExpansion();
+  const autoRecategorizeRef = useRef(false);
+
+  const unclassifiedCount = useMemo(() => {
+    const unc = groups.find((g) => g.name === "미분류");
+    if (!unc) return 0;
+    return groupLatentNeeds(data, unc.id).length;
+  }, [data, groups]);
 
   const handleDragStart = useCallback((needId: string) => {
     return (e: React.DragEvent) => {
@@ -148,12 +156,27 @@ export function LatentNeedsCategorizationBoard({
     }
   }, [data, onChange, projectId]);
 
+  // 미분류 10개 이상이면 진입 시 1회 자동 재분류
+  useEffect(() => {
+    if (autoRecategorizeRef.current || recategorizing) return;
+    if (unclassifiedCount < UNCLASSIFIED_RECLUSTER_MIN) return;
+    autoRecategorizeRef.current = true;
+    void handleAiRecategorize();
+  }, [handleAiRecategorize, recategorizing, unclassifiedCount]);
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className={stageCaption}>
           비슷한 잠재 니즈를 같은 그룹에 모아 보세요. 그룹 이름을 바꾸고, 카드를
           다른 그룹으로 끌어다 옮길 수 있어요.
+          {unclassifiedCount >= UNCLASSIFIED_RECLUSTER_MIN ? (
+            <>
+              {" "}
+              미분류가 {unclassifiedCount}개라 비슷한 주제끼리 다시 나누고
+              있어요.
+            </>
+          ) : null}
         </p>
         <div className="flex flex-wrap gap-1.5">
           <button

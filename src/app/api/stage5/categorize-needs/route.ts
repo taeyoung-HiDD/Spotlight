@@ -14,6 +14,7 @@ import {
   heuristicClusterNeeds,
   isLowQualityGroupName,
   textSimilarity,
+  UNCLASSIFIED_RECLUSTER_MIN,
 } from "@/lib/stages/stage5/categorizeNeedsHeuristic";
 
 interface NeedPayload {
@@ -552,6 +553,76 @@ function normalizeGroups(
   return collapsed;
 }
 
+function unclassifiedNeedCount(groups: GroupResult[]): number {
+  return groups.find((g) => g.name === "미분류")?.needIds.length ?? 0;
+}
+
+/**
+ * 미분류가 10개 이상이면 해당 풀만 다시 클러스터링해 유명 그룹으로 흡수·분리한다.
+ * (한 번에 다 못 나눈 잔여가 미분류로 쌓이는 경우 대응)
+ */
+async function reclusterLargeUnclassified(
+  groups: GroupResult[],
+  needs: NeedPayload[],
+): Promise<GroupResult[]> {
+  let out = groups;
+  for (let pass = 0; pass < 2; pass += 1) {
+    const unc = out.find((g) => g.name === "미분류");
+    if (!unc || unc.needIds.length < UNCLASSIFIED_RECLUSTER_MIN) {
+      return out;
+    }
+
+    const named = out.filter((g) => g.name !== "미분류");
+    const leftoverIds = new Set(unc.needIds);
+    const leftovers = needs.filter((n) => leftoverIds.has(n.id));
+    if (leftovers.length < UNCLASSIFIED_RECLUSTER_MIN) return out;
+
+    let sub = await aiCluster(leftovers);
+    if (!sub) {
+      const textById = new Map(needs.map((n) => [n.id, n.text] as const));
+      const heur = collapseSingletonClusters(
+        heuristicClusterNeeds(leftovers),
+        textById,
+      );
+      const names = await aiNameClusters(
+        heur.map((g) =>
+          g.needIds.map((id) => textById.get(id) ?? "").filter(Boolean),
+        ),
+      );
+      sub = heur.map((g, i) => ({
+        name:
+          (names && acceptableName(names[i] ?? "")) ||
+          acceptableName(g.name) ||
+          deriveGroupNameFromTexts(
+            g.needIds.map((id) => textById.get(id) ?? ""),
+          ) ||
+          "관련 니즈",
+        needIds: g.needIds,
+      }));
+    }
+
+    const merged = mergeGroupsByName(named, sub);
+    const completed = await clusterRemainder(merged, needs);
+    const polished = await polishGroupNames(completed, needs);
+    const next = normalizeGroups(polished, needs);
+
+    // 진전이 없으면 중단 (무한 루프 방지)
+    if (unclassifiedNeedCount(next) >= unc.needIds.length) {
+      return next;
+    }
+    out = next;
+  }
+  return out;
+}
+
+async function finalizeCategorizedGroups(
+  groups: GroupResult[],
+  needs: NeedPayload[],
+): Promise<GroupResult[]> {
+  const normalized = normalizeGroups(groups, needs);
+  return reclusterLargeUnclassified(normalized, needs);
+}
+
 export async function POST(request: Request) {
   let body: unknown;
   try {
@@ -584,7 +655,7 @@ export async function POST(request: Request) {
 
   if (!resolveGroqApiKey()) {
     return NextResponse.json({
-      groups: normalizeGroups(heuristicGroups(), needs),
+      groups: await finalizeCategorizedGroups(heuristicGroups(), needs),
       source: "heuristic",
     });
   }
@@ -595,7 +666,7 @@ export async function POST(request: Request) {
     const balanced = await splitOversizedGroups(completed, needs, true);
     const polished = await polishGroupNames(balanced, needs);
     return NextResponse.json({
-      groups: normalizeGroups(polished, needs),
+      groups: await finalizeCategorizedGroups(polished, needs),
       source: "groq",
     });
   }
@@ -613,13 +684,13 @@ export async function POST(request: Request) {
     }));
     const polished = await polishGroupNames(named, needs);
     return NextResponse.json({
-      groups: normalizeGroups(polished, needs),
+      groups: await finalizeCategorizedGroups(polished, needs),
       source: "groq-named",
     });
   }
 
   return NextResponse.json({
-    groups: normalizeGroups(fallback, needs),
+    groups: await finalizeCategorizedGroups(fallback, needs),
     source: "heuristic",
   });
 }

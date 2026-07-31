@@ -65,6 +65,34 @@ export function buildSourceInputsFromBoard(
   });
 }
 
+/**
+ * 잠재 니즈가 아직 없는(또는 템플릿뿐인) 조사 포스트잇.
+ * kevinGeneratedAt만 있고 일부만 채워진 경우에도 나머지를 이어서 생성합니다.
+ */
+export function buildUncoveredSourceInputsFromBoard(
+  data: Stage5LatentNeedsData,
+): GenerateLatentNeedsSourceInput[] {
+  const covered = new Set<string>();
+  for (const p of data.postits) {
+    if (p.kind !== "latent_need" || !p.text.trim()) continue;
+    if (p.kevinGenerated && isTemplateLatentNeedText(p.text)) continue;
+    for (const id of p.linkedSourceIds ?? []) {
+      if (id) covered.add(id);
+    }
+  }
+  return buildSourceInputsFromBoard(data).filter(
+    (s) => !covered.has(s.sourceId),
+  );
+}
+
+/** 진입 시 Kevin 잠재 니즈 생성이 필요한지 */
+export function boardNeedsLatentNeedsGeneration(
+  data: Stage5LatentNeedsData,
+): boolean {
+  if (boardHasTemplateLatentNeeds(data)) return true;
+  return buildUncoveredSourceInputsFromBoard(data).length > 0;
+}
+
 /** 과거 폴백 템플릿·비허용 문자(키릴 등)로 작성된 Kevin 잠재 니즈가 보드에 남아 있는지 */
 export function boardHasTemplateLatentNeeds(
   data: Stage5LatentNeedsData,

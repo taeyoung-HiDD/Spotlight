@@ -115,15 +115,22 @@ export function LatentNeedsWorkPanel({
 
       <p className={`mb-4 ${stageCaption}`}>
         {isCoreSelection
-          ? "모든 니즈를 다 해결할 수는 없어요. 사분면에 배치해 보고, HMW 질문으로 가져갈 핵심 니즈를 골라 보세요."
+          ? "문제·Pain·반복 패턴을 기준으로 핵심 니즈를 미리 골라 두었어요. 사분면에서 확인하고, HMW로 가져갈 후보를 필요하면 조정해 보세요."
           : isCategorization
             ? "도출한 잠재 니즈를 비슷한 것끼리 묶어 분류해 보세요. 그룹 이름·구성은 언제든 바꿀 수 있어요."
             : purposeCopy.purpose}
       </p>
 
+      {!isCategorization && !isCoreSelection && generating ? (
+        <p className="mb-3 rounded-xl border border-spotlight/30 bg-[#FFFDF4] px-3 py-2 text-[13px] font-semibold text-foreground break-keep">
+          Kevin이 조사 내용을 바탕으로 잠재 니즈 초안을 작성하고 있어요…
+        </p>
+      ) : null}
+
       {isCoreSelection ? (
         <LatentNeedsCoreSelectionBoard
           projectId={projectId}
+          journey={journey}
           data={data}
           onChange={onChange}
         />
@@ -140,6 +147,8 @@ export function LatentNeedsWorkPanel({
           onJourneySubjectChange={onJourneyChange}
           needs={data}
           onNeedsChange={onChange}
+          generating={generating}
+          onGenerate={onGenerate}
         />
       )}
 

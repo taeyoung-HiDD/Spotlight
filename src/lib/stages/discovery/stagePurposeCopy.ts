@@ -63,7 +63,7 @@ const STAGE_PURPOSE_KO: Partial<Record<number, StagePurposeCopy>> = {
   7: {
     label: "HMW 질문을 만드는 이유",
     purpose:
-      "6단계에서 선별한 핵심 잠재 니즈를 조사 대상·니즈 그룹별로 보며 ‘어떻게 하면 …하기 위해 …할 수 있을까?’ 형태의 열린 질문으로 바꿔, 아이디어를 펼치기 전에 탐색할 방향을 잡는 단계예요. Kevin이 Amp up / Remove bad / Explore opposite 세 변주로 사전 HMW 초안을 만들고, 품질 체크 후 가장 알맞은 하나를 채워 두었어요. 자유롭게 다듬어 보세요.",
+      "6단계에서 선별한 핵심 잠재 니즈를 조사 대상·니즈 그룹별로 보며 ‘어떻게 하면 …하기 위해 …할 수 있을까?’ 형태의 열린 질문으로 바꿔, 아이디어를 펼치기 전에 탐색할 방향을 잡는 단계예요. Kevin이 Amp up / Remove bad / Explore opposite 세 변주로 사전 HMW 초안을 만들고 가장 알맞은 하나를 채워 두었어요. 자유롭게 다듬어 보세요.",
     workCaption: "HMW 질문 만들기",
     placeholderLines: [
       "왼쪽에 잠재 니즈가 보이면,",

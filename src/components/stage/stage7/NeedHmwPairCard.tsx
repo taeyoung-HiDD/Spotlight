@@ -3,7 +3,6 @@
 import { IconArrowDown, IconArrowRight } from "@tabler/icons-react";
 import { LocalizedText } from "@/components/i18n/LocalizedText";
 import { SynthesisPostitTextarea } from "@/components/stage/stage4/SynthesisPostitTextarea";
-import { HmwQualityTipsPanel } from "@/components/stage/stage7/HmwQualityTipsPanel";
 import { HmwQuestionSquareField } from "@/components/stage/stage7/HmwQuestionSquareField";
 import { SubjectInitialBadge } from "@/components/stage/stage5/SubjectInitialBadge";
 import { useUiLocale } from "@/hooks/useUiLocale";
@@ -105,11 +104,6 @@ export function NeedHmwPairCard({
           pairIndex={pairIndex}
         />
       </div>
-
-      <HmwQualityTipsPanel
-        tips={question.qualityTips}
-        variationKind={question.variationKind}
-      />
     </article>
   );
 }

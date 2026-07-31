@@ -19,8 +19,9 @@ export function emptyPersonaBio(): PersonaBio {
   };
 }
 
+/** 길이만 제한 — trim하지 않음(입력 중 띄어쓰기 유지). 빈 값 판별은 호출부에서 trim */
 function clipField(value: unknown, max: number): string {
-  return typeof value === "string" ? value.trim().slice(0, max) : "";
+  return typeof value === "string" ? value.slice(0, max) : "";
 }
 
 export function normalizePersonaBio(
@@ -36,7 +37,12 @@ export function normalizePersonaBio(
   const occupation = clipField(o.occupation, 80);
   const familyRelations = clipField(o.familyRelations, 120);
 
-  if (name || age || occupation || familyRelations) {
+  if (
+    name.trim() ||
+    age.trim() ||
+    occupation.trim() ||
+    familyRelations.trim()
+  ) {
     return { name, age, occupation, familyRelations };
   }
 

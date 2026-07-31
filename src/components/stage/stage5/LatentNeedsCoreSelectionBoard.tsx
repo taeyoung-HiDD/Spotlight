@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { LocalizedText } from "@/components/i18n/LocalizedText";
+import { fetchStage1CollectState } from "@/lib/artifacts/stage1Collect";
 import {
   CORE_CANDIDATE_CELL,
   NEED_SIGNAL_LABELS,
@@ -17,18 +18,20 @@ import {
   unparkNeed,
   unplacedLatentNeeds,
 } from "@/lib/stages/stage5/latentNeedsCoreSelection";
+import { listLatentNeedPostits } from "@/lib/stages/stage5/latentNeedsGroups";
 import {
-  requestCoreNeedsReview,
-  type CoreNeedReview,
-} from "@/lib/stages/stage5/reviewCoreNeedsClient";
+  applyCoreNeedSelection,
+  collectJourneyPainPoints,
+} from "@/lib/stages/stage5/selectCoreNeeds";
+import { requestCoreNeedsSelection } from "@/lib/stages/stage5/selectCoreNeedsClient";
 import {
   CORE_NEED_LIMIT,
   CORE_NEED_SOFT_WARN_AT,
   NEED_SIGNAL_IDS,
   type NeedQuadrantCell,
-  type Stage5BoardPostit,
   type Stage5LatentNeedsData,
 } from "@/lib/stages/stage5/latentNeedsTypes";
+import type { UserJourneyMapData } from "@/lib/stages/stage6/userJourneyTypes";
 import { stageBtnSecondary, stageCaption, stageLabel } from "@/lib/stages/ui";
 
 const DRAG_MIME = "application/x-spotlight-core-need-item";
@@ -71,12 +74,6 @@ const QUADRANT_ROWS: Array<{
   },
 ];
 
-function clip(s: string, max: number): string {
-  const t = s.trim();
-  if (t.length <= max) return t;
-  return `${t.slice(0, max)}…`;
-}
-
 function TrayNeedCard({
   postit,
   groupName,
@@ -84,7 +81,7 @@ function TrayNeedCard({
   onDragStart,
   onDragEnd,
 }: {
-  postit: Stage5BoardPostit;
+  postit: Stage5LatentNeedsData["postits"][number];
   groupName?: string;
   isDragging: boolean;
   onDragStart: (e: React.DragEvent) => void;
@@ -96,19 +93,18 @@ function TrayNeedCard({
       onDragStart={onDragStart}
       onDragEnd={onDragEnd}
       className={[
-        "min-w-0 cursor-grab rounded-md border border-[#7E57C2]/40 bg-[#EDE7F6]/95 px-2.5 py-2 text-[13px] font-semibold leading-snug text-[#1c1a16] break-keep [overflow-wrap:anywhere] active:cursor-grabbing",
+        "min-w-0 cursor-grab rounded-md border border-[#7E57C2]/40 bg-[#EDE7F6]/95 px-2 py-1.5 text-[12px] font-semibold leading-snug text-[#1c1a16] break-keep [overflow-wrap:anywhere] active:cursor-grabbing",
         isDragging ? "opacity-45" : "",
       ].join(" ")}
     >
-      <p className="mb-0.5 flex items-center gap-1.5 text-[10px] font-bold opacity-70">
-        잠재 니즈
-        {groupName ? (
-          <span className="rounded-sm bg-white/70 px-1 py-px font-semibold opacity-90">
-            <LocalizedText>{groupName}</LocalizedText>
-          </span>
-        ) : null}
+      {groupName ? (
+        <p className="mb-0.5 truncate text-[10px] font-bold opacity-70">
+          <LocalizedText>{groupName}</LocalizedText>
+        </p>
+      ) : null}
+      <p className="line-clamp-2">
+        <LocalizedText>{postit.text}</LocalizedText>
       </p>
-      <LocalizedText>{postit.text}</LocalizedText>
     </div>
   );
 }
@@ -119,16 +115,18 @@ function QuadrantNeedCard({
   data,
   isDragging,
   coreLimitReached,
+  onOpenDetail,
   onChange,
   onCoreAddAttempt,
   onDragStart,
   onDragEnd,
 }: {
-  postit: Stage5BoardPostit;
+  postit: Stage5LatentNeedsData["postits"][number];
   groupName?: string;
   data: Stage5LatentNeedsData;
   isDragging: boolean;
   coreLimitReached: boolean;
+  onOpenDetail: () => void;
   onChange: (data: Stage5LatentNeedsData) => void;
   onCoreAddAttempt: (nextCount: number) => void;
   onDragStart: (e: React.DragEvent) => void;
@@ -137,11 +135,15 @@ function QuadrantNeedCard({
   const isCore = data.coreNeedIds.includes(postit.id);
   const rating = data.needRatings[postit.id];
   const coreDisabled = !isCore && coreLimitReached;
-  const rationale = data.selectionRationales?.[postit.id] ?? "";
+  const activeSignals = NEED_SIGNAL_IDS.filter((s) =>
+    rating?.signals.includes(s),
+  );
 
-  const handleToggleCore = () => {
+  const handleToggleCore = (e: React.MouseEvent) => {
+    e.stopPropagation();
     if (!isCore) {
       onCoreAddAttempt(data.coreNeedIds.length + 1);
+      onOpenDetail();
     }
     onChange(toggleCoreNeed(data, postit.id));
   };
@@ -151,23 +153,44 @@ function QuadrantNeedCard({
       draggable
       onDragStart={onDragStart}
       onDragEnd={onDragEnd}
+      role="button"
+      tabIndex={0}
+      onClick={onOpenDetail}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onOpenDetail();
+        }
+      }}
+      title="자세히 보기"
       className={[
-        "min-w-0 cursor-grab rounded-md border bg-[#EDE7F6]/95 px-2.5 py-2 text-[13px] font-semibold leading-snug text-[#1c1a16] break-keep [overflow-wrap:anywhere] active:cursor-grabbing",
+        "min-w-0 cursor-grab rounded-md border bg-[#EDE7F6]/95 px-2 py-1.5 text-left text-[#1c1a16] break-keep [overflow-wrap:anywhere] active:cursor-grabbing",
         isCore
-          ? "border-spotlight ring-2 ring-spotlight/50"
+          ? "border-spotlight ring-1 ring-spotlight/50"
           : "border-[#7E57C2]/40",
         isDragging ? "opacity-45" : "",
       ].join(" ")}
     >
-      <div className="mb-1 flex items-start justify-between gap-1.5">
-        <p className="flex min-w-0 flex-wrap items-center gap-1.5 text-[10px] font-bold opacity-70">
-          잠재 니즈
-          {groupName ? (
-            <span className="rounded-sm bg-white/70 px-1 py-px font-semibold opacity-90">
-              <LocalizedText>{groupName}</LocalizedText>
-            </span>
-          ) : null}
-        </p>
+      <div className="flex items-start gap-1.5">
+        <div className="min-w-0 flex-1">
+          <div className="mb-0.5 flex min-w-0 flex-wrap items-center gap-1">
+            {groupName ? (
+              <span className="rounded-sm bg-white/70 px-1 py-px text-[10px] font-semibold opacity-90">
+                <LocalizedText>{groupName}</LocalizedText>
+              </span>
+            ) : (
+              <span className="text-[10px] font-bold opacity-60">잠재 니즈</span>
+            )}
+            {activeSignals.length > 0 ? (
+              <span className="text-[10px] font-semibold text-[#4A3580]/80">
+                · {activeSignals.map((s) => NEED_SIGNAL_LABELS[s]).join(" · ")}
+              </span>
+            ) : null}
+          </div>
+          <p className="line-clamp-2 text-[12px] font-semibold leading-snug">
+            <LocalizedText>{postit.text}</LocalizedText>
+          </p>
+        </div>
         <button
           type="button"
           onClick={handleToggleCore}
@@ -188,61 +211,173 @@ function QuadrantNeedCard({
             coreDisabled ? "cursor-not-allowed opacity-40" : "",
           ].join(" ")}
         >
-          {isCore ? "★ 핵심" : "☆ 핵심으로"}
+          {isCore ? "★" : "☆"}
         </button>
       </div>
+    </div>
+  );
+}
 
-      <LocalizedText>{postit.text}</LocalizedText>
+function NeedDetailPopup({
+  postit,
+  groupName,
+  data,
+  coreLimitReached,
+  onChange,
+  onCoreAddAttempt,
+  onClose,
+}: {
+  postit: Stage5LatentNeedsData["postits"][number];
+  groupName?: string;
+  data: Stage5LatentNeedsData;
+  coreLimitReached: boolean;
+  onChange: (data: Stage5LatentNeedsData) => void;
+  onCoreAddAttempt: (nextCount: number) => void;
+  onClose: () => void;
+}) {
+  const titleId = useId();
+  const closeRef = useRef<HTMLButtonElement>(null);
+  const isCore = data.coreNeedIds.includes(postit.id);
+  const rating = data.needRatings[postit.id];
+  const coreDisabled = !isCore && coreLimitReached;
+  const rationale = data.selectionRationales?.[postit.id] ?? "";
 
-      {isCore ? (
-        <label className="mt-1.5 block">
-          <span className="mb-0.5 block text-[10px] font-semibold text-[#1c1a16]/55">
-            왜 이걸 골랐나요? (선택)
-          </span>
-          <input
-            type="text"
-            value={rationale}
-            onChange={(e) =>
-              onChange(setSelectionRationale(data, postit.id, e.target.value))
-            }
-            onMouseDown={(e) => e.stopPropagation()}
-            onPointerDown={(e) => e.stopPropagation()}
-            placeholder="예: 조사에서 자주 나왔고, 대안이 약함"
-            className="w-full rounded-sm border border-[#7E57C2]/25 bg-white/80 px-1.5 py-1 text-[11px] font-medium text-[#1c1a16] outline-none placeholder:text-[#1c1a16]/35 focus:border-spotlight/50"
-          />
-        </label>
-      ) : null}
+  useEffect(() => {
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    closeRef.current?.focus();
 
-      <div className="mt-1.5 flex flex-wrap gap-1">
-        {NEED_SIGNAL_IDS.map((signal) => {
-          const active = rating?.signals.includes(signal) ?? false;
-          return (
-            <button
-              key={signal}
-              type="button"
-              onClick={() => onChange(toggleNeedSignal(data, postit.id, signal))}
-              aria-pressed={active}
-              className={[
-                "rounded-sm border px-1.5 py-0.5 text-[10px] font-semibold transition-colors",
-                active
-                  ? "border-[#7E57C2]/70 bg-[#7E57C2]/15 text-[#4A3580]"
-                  : "border-[#7E57C2]/25 bg-white/60 text-[#1c1a16]/60 hover:border-[#7E57C2]/50",
-              ].join(" ")}
-            >
-              {NEED_SIGNAL_LABELS[signal]}
-            </button>
-          );
-        })}
-      </div>
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [onClose]);
 
-      <div className="mt-1.5 flex justify-end">
-        <button
-          type="button"
-          onClick={() => onChange(parkNeed(data, postit.id))}
-          className="rounded-sm px-1.5 py-0.5 text-[11px] font-semibold text-[#1c1a16]/55 transition-colors hover:bg-white/70 hover:text-[#1c1a16]"
-        >
-          보류함으로
-        </button>
+  const handleToggleCore = () => {
+    if (!isCore) onCoreAddAttempt(data.coreNeedIds.length + 1);
+    onChange(toggleCoreNeed(data, postit.id));
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-[200] flex items-center justify-center p-4"
+      role="presentation"
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div className="absolute inset-0 bg-charcoal/40" aria-hidden />
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        className={[
+          "relative w-full max-w-[32rem] rounded-xl border bg-panel p-5 shadow-[0_12px_40px_rgba(45,45,42,0.18)]",
+          isCore ? "border-spotlight" : "border-border-warm",
+        ].join(" ")}
+        onMouseDown={(e) => e.stopPropagation()}
+      >
+        <div className="mb-3 flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p id={titleId} className={`mb-1 ${stageLabel}`}>
+              잠재 니즈
+              {groupName ? (
+                <>
+                  {" · "}
+                  <LocalizedText>{groupName}</LocalizedText>
+                </>
+              ) : null}
+            </p>
+            <p className="text-[16px] font-semibold leading-relaxed text-foreground break-keep [overflow-wrap:anywhere]">
+              <LocalizedText>{postit.text}</LocalizedText>
+            </p>
+          </div>
+          <button
+            ref={closeRef}
+            type="button"
+            onClick={onClose}
+            className={`${stageBtnSecondary} shrink-0 px-2.5 py-1 text-[12px]`}
+            aria-label="닫기"
+          >
+            닫기
+          </button>
+        </div>
+
+        <div className="mb-4 flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={handleToggleCore}
+            disabled={coreDisabled}
+            aria-pressed={isCore}
+            className={[
+              "rounded-md border px-2.5 py-1.5 text-[13px] font-bold transition-colors",
+              isCore
+                ? "border-spotlight bg-spotlight text-on-spotlight"
+                : "border-[#7E57C2]/40 bg-[#EDE7F6]/95 text-[#1c1a16] hover:border-spotlight/60",
+              coreDisabled ? "cursor-not-allowed opacity-40" : "",
+            ].join(" ")}
+          >
+            {isCore ? "★ 핵심" : "☆ 핵심으로"}
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              onChange(parkNeed(data, postit.id));
+              onClose();
+            }}
+            className={`${stageBtnSecondary} px-2.5 py-1.5 text-[13px]`}
+          >
+            보류함으로
+          </button>
+        </div>
+
+        {isCore ? (
+          <label className="mb-4 block">
+            <span className="mb-1 block text-[12px] font-semibold text-muted">
+              왜 이걸 골랐나요? (선택)
+            </span>
+            <input
+              type="text"
+              value={rationale}
+              onChange={(e) =>
+                onChange(setSelectionRationale(data, postit.id, e.target.value))
+              }
+              placeholder="예: 조사에서 자주 나왔고, 대안이 약함"
+              className="w-full rounded-md border border-border-warm bg-cream/60 px-3 py-2 text-[14px] font-medium text-foreground outline-none placeholder:text-muted focus:border-spotlight/50"
+            />
+          </label>
+        ) : null}
+
+        <div>
+          <p className="mb-1.5 text-[12px] font-semibold text-muted">근거 배지</p>
+          <div className="flex flex-wrap gap-1.5">
+            {NEED_SIGNAL_IDS.map((signal) => {
+              const active = rating?.signals.includes(signal) ?? false;
+              return (
+                <button
+                  key={signal}
+                  type="button"
+                  onClick={() =>
+                    onChange(toggleNeedSignal(data, postit.id, signal))
+                  }
+                  aria-pressed={active}
+                  className={[
+                    "rounded-md border px-2 py-1 text-[12px] font-semibold transition-colors",
+                    active
+                      ? "border-[#7E57C2]/70 bg-[#7E57C2]/15 text-[#4A3580]"
+                      : "border-border-warm bg-cream text-muted hover:border-[#7E57C2]/50",
+                  ].join(" ")}
+                >
+                  {NEED_SIGNAL_LABELS[signal]}
+                </button>
+              );
+            })}
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -250,32 +385,42 @@ function QuadrantNeedCard({
 
 interface LatentNeedsCoreSelectionBoardProps {
   projectId: string;
+  journey: UserJourneyMapData;
   data: Stage5LatentNeedsData;
   onChange: (data: Stage5LatentNeedsData) => void;
 }
 
 export function LatentNeedsCoreSelectionBoard({
   projectId,
+  journey,
   data,
   onChange,
 }: LatentNeedsCoreSelectionBoardProps) {
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [dropTarget, setDropTarget] = useState<DropZone | null>(null);
-  const [reviewing, setReviewing] = useState(false);
-  const [reviews, setReviews] = useState<CoreNeedReview[] | null>(null);
+  const [selecting, setSelecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [softWarnVisible, setSoftWarnVisible] = useState(false);
+  const [detailNeedId, setDetailNeedId] = useState<string | null>(null);
+  const autoSelectRef = useRef(false);
+  const dataRef = useRef(data);
+  dataRef.current = data;
 
   const groupNames = useMemo(() => needGroupNameMap(data), [data]);
   const unplaced = useMemo(() => unplacedLatentNeeds(data), [data]);
   const parked = useMemo(() => parkedLatentNeeds(data), [data]);
-  const needById = useMemo(
-    () => new Map(data.postits.map((p) => [p.id, p] as const)),
-    [data.postits],
-  );
   const coreLimitReached = data.coreNeedIds.length >= CORE_NEED_LIMIT;
   const showSoftWarn =
     softWarnVisible || data.coreNeedIds.length >= CORE_NEED_SOFT_WARN_AT;
+  const detailPostit = useMemo(() => {
+    if (!detailNeedId) return null;
+    return (
+      data.postits.find(
+        (p) => p.id === detailNeedId && p.kind === "latent_need",
+      ) ?? null
+    );
+  }, [data.postits, detailNeedId]);
+  const closeDetail = useCallback(() => setDetailNeedId(null), []);
 
   const handleCoreAddAttempt = useCallback((nextCount: number) => {
     if (nextCount >= CORE_NEED_SOFT_WARN_AT) {
@@ -324,54 +469,89 @@ export function LatentNeedsCoreSelectionBoard({
     [data, onChange],
   );
 
-  const handleKevinReview = useCallback(async () => {
-    const core = data.coreNeedIds
-      .map((id) => needById.get(id))
-      .filter((p): p is Stage5BoardPostit => Boolean(p?.text.trim()))
-      .map((p) => ({ id: p.id, text: p.text.trim() }));
-    if (core.length === 0) {
-      setError("먼저 핵심 니즈를 1개 이상 지정해 주세요.");
+  const runAutoSelection = useCallback(async () => {
+    const current = dataRef.current;
+    const latents = listLatentNeedPostits(current);
+    if (latents.length === 0) {
+      setError("선별할 잠재 니즈가 없어요. 먼저 니즈 분석·분류를 채워 주세요.");
       return;
     }
-    const parkedPayload = parked.map((p) => ({
-      id: p.id,
-      text: p.text.trim(),
-    }));
 
-    setReviewing(true);
+    setSelecting(true);
     setError(null);
     try {
-      const result = await requestCoreNeedsReview(
-        projectId,
-        core,
-        parkedPayload,
+      const sourceById = new Map(
+        current.postits
+          .filter((p) => p.kind !== "latent_need" && p.text.trim())
+          .map((p) => [p.id, p.text.trim()] as const),
       );
-      setReviews(result.reviews);
+      const groupNamesMap = needGroupNameMap(current);
+      const needs = latents.map((p) => ({
+        id: p.id,
+        text: p.text.trim(),
+        subjectId: p.subjectId,
+        groupName: groupNamesMap.get(p.id),
+        linkedSourceTexts: (p.linkedSourceIds ?? [])
+          .map((id) => sourceById.get(id))
+          .filter((t): t is string => Boolean(t))
+          .slice(0, 4),
+      }));
+
+      const [stage1] = await Promise.all([fetchStage1CollectState(projectId)]);
+      const problem = stage1.state.startingPoint?.trim() ?? "";
+      const painPoints = collectJourneyPainPoints(journey);
+
+      const result = await requestCoreNeedsSelection({
+        projectId,
+        problem,
+        painPoints,
+        needs,
+      });
+
+      // 사용자가 선별 중 수동 편집했을 수 있으므로 최신 보드에 반영
+      onChange(applyCoreNeedSelection(dataRef.current, result));
+      if (result.selections.length >= CORE_NEED_SOFT_WARN_AT) {
+        setSoftWarnVisible(true);
+      }
     } catch (e) {
       setError(
-        e instanceof Error ? e.message : "Kevin 관점 요청에 실패했습니다.",
+        e instanceof Error ? e.message : "핵심 니즈 자동 선별에 실패했습니다.",
       );
     } finally {
-      setReviewing(false);
+      setSelecting(false);
     }
-  }, [data.coreNeedIds, needById, parked, projectId]);
+  }, [journey, onChange, projectId]);
+
+  // 탭 진입 시: 핵심이 없거나, 대부분 보류만 되어 있으면 1회 자동 선별
+  useEffect(() => {
+    if (autoSelectRef.current || selecting) return;
+    const latents = listLatentNeedPostits(data);
+    if (latents.length === 0) return;
+
+    const parked = new Set(data.parkedNeedIds);
+    const onQuadrant = latents.filter(
+      (p) => data.needRatings[p.id] && !parked.has(p.id),
+    ).length;
+    const mostlyParked =
+      latents.length >= 4 && onQuadrant < Math.ceil(latents.length * 0.5);
+
+    if (data.coreNeedIds.length > 0 && !mostlyParked) {
+      autoSelectRef.current = true;
+      return;
+    }
+
+    autoSelectRef.current = true;
+    void runAutoSelection();
+  }, [data, runAutoSelection, selecting]);
 
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className={stageCaption}>
-          카드를 사분면에 끌어다 놓고, 좋은 아이디어로 이어질 핵심 니즈를 최대{" "}
-          {CORE_NEED_LIMIT}개까지 골라 보세요. 나머지는 보류함에 — 버리는 게
-          아니라 잠시 접어두는 거예요.
+          {selecting
+            ? "문제·Pain·반복 패턴·HMW 전환 용이성을 기준으로 핵심 니즈를 고르는 중이에요…"
+            : "카드를 눌러 크게 보고, 핵심·근거·보류를 조정해 보세요. 각 칸 안에서만 스크롤해 한눈에 비교할 수 있어요."}
         </p>
-        <button
-          type="button"
-          onClick={() => void handleKevinReview()}
-          disabled={reviewing || data.coreNeedIds.length === 0}
-          className={stageBtnSecondary}
-        >
-          {reviewing ? "Kevin이 살펴보는 중…" : "Kevin 관점 듣기"}
-        </button>
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
@@ -381,6 +561,11 @@ export function LatentNeedsCoreSelectionBoard({
         <span className="rounded-md bg-cream px-2.5 py-1 text-[13px] font-semibold text-muted">
           보류 {parked.length}개
         </span>
+        {selecting ? (
+          <span className="text-[12px] font-semibold text-muted break-keep">
+            자동 선별 중…
+          </span>
+        ) : null}
         {unplaced.length > 0 ? (
           <span className="text-[12px] text-muted break-keep">
             아직 배치 안 한 니즈 {unplaced.length}개
@@ -391,7 +576,7 @@ export function LatentNeedsCoreSelectionBoard({
       {showSoftWarn ? (
         <div className="rounded-xl border border-spotlight/40 bg-[#FFFDF4] px-3 py-2.5">
           <p className="text-[13px] font-semibold text-foreground break-keep">
-            Kevin: 지금 {data.coreNeedIds.length || CORE_NEED_SOFT_WARN_AT}개를
+            지금 {data.coreNeedIds.length || CORE_NEED_SOFT_WARN_AT}개를
             골랐어요. 2~3개로 좁히면 다음 단계에서 더 깊이 파고들 수 있어요.
             그래도 계속 {data.coreNeedIds.length || CORE_NEED_SOFT_WARN_AT}개로
             가시겠어요?
@@ -460,7 +645,7 @@ export function LatentNeedsCoreSelectionBoard({
                 {row.importanceLabel}
               </p>
             </div>
-            <div className="grid min-w-0 flex-1 gap-2 sm:grid-cols-2">
+            <div className="grid min-w-0 flex-1 gap-2 sm:grid-cols-2 sm:items-stretch">
               {row.cells.map(({ cell, title, hint }) => {
                 const members = needsInQuadrantCell(data, cell);
                 const isDropActive = dropTarget === cell;
@@ -472,7 +657,7 @@ export function LatentNeedsCoreSelectionBoard({
                     onDragLeave={leaveDrop(cell)}
                     onDrop={handleDrop(cell)}
                     className={[
-                      "flex min-h-[11rem] flex-col rounded-xl border p-3 transition-colors",
+                      "flex h-[min(22rem,42vh)] min-h-[14rem] flex-col rounded-xl border p-2.5 transition-colors",
                       isDropActive
                         ? "border-spotlight/70 bg-highlight/40"
                         : isCandidate
@@ -480,7 +665,7 @@ export function LatentNeedsCoreSelectionBoard({
                           : "border-border-warm bg-panel",
                     ].join(" ")}
                   >
-                    <div className="mb-2 flex flex-wrap items-center gap-1.5">
+                    <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
                       <p className="text-[13px] font-semibold text-foreground break-keep">
                         {title}
                       </p>
@@ -494,11 +679,18 @@ export function LatentNeedsCoreSelectionBoard({
                       >
                         {hint}
                       </span>
+                      <span className="ml-auto rounded-sm bg-cream/80 px-1.5 py-px text-[10px] font-semibold text-muted">
+                        {members.length}개
+                      </span>
                     </div>
-                    <div className="flex flex-1 flex-col gap-2">
+                    <div className="min-h-0 flex-1 space-y-1.5 overflow-y-auto overscroll-contain pr-0.5">
                       {members.length === 0 ? (
-                        <p className="flex-1 rounded-md border border-dashed border-border-warm/80 px-2 py-5 text-center text-[12px] text-muted break-keep">
-                          {isDropActive ? "여기에 놓기" : "카드를 끌어다 놓기"}
+                        <p className="flex h-full min-h-[6rem] items-center justify-center rounded-md border border-dashed border-border-warm/80 px-2 text-center text-[12px] text-muted break-keep">
+                          {isDropActive
+                            ? "여기에 놓기"
+                            : selecting
+                              ? "선별 중…"
+                              : "카드를 끌어다 놓기"}
                         </p>
                       ) : (
                         members.map((postit) => (
@@ -509,6 +701,7 @@ export function LatentNeedsCoreSelectionBoard({
                             data={data}
                             isDragging={draggingId === postit.id}
                             coreLimitReached={coreLimitReached}
+                            onOpenDetail={() => setDetailNeedId(postit.id)}
                             onChange={onChange}
                             onCoreAddAttempt={handleCoreAddAttempt}
                             onDragStart={handleDragStart(postit.id)}
@@ -549,84 +742,47 @@ export function LatentNeedsCoreSelectionBoard({
               : "핵심이 아니라고 판단한 카드를 여기로 끌어다 놓으세요"}
           </p>
         ) : (
-          <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
-            {parked.map((postit) => (
-              <div
-                key={postit.id}
-                className="min-w-0 rounded-md border border-border-warm bg-panel/80 px-2.5 py-2 text-[13px] font-medium leading-snug text-muted break-keep [overflow-wrap:anywhere]"
-              >
-                <p className="mb-0.5 flex items-center gap-1.5 text-[10px] font-bold opacity-70">
-                  잠재 니즈
+          <div className="max-h-[12rem] overflow-y-auto overscroll-contain">
+            <div className="grid gap-1.5 sm:grid-cols-2 xl:grid-cols-3">
+              {parked.map((postit) => (
+                <div
+                  key={postit.id}
+                  className="min-w-0 rounded-md border border-border-warm bg-panel/80 px-2 py-1.5 text-[12px] font-medium leading-snug text-muted break-keep [overflow-wrap:anywhere]"
+                >
                   {groupNames.get(postit.id) ? (
-                    <span className="rounded-sm bg-cream px-1 py-px font-semibold">
+                    <p className="mb-0.5 truncate text-[10px] font-bold opacity-70">
                       <LocalizedText>{groupNames.get(postit.id)!}</LocalizedText>
-                    </span>
+                    </p>
                   ) : null}
-                </p>
-                <LocalizedText>{postit.text}</LocalizedText>
-                <div className="mt-1.5 flex justify-end">
-                  <button
-                    type="button"
-                    onClick={() => onChange(unparkNeed(data, postit.id))}
-                    className={`${stageBtnSecondary} px-2 py-1 text-[11px]`}
-                  >
-                    다시 꺼내기
-                  </button>
+                  <p className="line-clamp-2">
+                    <LocalizedText>{postit.text}</LocalizedText>
+                  </p>
+                  <div className="mt-1 flex justify-end">
+                    <button
+                      type="button"
+                      onClick={() => onChange(unparkNeed(data, postit.id))}
+                      className={`${stageBtnSecondary} px-2 py-0.5 text-[11px]`}
+                    >
+                      다시 꺼내기
+                    </button>
+                  </div>
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
         )}
       </section>
 
-      {reviews && reviews.length > 0 ? (
-        <section className="rounded-xl border border-border-warm bg-surface p-3">
-          <p className={`mb-2 ${stageLabel}`}>Kevin의 반대 관점</p>
-          <p className={`mb-2.5 ${stageCaption}`}>
-            혼자 고를 때는 반대 의견이 없기 쉬워요. 아래 질문에 답이 선다면
-            그대로, 흔들린다면 보류함과 한 번 더 바꿔 보세요.
-          </p>
-          <div className="space-y-2">
-            {reviews.map((review) => {
-              const need = needById.get(review.needId);
-              const mustBe =
-                review.mustBeSuspicion === true ||
-                review.kanoSignal === "must_be";
-              return (
-                <div
-                  key={review.needId}
-                  className={[
-                    "rounded-md border bg-panel px-3 py-2.5",
-                    mustBe
-                      ? "border-spotlight/50 bg-[#FFFDF4]"
-                      : "border-border-warm",
-                  ].join(" ")}
-                >
-                  <div className="mb-1 flex flex-wrap items-center gap-1.5">
-                    {need ? (
-                      <p className="text-[12px] font-semibold text-muted break-keep">
-                        <LocalizedText>{clip(need.text, 60)}</LocalizedText>
-                      </p>
-                    ) : null}
-                    {mustBe ? (
-                      <span className="rounded-sm bg-spotlight/20 px-1.5 py-px text-[10px] font-semibold text-foreground">
-                        당연할 수도? · 질문으로만
-                      </span>
-                    ) : null}
-                  </div>
-                  <p className="text-[13px] font-semibold text-foreground leading-relaxed break-keep">
-                    <LocalizedText>{review.counterQuestion}</LocalizedText>
-                  </p>
-                  {review.riskNote ? (
-                    <p className="mt-1 text-[12px] text-muted leading-relaxed break-keep">
-                      <LocalizedText>{review.riskNote}</LocalizedText>
-                    </p>
-                  ) : null}
-                </div>
-              );
-            })}
-          </div>
-        </section>
+      {detailPostit ? (
+        <NeedDetailPopup
+          postit={detailPostit}
+          groupName={groupNames.get(detailPostit.id)}
+          data={data}
+          coreLimitReached={coreLimitReached}
+          onChange={onChange}
+          onCoreAddAttempt={handleCoreAddAttempt}
+          onClose={closeDetail}
+        />
       ) : null}
     </div>
   );
