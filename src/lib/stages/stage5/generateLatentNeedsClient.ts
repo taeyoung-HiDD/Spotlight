@@ -1,5 +1,8 @@
 import { isStage5SourcePostitKind } from "@/lib/stages/stage5/bootstrapLatentNeedsFromStage4";
-import { isTemplateLatentNeedText } from "@/lib/stages/stage5/generateLatentNeedsHeuristic";
+import {
+  heuristicGenerateLatentNeeds,
+  isTemplateLatentNeedText,
+} from "@/lib/stages/stage5/generateLatentNeedsHeuristic";
 import { cleanLatentNeedText } from "@/lib/stages/stage5/latentNeedText";
 import type { Stage5LatentNeedsData } from "@/lib/stages/stage5/latentNeedsTypes";
 import {
@@ -37,7 +40,19 @@ export async function requestLatentNeedsGeneration(
   };
 
   if (!res.ok) {
+    // 네트워크/권한 오류여도 화면이 비지 않도록 휴리스틱으로 채웁니다.
+    const heuristic = heuristicGenerateLatentNeeds(sources);
+    if (heuristic.length > 0) {
+      return { needs: heuristic, source: "heuristic_client" };
+    }
     throw new Error(json.error ?? "잠재 니즈 생성에 실패했습니다.");
+  }
+
+  if (!Array.isArray(json.needs) || json.needs.length === 0) {
+    return {
+      needs: heuristicGenerateLatentNeeds(sources),
+      source: "heuristic_client",
+    };
   }
 
   return json;

@@ -32,3 +32,53 @@ export function isTemplateLatentNeedText(text: string): boolean {
   }
   return false;
 }
+
+function clipSourceSnippet(text: string, max = 36): string {
+  const t = text.replace(/\s+/g, " ").trim();
+  if (t.length <= max) return t;
+  return `${t.slice(0, max)}…`;
+}
+
+/**
+ * AI 없을 때·빈 응답일 때 조사 문장에서 Need Statement 초안을 만듭니다.
+ * (가설) 접두·템플릿 문구는 쓰지 않습니다.
+ */
+export function heuristicLatentNeedFromSource(input: {
+  kind: "quote" | "observation" | "finding";
+  text: string;
+}): string {
+  const snippet = clipSourceSnippet(input.text);
+  if (!snippet) return "";
+
+  if (input.kind === "quote") {
+    return `말한 속 마음을 스스로 납득하기 위해서, 「${snippet}」 부담을 덜어 줄 기준을 세우고 싶다`;
+  }
+  if (input.kind === "finding") {
+    return `발견한 패턴 아래의 불안을 줄이기 위해서, 「${snippet}」에 맞는 다음 행동을 정하고 싶다`;
+  }
+  return `겉으로 드러난 불편을 줄이기 위해서, 「${snippet}」 상황을 스스로 해결할 기준을 만들고 싶다`;
+}
+
+export function heuristicGenerateLatentNeeds(
+  sources: Array<{
+    sourceId: string;
+    subjectId: string;
+    kind: "quote" | "observation" | "finding";
+    text: string;
+  }>,
+): Array<{ sourceId: string; subjectId: string; text: string }> {
+  const out: Array<{ sourceId: string; subjectId: string; text: string }> = [];
+  for (const s of sources) {
+    const text = heuristicLatentNeedFromSource({
+      kind: s.kind,
+      text: s.text,
+    });
+    if (!text || isTemplateLatentNeedText(text)) continue;
+    out.push({
+      sourceId: s.sourceId,
+      subjectId: s.subjectId,
+      text,
+    });
+  }
+  return out;
+}

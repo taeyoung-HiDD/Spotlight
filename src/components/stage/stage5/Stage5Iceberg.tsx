@@ -19,6 +19,7 @@ import {
 import { fetchStage6UserJourney } from "@/lib/artifacts/stage6UserJourney";
 import { touchProjectPhase } from "@/lib/artifacts/stage5Iceberg";
 import {
+  mergeJourneyItemsIntoLatentNeeds,
   mergeStage4DiscoveriesIntoLatentNeeds,
   stage4HasResearchContent,
 } from "@/lib/stages/stage5/bootstrapLatentNeedsFromStage4";
@@ -93,7 +94,8 @@ export function Stage5Iceberg({ projectId }: Stage5IcebergProps) {
         if (shouldSyncStage4) {
           next = mergeStage4DiscoveriesIntoLatentNeeds(next, stage4Data);
         }
-
+        // 여정에만 있는 언급·관찰도 소스로 보강 (생성 입력이 비지 않게)
+        next = mergeJourneyItemsIntoLatentNeeds(next, journeyData);
         next = withBootstrappedJourneyNeeds(next, journeyData);
 
         setData(next);
@@ -105,7 +107,7 @@ export function Stage5Iceberg({ projectId }: Stage5IcebergProps) {
         // kevinGeneratedAt만 있고 일부만 채워진 경우도 나머지를 이어서 채웁니다.
         const needsKevin = boardNeedsLatentNeedsGeneration(next);
 
-        if (shouldSyncStage4 && !needsKevin) {
+        if ((shouldSyncStage4 || next.postits.length > 0) && !needsKevin) {
           const { artifactId: syncedId } = await saveStage5LatentNeeds({
             projectId,
             artifactId: needsResult.artifactId,
@@ -224,12 +226,20 @@ export function Stage5Iceberg({ projectId }: Stage5IcebergProps) {
   }, []);
 
   const handleGenerateLatentNeeds = useCallback(async () => {
-    let inputs = buildUncoveredSourceInputsFromBoard(data);
+    // 여정 카드가 있는데 보드 소스가 비어 있으면 먼저 보강
+    let board = mergeJourneyItemsIntoLatentNeeds(data, journey);
+    if (board !== data) {
+      setData(board);
+    }
+
+    let inputs = buildUncoveredSourceInputsFromBoard(board);
     if (inputs.length === 0) {
-      inputs = buildSourceInputsFromBoard(data);
+      inputs = buildSourceInputsFromBoard(board);
     }
     if (inputs.length === 0) {
-      setSaveError("잠재 니즈를 만들 조사 결과 포스트잇이 없어요.");
+      setSaveError(
+        "잠재 니즈를 만들 조사(언급·관찰)가 없어요. 발견 정리하기나 사용자 여정 지도에 조사 내용을 채워 주세요.",
+      );
       return;
     }
 
@@ -248,7 +258,7 @@ export function Stage5Iceberg({ projectId }: Stage5IcebergProps) {
         return;
       }
       const withNeeds = withBootstrappedJourneyNeeds(
-        applyGeneratedLatentNeeds(data, result),
+        applyGeneratedLatentNeeds(board, result),
         journey,
       );
       setData(withNeeds);

@@ -12,7 +12,10 @@ import {
 import { COACH_SYSTEM_INSTRUCTION } from "@/lib/coach/systemInstruction";
 import type { UiLocale } from "@/lib/i18n/uiLocale";
 import { fetchProjectAccess } from "@/lib/projects/projectAccess";
-import { isTemplateLatentNeedText } from "@/lib/stages/stage5/generateLatentNeedsHeuristic";
+import {
+  heuristicGenerateLatentNeeds,
+  isTemplateLatentNeedText,
+} from "@/lib/stages/stage5/generateLatentNeedsHeuristic";
 
 interface SourcePayload {
   sourceId: string;
@@ -198,9 +201,12 @@ export async function POST(request: Request) {
     );
   }
 
-  // AI를 못 쓰면 뭉뚱그린 템플릿 대신 빈 결과를 돌려 다음에 다시 시도하게 둡니다.
+  // AI를 못 쓰면 휴리스틱으로라도 초안을 채워 보드가 비지 않게 합니다.
   if (!resolveGroqApiKey()) {
-    return NextResponse.json({ needs: [], source: "heuristic" });
+    return NextResponse.json({
+      needs: heuristicGenerateLatentNeeds(sources),
+      source: "heuristic",
+    });
   }
 
   const subjectHints = [
@@ -276,7 +282,10 @@ export async function POST(request: Request) {
   }
 
   if (needs.length === 0) {
-    return NextResponse.json({ needs: [], source: "heuristic" });
+    return NextResponse.json({
+      needs: heuristicGenerateLatentNeeds(sources),
+      source: "heuristic_fallback",
+    });
   }
 
   return NextResponse.json({ needs, source: "groq", model });

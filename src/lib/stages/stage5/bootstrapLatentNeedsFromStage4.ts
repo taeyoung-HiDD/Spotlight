@@ -3,6 +3,7 @@ import type { ResearchMethodId } from "@/lib/stages/fieldResearch/types";
 import {
   filterMeaningfulResearchSubjects,
   type ResearchSynthesisData,
+  type ResearchSubject,
   type SynthesisNote,
   type SynthesisNoteKind,
 } from "@/lib/stages/stage4/researchSynthesisTypes";
@@ -13,7 +14,9 @@ import {
   type Stage5BoardPostit,
   type Stage5BoardPostitKind,
   type Stage5LatentNeedsData,
+  type Stage5SubjectRef,
 } from "@/lib/stages/stage5/latentNeedsTypes";
+import type { UserJourneyMapData } from "@/lib/stages/stage6/userJourneyTypes";
 
 const STAGE5_SOURCE_NOTE_KINDS: SynthesisNoteKind[] = [
   "quote",
@@ -67,21 +70,51 @@ function synthesisNoteToPostit(note: SynthesisNote): Stage5BoardPostit | null {
   });
 }
 
-/** 4단계 데이터 정리 → 5단계 통합 보드(언급·관찰·발견) */
-export function bootstrapSourcePostitsFromStage4(
-  synthesis: ResearchSynthesisData,
-): Pick<Stage5LatentNeedsData, "subjects" | "postits"> {
-  const meaningfulSubjects = filterMeaningfulResearchSubjects(synthesis);
-  const allowedSubjectIds = new Set(meaningfulSubjects.map((s) => s.id));
-
-  const subjects = meaningfulSubjects.map((s) => ({
+function subjectToStage5Ref(s: ResearchSubject): Stage5SubjectRef {
+  return {
     id: s.id,
     name: s.name,
     context: s.context,
     thumbnailUrl: s.thumbnailUrl,
     researchMethodId: (s.researchMethodId || "") as ResearchMethodId | "",
     conductedAt: s.conductedAt || "",
-  }));
+  };
+}
+
+/** 4단계 데이터 정리 → 5단계 통합 보드(언급·관찰·발견) */
+export function bootstrapSourcePostitsFromStage4(
+  synthesis: ResearchSynthesisData,
+): Pick<Stage5LatentNeedsData, "subjects" | "postits"> {
+  const subjectsById = new Map(
+    filterMeaningfulResearchSubjects(synthesis).map((s) => [
+      s.id,
+      subjectToStage5Ref(s),
+    ]),
+  );
+
+  // 의미 있는 대상에 없더라도 조사 노트가 있으면 대상·소스를 포함
+  for (const note of synthesis.notes) {
+    if (!STAGE5_SOURCE_NOTE_KINDS.includes(note.kind) || !note.text.trim()) {
+      continue;
+    }
+    if (subjectsById.has(note.subjectId)) continue;
+    const fromList = synthesis.subjects.find((s) => s.id === note.subjectId);
+    if (fromList) {
+      subjectsById.set(fromList.id, subjectToStage5Ref(fromList));
+    } else {
+      subjectsById.set(note.subjectId, {
+        id: note.subjectId,
+        name: "",
+        context: "",
+        thumbnailUrl: "",
+        researchMethodId: "",
+        conductedAt: "",
+      });
+    }
+  }
+
+  const subjects = [...subjectsById.values()];
+  const allowedSubjectIds = new Set(subjects.map((s) => s.id));
 
   const postits = synthesis.notes
     .filter((note) => allowedSubjectIds.has(note.subjectId))
@@ -125,6 +158,101 @@ export function mergeStage4DiscoveriesIntoLatentNeeds(
     subjects,
     postits: [...mergedSources, ...latentNeeds],
     stage4SyncedAt: new Date().toISOString(),
+  });
+}
+
+/**
+ * 여정 지도에 올라간 언급·관찰을 Stage5 조사 소스로 보강.
+ * Stage4 동기화가 비었거나 대상 id가 어긋나도 생성이 돌 수 있게 합니다.
+ */
+export function mergeJourneyItemsIntoLatentNeeds(
+  current: Stage5LatentNeedsData,
+  journey: UserJourneyMapData,
+): Stage5LatentNeedsData {
+  const subjectsById = new Map(
+    current.subjects.map((s) => [s.id, s] as const),
+  );
+  for (const s of journey.subjects) {
+    if (subjectsById.has(s.id)) continue;
+    subjectsById.set(s.id, {
+      id: s.id,
+      name: s.name,
+      context: s.context,
+      thumbnailUrl: s.thumbnailUrl ?? "",
+      researchMethodId: "",
+      conductedAt: "",
+    });
+  }
+
+  const existingSources = current.postits.filter((p) =>
+    isStage5SourcePostitKind(p.kind),
+  );
+  const byRef = new Map(
+    existingSources.map((p) => [p.sourceRef ?? p.id, p] as const),
+  );
+  const byTextKey = new Map(
+    existingSources.map(
+      (p) => [`${p.subjectId}::${p.text.trim()}`, p] as const,
+    ),
+  );
+
+  const incoming: Stage5BoardPostit[] = [];
+  for (const item of Object.values(journey.itemsById ?? {})) {
+    if (item.kind !== "quote" && item.kind !== "observation") continue;
+    const text = item.text.trim();
+    if (!text) continue;
+
+    const noteId =
+      item.sourceId?.trim() ||
+      (item.id.startsWith("s4-") ? item.id.slice(3) : item.id);
+    const sourceRef = item.sourceId?.trim()
+      ? `s4-note-${item.sourceId.trim()}`
+      : `journey-${item.id}`;
+
+    if (
+      byRef.has(sourceRef) ||
+      byRef.has(`s4-note-${noteId}`) ||
+      byRef.has(item.id) ||
+      byTextKey.has(`${item.subjectId}::${text}`)
+    ) {
+      continue;
+    }
+
+    if (!subjectsById.has(item.subjectId)) {
+      subjectsById.set(item.subjectId, {
+        id: item.subjectId,
+        name: "",
+        context: "",
+        thumbnailUrl: "",
+        researchMethodId: "",
+        conductedAt: "",
+      });
+    }
+
+    const postit = createStage5BoardPostit(item.subjectId, item.kind, {
+      id: `s5-src-${noteId}`,
+      text,
+      readonly: true,
+      sourceRef,
+    });
+    incoming.push(postit);
+    byRef.set(sourceRef, postit);
+    byTextKey.set(`${item.subjectId}::${text}`, postit);
+  }
+
+  if (incoming.length === 0 && subjectsById.size === current.subjects.length) {
+    return current;
+  }
+
+  const subjectIds = new Set(subjectsById.keys());
+  const latentNeeds = current.postits.filter(
+    (p) => p.kind === "latent_need" && subjectIds.has(p.subjectId),
+  );
+
+  return pruneStage5LatentNeedsData({
+    ...current,
+    subjects: [...subjectsById.values()],
+    postits: [...existingSources, ...incoming, ...latentNeeds],
   });
 }
 
