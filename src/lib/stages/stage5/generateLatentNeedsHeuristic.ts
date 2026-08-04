@@ -51,12 +51,12 @@ export function heuristicLatentNeedFromSource(input: {
   if (!snippet) return "";
 
   if (input.kind === "quote") {
-    return `말한 속 마음을 스스로 납득하기 위해서, 「${snippet}」 부담을 덜어 줄 기준을 세우고 싶다`;
+    return `말한 속 마음을 스스로 납득하기 위해서, 「${snippet}」 부담을 덜어 줄 (내게 맞는) 기준을 쉽게 세우고 싶다`;
   }
   if (input.kind === "finding") {
-    return `발견한 패턴 아래의 불안을 줄이기 위해서, 「${snippet}」에 맞는 다음 행동을 정하고 싶다`;
+    return `발견한 패턴 아래의 불안을 줄이기 위해서, 「${snippet}」에 맞는 다음 행동을 구체적으로 정하고 싶다`;
   }
-  return `겉으로 드러난 불편을 줄이기 위해서, 「${snippet}」 상황을 스스로 해결할 기준을 만들고 싶다`;
+  return `겉으로 드러난 불편을 줄이기 위해서, 「${snippet}」 상황을 스스로 해결할 (실천 가능한) 기준을 만들고 싶다`;
 }
 
 export function heuristicGenerateLatentNeeds(

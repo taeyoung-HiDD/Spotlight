@@ -165,7 +165,9 @@ function LatentPostitBody({
       onUpdate={onUpdate}
       onRemove={onRemove}
       placeholder={
-        locale === "en" ? "Write a latent need" : "잠재 니즈를 적어 보세요"
+        locale === "en"
+          ? "Write a need: to …, I want to … (how / what kind)"
+          : "~하기 위해서, (어떠한/어떻게) ~하고 싶다"
       }
     />
   );

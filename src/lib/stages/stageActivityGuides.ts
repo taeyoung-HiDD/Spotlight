@@ -286,7 +286,7 @@ const GUIDE_OVERRIDES: Partial<Record<number, Omit<StageActivityGuideContent, "s
             sourceText:
               "배달이 늦으면 일정을 다시 짜야 해서 스트레스받아요",
             latentText:
-              "도착 전에 예상 시간을 알고 일정을 미리 조정하고 싶다",
+              "일정을 미리 조정하기 위해서, 배달 도착 전에 예상 시간을 한눈에 알고 싶다",
             subjectName: "지민",
             kevinGenerated: true,
             expanded: true,
@@ -294,7 +294,8 @@ const GUIDE_OVERRIDES: Partial<Record<number, Omit<StageActivityGuideContent, "s
           {
             sourceKind: "observation",
             sourceText: "앱에서 배달 현황을 여러 번 새로고침함",
-            latentText: "배달 위치·도착 시각을 한눈에 확인하고 싶다",
+            latentText:
+              "불안을 줄이기 위해서, 배달 위치·도착 시각을 한눈에 확인하고 싶다",
             subjectName: "수현",
             kevinGenerated: true,
             expanded: false,
@@ -327,15 +328,15 @@ const GUIDE_OVERRIDES: Partial<Record<number, Omit<StageActivityGuideContent, "s
       example: {
         label: "HMW 예시",
         content:
-          "잠재 니즈 「도착 전에 예상 시간을 알고 일정을 미리 조정하고 싶다」→ HMW 「어떻게 하면 일정을 미리 조정하기 위해 배달 도착 전에 예상 시간을 알 수 있을까?」",
+          "잠재 니즈 「일정을 미리 조정하기 위해서, 배달 도착 전에 예상 시간을 한눈에 알고 싶다」→ HMW 「어떻게 하면 일정을 미리 조정하기 위해 배달 도착 전에 예상 시간을 한눈에 알 수 있을까?」",
       },
       visualExample: {
         type: "hmw_board",
         caption: "왼쪽 잠재 니즈를 보고 오른쪽에 HMW 질문을 적어요.",
         latentNeedText:
-          "도착 전에 예상 시간을 알고 일정을 미리 조정하고 싶다",
+          "일정을 미리 조정하기 위해서, 배달 도착 전에 예상 시간을 한눈에 알고 싶다",
         hmwText:
-          "어떻게 하면 일정을 미리 조정하기 위해 배달 도착 전에 예상 시간을 알 수 있을까?",
+          "어떻게 하면 일정을 미리 조정하기 위해 배달 도착 전에 예상 시간을 한눈에 알 수 있을까?",
         subjectName: "민지",
       },
       tip: "HMW를 채운 뒤 8단계 아이디어 펼치기로 넘어가 보세요.",

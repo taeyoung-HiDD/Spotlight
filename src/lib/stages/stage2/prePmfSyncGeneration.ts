@@ -123,7 +123,7 @@ ${groundingBlock("유사 서비스", similar)}
   "competitiveLandscape": "· 경쟁사·대안 한 줄씩\\n· 차별·공백 한 줄(출처·URL 없이)",
   "similarServices": [{"name": "서비스명", "region": "global", "note": "한 줄 설명", "url": "https://..."}],
   "businessModel": "· 수익 가설 한 줄씩",
-  "valueProposition": "「~하기 위해서 ~하고 싶다」 형태의 잠재 니즈 한 문장 (해결책이 아니라 사용자가 진짜 원하는 상태)",
+  "valueProposition": "「~하기 위해서, (어떠한/어떻게) ~하고 싶다」 형태의 잠재 니즈 한 문장 — 행동 절에 방식·성격 수식 포함 (해결책이 아니라 사용자가 진짜 원하는 상태)",
   "keyFeatures": "· 고객이 기대하는 핵심 기능 1\\n· 핵심 기능 2\\n· 핵심 기능 3",
   "marketStats": [{"label": "지표명(예: 국내 XX 시장 규모)", "value": "수치(예: 1.2조 원)", "source": "출처: OO리포트, 2026"}],
   "requiredTechnology": "· 프로토타입 구현 관점 요약 한 줄\\n· 기술 스택·아키텍처 방향 한 줄",
@@ -179,7 +179,7 @@ ${DT_PROBLEM_STATEMENT_WRITING_RULE}
 - verdict.hypothesisActivities는 **더 검증 후 결정(HYPOTHESIS BOARD)** 할 때 거쳐야 할 검증 단계·활동 2~4개입니다 (보통 3·4·5단계 등 조사·니즈 검증).
 - verdict.loopBackActivities는 **방향 재정의(LOOP-BACK)** 할 때 돌아갈 단계·활동 2~3개입니다 (보통 1·2단계).
 - 각 activities 항목의 stageId는 반드시 워크북 목록 번호이고, description은 그 단계에서 할 구체 과제를 한 줄로 씁니다.
-- valueProposition은 해결책·기능이 아니라 사용자의 **잠재 니즈**를 「~하기 위해서 ~하고 싶다」 한 문장으로 쓰세요 (디자인씽킹 빙산 모델).
+- valueProposition은 해결책·기능이 아니라 사용자의 **잠재 니즈**를 「~하기 위해서, (어떠한/어떻게) ~하고 싶다」 한 문장으로 쓰세요. 행동 절에 방식·성격 수식을 넣으세요 (디자인씽킹 빙산 모델).
 - keyFeatures는 내부 보조 필드입니다. 고객이 기대할 핵심 솔루션 기능 3~5개를 불릿(·) 한 줄씩 쓰되, **렌즈2 시장 환경 본문에는 넣지 마세요**.
 - keyFeatures 각 줄은 기능명 + 한 줄 효과(무엇을 해결·도와주는지)로 짧게 씁니다.
 - researchLenses.key_features는 **렌즈2 시장 환경** 전용입니다. targetUsers·currentBehavior는 비우고, marketEnvironment에 **(1) 산업·실물 경제 맥락**과 **(2) 디지털·서비스 시장**을 함께 **·** 4~6줄로 씁니다. judgmentResult는 이 시장·산업 환경이 기회인지·검증이 필요한지 한 줄로 씁니다.

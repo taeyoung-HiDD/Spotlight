@@ -16,6 +16,7 @@ import {
   heuristicGenerateLatentNeeds,
   isTemplateLatentNeedText,
 } from "@/lib/stages/stage5/generateLatentNeedsHeuristic";
+import { LATENT_NEED_STATEMENT_RULE } from "@/lib/stages/stage5/latentNeedStatement";
 
 interface SourcePayload {
   sourceId: string;
@@ -83,10 +84,7 @@ function buildPrompt(
 - 겉으로 보이는 사실(Fact)은 빙산의 일각입니다. 그 아래에 있는, 사용자가 바라고 희망하지만 사회적 압력(체면·부끄러움) 때문에 표현하지 못하거나 스스로 자각하지 못하는 깊은 욕구(Desire)입니다.
 - 말로 표현된 니즈(Explicit)나 행동으로 드러나는 니즈(Tacit)를 넘어, 분석을 통해서만 찾아지는 욕구입니다.
 
-작성 형식 — Need Statement 한 문장:
-- 문장 구조는 [이 사람이 궁극적으로 얻고 싶은 가치나 이유]가 먼저 나오고, 그 다음 [그 가치를 위해 실제로 하고 싶은 구체적 행동]이 이어지는 "~하기 위해서 ~하고 싶다" 형태입니다.
-- 예: "막연한 돈 불안에서 벗어나 잘하고 있다는 확신을 얻기 위해서, 내 상황에 맞는 돈 관리 기준을 세우고 싶다"
-- 다른 예: "남들과 비교해 뒤처진다는 느낌 없이 스스로 속도로 나아가기 위해서, 내 소비를 남 눈치 안 보고 결정하고 싶다"
+${LATENT_NEED_STATEMENT_RULE}
 
 절대 금지:
 - 위 형식 설명을 그대로 옮기거나 문장의 빈 자리를 채우지 않은 채 내보내는 것. "궁극적 이유", "얻으려는 가치", "가치 달성을 위한 행위" 같은 메타 설명 단어 자체를 답으로 쓰면 안 됩니다.
@@ -105,7 +103,7 @@ ${enforceKoreanPrimary ? `\n${KOREAN_PRIMARY_OUTPUT_RULE}\n` : ""}
 - JSON만 출력합니다. 마크다운·설명 없음.
 ${
   retry
-    ? "\n[재시도] 이전 시도에서 형식 설명 문구·빈칸 표기·허용되지 않는 문자(키릴·한자 등)·영어만인 문장이 나왔습니다. 이번에는 예시처럼 **한글이 중심인** 문장으로, 실제 내용으로 완전히 채운 문장만 쓰세요.\n"
+    ? "\n[재시도] 이전 시도에서 형식 설명 문구·빈칸 표기·허용되지 않는 문자(키릴·한자 등)·영어만인 문장·수식 없는 행동 절이 나왔습니다. 이번에는 예시처럼 **한글이 중심**이고, 행동 절에 「어떠한/어떻게」 수식이 들어간 완전한 문장만 쓰세요.\n"
     : ""
 }
 출력 형식:

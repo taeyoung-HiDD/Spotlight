@@ -17,6 +17,8 @@ function ensureQuestionMark(text: string): string {
 function stripWantSuffix(text: string): string {
   return text
     .replace(/(하고|하기)\s*싶(다|어요|습니다|음)?$/u, "")
+    // 「받고/알고/얻고 싶다」 등
+    .replace(/([가-힣]+?)고\s*싶(다|어요|습니다|음)?$/u, "$1")
     .replace(/(하려고|하기를)\s*(한다|해요|합니다|원함)?$/u, "")
     .trim();
 }
@@ -29,20 +31,42 @@ function stripHadaStem(text: string): string {
   return text.replace(/하기$/u, "").trim();
 }
 
-/** 결과 절을 「~할 수 있을까」로 마무리 */
+/** 결과 절 마지막 어간을 「~할 수 있을까」로 마무리 (앞 수식어는 유지) */
 function withCanEnding(outcome: string): string {
-  let o = stripHadaStem(outcome).replace(/고$/u, "").trim();
+  const o = stripHadaStem(outcome).replace(/고$/u, "").trim();
   if (!o) return "";
-  if (/할$/u.test(o)) return `${o} 수 있을까`;
-  // 「알·보·듣」 등 순수 동사 어간
-  if (
-    /(?:알|보|듣|찾|가|오|주|받|쓰|읽|먹|살|서|앉|걷|뛰|날|울|웃|쉬|자|깨|열|닫|팔|사|만드)$/u.test(
-      o,
+  const parts = o.split(/\s+/);
+  const last = parts.pop() ?? "";
+  if (!last) return "";
+
+  let ending: string;
+  if (/할$/u.test(last)) {
+    ending = `${last} 수 있을까`;
+  } else if (/세우$/u.test(last)) {
+    ending = `${last.slice(0, -1)}울 수 있을까`;
+  } else if (
+    /^(알|보|듣|가|오|주|쓰|먹|살|서|앉|걷|뛰|날|울|웃|쉬|자|깨|열|닫|팔|사)$/u.test(
+      last,
     )
   ) {
-    return `${o} 수 있을까`;
+    ending = `${last} 수 있을까`;
+  } else if (/^(받|찾|읽|신|입)$/u.test(last)) {
+    ending = `${last}을 수 있을까`;
+  } else if (/만드$/u.test(last)) {
+    ending = "만들 수 있을까";
+  } else {
+    ending = `${last}할 수 있을까`;
   }
-  return `${o}할 수 있을까`;
+  return [...parts, ending].join(" ");
+}
+
+function purposeForClause(purpose: string): string {
+  const p = purpose.trim();
+  if (!p) return "";
+  if (/위해$/u.test(p) || /없이$/u.test(p)) return p;
+  if (/기$/u.test(p)) return `${p} 위해`;
+  // 「덜어드리·풀·얻·조정하」 → 「…기 위해」
+  return `${p}기 위해`;
 }
 
 function formatHmw(purpose: string, outcome: string): string {
@@ -53,17 +77,17 @@ function formatHmw(purpose: string, outcome: string): string {
   if (/없이$/u.test(p)) {
     return ensureQuestionMark(`어떻게 하면 ${p}도 ${outcomeClause}`);
   }
-  if (/위해$/u.test(p)) {
-    return ensureQuestionMark(`어떻게 하면 ${p} ${outcomeClause}`);
-  }
-  return ensureQuestionMark(`어떻게 하면 ${p}하기 위해 ${outcomeClause}`);
+  return ensureQuestionMark(`어떻게 하면 ${purposeForClause(p)} ${outcomeClause}`);
 }
 
-/** 「A하기 위해서 B하고 싶다」 */
+/**
+ * 「A기 위해서(, )B하고 싶다」 — 행동 절의 (어떠한)/(어떻게) 수식 유지.
+ * 「덜어드리기 위해서」「풀기 위해」「관리하기 위해서」 모두 허용.
+ */
 function parseIcebergNeed(
   need: string,
 ): { purpose: string; outcome: string } | null {
-  const m = need.match(/^(.+?)\s*하기\s*위해서?\s+(.+)$/u);
+  const m = need.match(/^(.+?)기\s*위해서?,?\s+(.+)$/u);
   if (!m?.[1] || !m[2]) return null;
   const purpose = m[1].trim();
   const outcome = stripWantSuffix(m[2]);

@@ -94,7 +94,7 @@ function buildIntroMessages(
     messages.push({
       type: "bubble",
       content: formatCoachDialogBreaks(
-        "보라색 잠재 니즈 포스트잇은 Kevin이 언급·관찰을 바탕으로 적어 둔 초안이에요. 맞는지·빠진 게 있는지 함께 다듬어 보세요.",
+        "보라색 잠재 니즈 포스트잇은 Kevin이 언급·관찰을 바탕으로 적어 둔 초안이에요. 「~하기 위해서, (어떠한/어떻게) ~하고 싶다」 형태로 구체화돼 있는지 보고, 맞는지·빠진 게 있는지 함께 다듬어 보세요.",
       ),
     });
   } else if (subjectCountFromStage4 > 0) {

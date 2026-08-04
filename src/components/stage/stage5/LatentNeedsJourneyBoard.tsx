@@ -265,7 +265,7 @@ function LatentNeedChip({
             value={postit.text}
             onValueChange={onUpdate}
             rows={3}
-            placeholder="잠재 니즈를 적어 보세요"
+            placeholder="~하기 위해서, (어떠한/어떻게) ~하고 싶다"
             onBlur={exitEdit}
             className="w-full min-w-0 resize-y rounded border border-[#7E57C2]/25 bg-panel/80 px-1.5 py-1 text-[12px] font-semibold leading-snug text-[#1c1a16] outline-none placeholder:text-subtle focus:border-[#7E57C2]/55"
           />
