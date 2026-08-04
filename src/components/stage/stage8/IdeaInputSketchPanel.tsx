@@ -42,6 +42,12 @@ interface IdeaInputSketchPanelProps {
   onDescriptionHintConsumed?: () => void;
 }
 
+function initialSketchDataUrl(existing: IdeaSketch | null | undefined): string {
+  const own = existing?.sketchDataUrl?.trim() ?? "";
+  if (own) return own;
+  return existing?.referenceSketchDataUrl?.trim() ?? "";
+}
+
 export function IdeaInputSketchPanel({
   projectId,
   data,
@@ -57,11 +63,8 @@ export function IdeaInputSketchPanel({
   const fileRef = useRef<HTMLInputElement>(null);
   const [title, setTitle] = useState(existing?.title ?? "");
   const [description, setDescription] = useState(existing?.description ?? "");
-  const [sketchDataUrl, setSketchDataUrl] = useState(
-    existing?.sketchDataUrl ?? "",
-  );
-  const [referenceSketchDataUrl, setReferenceSketchDataUrl] = useState(
-    existing?.referenceSketchDataUrl ?? "",
+  const [sketchDataUrl, setSketchDataUrl] = useState(() =>
+    initialSketchDataUrl(existing),
   );
   const sourceHmwId = existing?.sourceHmwId || cellHmw?.id || "";
   const [sketchError, setSketchError] = useState<string | null>(null);
@@ -82,8 +85,15 @@ export function IdeaInputSketchPanel({
     onDescriptionHintConsumed?.();
   }, [descriptionHint, onDescriptionHintConsumed]);
 
-  const canRequestReference =
+  const canRequestAi =
     Boolean(title.trim()) && Boolean(description.trim());
+
+  const confirmReplaceSketch = (): boolean => {
+    if (!sketchDataUrl.trim()) return true;
+    return window.confirm(
+      "지금 올려 둔 스케치가 바뀝니다. 계속할까요?",
+    );
+  };
 
   const handleSketchFile = (file: File | null) => {
     if (!file) return;
@@ -105,13 +115,21 @@ export function IdeaInputSketchPanel({
     reader.readAsDataURL(file);
   };
 
-  const handleGenerateReference = async () => {
+  const handlePickUpload = () => {
+    if (!confirmReplaceSketch()) return;
+    fileRef.current?.click();
+  };
+
+  const handleGenerateSketch = async () => {
     const trimmedTitle = title.trim();
     const trimmedDescription = description.trim();
     if (!trimmedTitle || !trimmedDescription) {
-      setSketchError("참고 사례를 보려면 한 줄 제목과 짧은 설명을 먼저 적어 주세요.");
+      setSketchError(
+        "AI로 아이디어를 그리려면 한 줄 제목과 짧은 설명을 먼저 적어 주세요.",
+      );
       return;
     }
+    if (!confirmReplaceSketch()) return;
 
     setSketchError(null);
     setGeneratingSketch(true);
@@ -124,26 +142,17 @@ export function IdeaInputSketchPanel({
       });
       markComplete();
       await new Promise((resolve) => setTimeout(resolve, 400));
-      setReferenceSketchDataUrl(result.imageUrl);
+      setSketchDataUrl(result.imageUrl);
     } catch (error) {
       setSketchError(
         error instanceof Error
           ? error.message
-          : "참고 시각 사례를 만들지 못했습니다.",
+          : "아이디어 스케치를 만들지 못했습니다.",
       );
     } finally {
       setGeneratingSketch(false);
       reset();
     }
-  };
-
-  const handleAdoptReference = () => {
-    if (!referenceSketchDataUrl.trim()) return;
-    const ok = window.confirm(
-      "참고 사례를 내 스케치 자리로 복사할까요? 지금 올려 둔 스케치가 있으면 바뀝니다.",
-    );
-    if (!ok) return;
-    setSketchDataUrl(referenceSketchDataUrl);
   };
 
   const sketchBusy = generatingSketch;
@@ -157,7 +166,6 @@ export function IdeaInputSketchPanel({
       description: description.trim(),
       tags: existing?.tags ?? [],
       sketchDataUrl,
-      referenceSketchDataUrl: referenceSketchDataUrl.trim() || undefined,
       sourceHmwId: selectedHmw?.id ?? sourceHmwId,
       sourceHmwText: selectedHmw?.hmwText.trim() ?? existing?.sourceHmwText ?? "",
       scamperLetter: existing?.scamperLetter,
@@ -243,114 +251,95 @@ export function IdeaInputSketchPanel({
           </div>
         </div>
 
-        <div className="flex min-h-0 flex-col gap-3 pt-1">
-          <div className="flex min-h-0 flex-1 flex-col">
-            <p className={`mb-1.5 shrink-0 ${stageCaption}`}>
-              내 스케치 (업로드 · 선택)
-            </p>
-            <input
-              ref={fileRef}
-              type="file"
-              accept="image/png,image/jpeg,image/webp"
-              className="sr-only"
-              disabled={sketchBusy}
-              onChange={(e) => handleSketchFile(e.target.files?.[0] ?? null)}
-            />
-            {sketchDataUrl ? (
-              <div className="flex min-h-0 flex-1 flex-col gap-2">
-                <IdeaSketchCard
-                  imageUrl={sketchDataUrl}
-                  onClear={() => setSketchDataUrl("")}
-                  clearDisabled={sketchBusy}
-                />
-                <button
-                  type="button"
-                  disabled={sketchBusy}
-                  onClick={() => fileRef.current?.click()}
-                  className={`${stageBtnSecondary} text-xs`}
-                >
-                  이미지 다시 올리기
-                </button>
-              </div>
-            ) : (
-              <button
-                type="button"
-                disabled={sketchBusy}
-                onClick={() => fileRef.current?.click()}
-                className="flex min-h-[7rem] flex-1 flex-col items-center justify-center gap-1.5 rounded-xl border-2 border-dashed border-muted bg-cream px-4 py-4 text-center hover:border-spotlight/50 hover:bg-highlight/40 disabled:opacity-60"
-              >
-                <IconPhotoPlus className="size-7 text-muted" stroke={1.5} />
-                <p className="text-sm font-medium text-foreground">
-                  손그림 · 앱 캡처 · 웹 이미지
-                </p>
-                <p className={`${stageCaption} text-muted`}>
-                  클릭해서 올려 주세요
-                </p>
-              </button>
-            )}
-          </div>
-
-          <div className="flex min-h-0 flex-col rounded-xl border border-border-warm bg-cream/40 p-2.5">
-            <p className={`mb-1.5 ${stageCaption}`}>
-              참고할 만한 시각 사례 (Kevin)
-            </p>
-            {generatingSketch ? (
+        <div className="flex min-h-0 flex-col pt-1">
+          <p className={`mb-1.5 shrink-0 ${stageCaption}`}>아이디어 스케치</p>
+          <input
+            ref={fileRef}
+            type="file"
+            accept="image/png,image/jpeg,image/webp"
+            className="sr-only"
+            disabled={sketchBusy}
+            onChange={(e) => {
+              handleSketchFile(e.target.files?.[0] ?? null);
+              e.target.value = "";
+            }}
+          />
+          {generatingSketch ? (
+            <div className="flex min-h-[10rem] flex-1 flex-col justify-center rounded-xl border border-border-warm bg-cream/40 p-3">
               <IdeaSketchGenerateProgress
                 progress={progress}
                 remainingSec={remainingSec}
               />
-            ) : referenceSketchDataUrl ? (
-              <div className="flex flex-col gap-2">
-                <IdeaSketchCard
-                  imageUrl={referenceSketchDataUrl}
-                  alt="Reference sketch"
-                  onClear={() => setReferenceSketchDataUrl("")}
-                  clearDisabled={sketchBusy}
-                />
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    disabled={sketchBusy || !canRequestReference}
-                    onClick={() => void handleGenerateReference()}
-                    className={`${stageBtnSecondary} inline-flex items-center gap-1.5 text-xs`}
-                  >
-                    <IconSparkles className="size-3.5" stroke={1.75} />
-                    다른 참고 보기
-                  </button>
-                  <button
-                    type="button"
-                    disabled={sketchBusy}
-                    onClick={handleAdoptReference}
-                    className={`${stageBtnSecondary} text-xs`}
-                  >
-                    참고를 내 스케치로 복사…
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <>
+            </div>
+          ) : sketchDataUrl ? (
+            <div className="flex min-h-0 flex-1 flex-col gap-2">
+              <IdeaSketchCard
+                imageUrl={sketchDataUrl}
+                onClear={() => setSketchDataUrl("")}
+                clearDisabled={sketchBusy}
+              />
+              <div className="flex flex-wrap gap-2">
                 <button
                   type="button"
-                  disabled={sketchBusy || !canRequestReference}
-                  onClick={() => void handleGenerateReference()}
-                  className={`${stageBtnSecondary} inline-flex w-full items-center justify-center gap-1.5`}
+                  disabled={sketchBusy}
+                  onClick={handlePickUpload}
+                  className={`${stageBtnSecondary} inline-flex items-center gap-1.5 text-xs`}
+                >
+                  <IconPhotoPlus className="size-3.5" stroke={1.75} />
+                  이미지 다시 올리기
+                </button>
+                <button
+                  type="button"
+                  disabled={sketchBusy || !canRequestAi}
+                  onClick={() => void handleGenerateSketch()}
+                  className={`${stageBtnSecondary} inline-flex items-center gap-1.5 text-xs`}
+                >
+                  <IconSparkles className="size-3.5 text-gold" stroke={1.75} />
+                  AI로 다시 그리기
+                </button>
+              </div>
+              {!canRequestAi ? (
+                <p className={`${stageCaption} text-muted`}>
+                  AI로 다시 그리려면 제목과 짧은 설명이 필요해요.
+                </p>
+              ) : null}
+            </div>
+          ) : (
+            <div className="flex min-h-[10rem] flex-1 flex-col items-stretch justify-center gap-2.5 rounded-xl border-2 border-dashed border-muted bg-cream px-4 py-4">
+              <p className="text-center text-sm font-medium text-foreground">
+                손그림 · 캡처를 올리거나 AI로 아이디어를 그려 보세요
+              </p>
+              <div className="flex flex-col gap-2 sm:flex-row sm:justify-center">
+                <button
+                  type="button"
+                  disabled={sketchBusy}
+                  onClick={handlePickUpload}
+                  className={`${stageBtnSecondary} inline-flex flex-1 items-center justify-center gap-1.5 sm:flex-initial`}
+                >
+                  <IconPhotoPlus className="size-4" stroke={1.75} />
+                  이미지 올리기
+                </button>
+                <button
+                  type="button"
+                  disabled={sketchBusy || !canRequestAi}
+                  onClick={() => void handleGenerateSketch()}
+                  className={`${stageBtnSecondary} inline-flex flex-1 items-center justify-center gap-1.5 sm:flex-initial`}
                 >
                   <IconSparkles className="size-4 text-gold" stroke={1.75} />
-                  참고 시각 사례 보기
+                  AI로 아이디어 그리기
                 </button>
-                {!canRequestReference ? (
-                  <p className={`mt-1.5 ${stageCaption} text-muted`}>
-                    제목과 짧은 설명을 먼저 적으면, 비슷한 상황에서 이런 표현도
-                    있어요 — 참고용으로 볼 수 있어요.
-                  </p>
-                ) : (
-                  <p className={`mt-1.5 ${stageCaption} text-muted`}>
-                    내 아이디어를 대체하지 않아요. 옆에 두고 참고만 하세요.
-                  </p>
-                )}
-              </>
-            )}
-          </div>
+              </div>
+              {!canRequestAi ? (
+                <p className={`text-center ${stageCaption} text-muted`}>
+                  AI 그리기는 제목과 짧은 설명을 먼저 적으면 열립니다.
+                </p>
+              ) : (
+                <p className={`text-center ${stageCaption} text-muted`}>
+                  제목·설명을 바탕으로 손스케치 한 장을 그려 줘요.
+                </p>
+              )}
+            </div>
+          )}
         </div>
       </div>
 

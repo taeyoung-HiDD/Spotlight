@@ -18,9 +18,9 @@ export interface IdeaSketch {
   title: string;
   description: string;
   tags: string[];
-  /** 사용자가 올린 스케치 */
+  /** 아이디어 스케치 (업로드 또는 AI로 아이디어 그리기) */
   sketchDataUrl: string;
-  /** AI가 만든 참고 시각 사례 (사용자 스케치를 덮지 않음) */
+  /** @deprecated 통합 전 참고 스케치 — 로드 시 sketchDataUrl 폴백용 */
   referenceSketchDataUrl?: string;
   sourceHmwId: string;
   sourceHmwText: string;
@@ -88,15 +88,17 @@ function normalizeIdea(raw: unknown): IdeaSketch | null {
   const tags = Array.isArray(o.tags)
     ? o.tags.filter((t): t is string => typeof t === "string")
     : [];
+  const sketchOwn = String(o.sketchDataUrl ?? "").trim();
+  const sketchLegacy = o.referenceSketchDataUrl
+    ? String(o.referenceSketchDataUrl).trim()
+    : "";
   return {
     id: String(o.id ?? createIdeaId()).trim() || createIdeaId(),
     title,
     description: String(o.description ?? ""),
     tags,
-    sketchDataUrl: String(o.sketchDataUrl ?? ""),
-    referenceSketchDataUrl: o.referenceSketchDataUrl
-      ? String(o.referenceSketchDataUrl)
-      : undefined,
+    sketchDataUrl: sketchOwn || sketchLegacy,
+    referenceSketchDataUrl: undefined,
     sourceHmwId: String(o.sourceHmwId ?? ""),
     sourceHmwText: String(o.sourceHmwText ?? ""),
     scamperLetter: o.scamperLetter as ScamperLetter | undefined,

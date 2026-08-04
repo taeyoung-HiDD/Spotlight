@@ -34,10 +34,10 @@ export function buildIdeaSketchImagePrompt(input: IdeaSketchImageInput): string 
     .join("\n");
 
   const body = `
-Create ONE hand-drawn concept sketch as OPTIONAL REFERENCE material for a design-thinking idea the user already drafted.
+Create ONE hand-drawn concept sketch for the design-thinking idea the user already drafted (their idea-sketch slot).
 
 IMPORTANT COACHING CONSTRAINT:
-- The user has already written their own idea (title + description). Your image is a visual REFERENCE only — not a finished idea to replace theirs.
+- The user has already written their own idea (title + description) and asked for a sketch of THAT draft.
 - Do NOT invent a new product concept that overrides the user's draft.
 - Visualize the interaction implied by THEIR words, not a polished competing solution.
 

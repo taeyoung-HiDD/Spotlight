@@ -151,8 +151,10 @@ export function IdeaGridWorkPanel({
           title: s?.title ?? "",
           description: s?.description ?? "",
           tags: s?.tags ?? [],
-          sketchDataUrl: s?.sketchDataUrl ?? "",
-          referenceSketchDataUrl: s?.referenceSketchDataUrl,
+          sketchDataUrl:
+            s?.sketchDataUrl?.trim() ||
+            s?.referenceSketchDataUrl?.trim() ||
+            "",
           sourceHmwId: s?.sourceHmwId || question?.id || "",
           sourceHmwText:
             s?.sourceHmwText || question?.hmwText.trim() || "",
