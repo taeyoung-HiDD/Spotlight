@@ -11,8 +11,10 @@ import {
 } from "react";
 import type { UserCoachingLevel } from "@/lib/stages/stage1/levelDiagnostic";
 import {
+  guidanceStyleFromUserLevel,
   readStoredGuidanceStyle,
   resolveCoachingLevel,
+  userLevelFromGuidanceStyle,
   writeStoredGuidanceStyle,
   type GuidanceStyle,
 } from "@/lib/stages/stage1/guidanceStyle";
@@ -55,19 +57,35 @@ export function ProjectWorkspaceProvider({
     useState<UserCoachingLevel>("beginner");
   const [guidanceStyle, setGuidanceStyleState] = useState<
     GuidanceStyle | undefined
-  >();
-  const [coachingLevelReady, setCoachingLevelReady] = useState(false);
+  >(() => readStoredGuidanceStyle(projectId));
+  const [coachingLevelReady, setCoachingLevelReady] = useState(() =>
+    Boolean(readStoredGuidanceStyle(projectId)),
+  );
 
   useEffect(() => {
     let cancelled = false;
-    setCoachingLevelReady(false);
-    setGuidanceStyleState(undefined);
+    const cachedStyle = readStoredGuidanceStyle(projectId);
+    // artifact 로드 전에도 로컬 백업이 있으면 혼자 조절/따라가기를 바로 적용
+    if (cachedStyle) {
+      setGuidanceStyleState(cachedStyle);
+      setCoachingLevelState(userLevelFromGuidanceStyle(cachedStyle));
+      setCoachingLevelReady(true);
+    } else {
+      setGuidanceStyleState(undefined);
+      setCoachingLevelReady(false);
+    }
+
     void (async () => {
       try {
         const { state } = await fetchStage1CollectState(projectId);
         if (cancelled) return;
         const storedStyle = readStoredGuidanceStyle(projectId);
-        const style = state.guidanceStyle ?? storedStyle;
+        const style =
+          state.guidanceStyle ??
+          storedStyle ??
+          (state.userLevel
+            ? guidanceStyleFromUserLevel(state.userLevel)
+            : undefined);
         if (style) {
           setGuidanceStyleState(style);
           writeStoredGuidanceStyle(projectId, style);
@@ -83,9 +101,7 @@ export function ProjectWorkspaceProvider({
         const storedStyle = readStoredGuidanceStyle(projectId);
         if (!cancelled && storedStyle) {
           setGuidanceStyleState(storedStyle);
-          setCoachingLevelState(
-            resolveCoachingLevel({ guidanceStyle: storedStyle }) ?? "beginner",
-          );
+          setCoachingLevelState(userLevelFromGuidanceStyle(storedStyle));
         }
       } finally {
         if (!cancelled) {

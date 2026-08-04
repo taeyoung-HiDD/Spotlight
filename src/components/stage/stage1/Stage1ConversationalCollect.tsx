@@ -20,6 +20,11 @@ import {
 import { STAGE1_CUSTOMER_PROBLEM_RATIONALE_BRIEF } from "@/lib/stages/stage1/customerProblemRationale";
 import type { UserCoachingLevel } from "@/lib/stages/stage1/levelDiagnostic";
 import {
+  guidanceStyleFromUserLevel,
+  readStoredGuidanceStyle,
+  type GuidanceStyle,
+} from "@/lib/stages/stage1/guidanceStyle";
+import {
   stageBtnPrimary,
   stageCaption,
   stageField,
@@ -37,6 +42,7 @@ interface Stage1ConversationalCollectProps {
   initialProjectTitle?: string;
   displayName?: string;
   userLevel?: "beginner" | "expert";
+  guidanceStyle?: GuidanceStyle;
   /** 팀원 — 프로젝트 합류 후 사전 조사로 이어짐 */
   isInviteMember?: boolean;
   persistedState?: Stage1PersistedState | null;
@@ -69,6 +75,7 @@ export function Stage1ConversationalCollect({
   initialProjectTitle = "",
   displayName,
   userLevel,
+  guidanceStyle: guidanceStyleProp,
   isInviteMember = false,
   persistedState,
   onComplete,
@@ -109,8 +116,17 @@ export function Stage1ConversationalCollect({
     onCompleteRef.current(pendingComplete);
   }, [pendingComplete]);
 
+  const resolveGuidanceStyle = useCallback((): GuidanceStyle | undefined => {
+    return (
+      guidanceStyleProp ??
+      readStoredGuidanceStyle(projectId) ??
+      (userLevel ? guidanceStyleFromUserLevel(userLevel) : undefined)
+    );
+  }, [guidanceStyleProp, projectId, userLevel]);
+
   const persist = useCallback(
     async (next: Stage1CollectedData, nextStep: Stage1CollectStep | "done") => {
+      const guidanceStyle = resolveGuidanceStyle();
       const state: Stage1PersistedState = {
         startingPoint: next.startingPoint,
         projectTitle: next.projectTitle,
@@ -119,6 +135,7 @@ export function Stage1ConversationalCollect({
           nextStep === "done" ? "team_collaboration" : nextStep,
         displayName: next.displayName,
         userLevel: next.userLevel,
+        guidanceStyle,
         hope: "",
         fear: "",
         principleAck: next.principleAck,
@@ -126,7 +143,7 @@ export function Stage1ConversationalCollect({
       const id = await saveStage1CollectState(projectId, state, artifactId);
       setArtifactId(id);
     },
-    [artifactId, projectId],
+    [artifactId, projectId, resolveGuidanceStyle],
   );
 
   useEffect(() => {

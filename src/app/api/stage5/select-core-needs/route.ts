@@ -5,6 +5,7 @@ import { COACH_SYSTEM_INSTRUCTION } from "@/lib/coach/systemInstruction";
 import { sanitizeCoachKoreanText } from "@/lib/coach/sanitizeCoachKorean";
 import { fetchProjectAccess } from "@/lib/projects/projectAccess";
 import {
+  CORE_NEED_AUTO_TARGET,
   CORE_NEED_LIMIT,
   type NeedQuadrantCell,
   type NeedSignalId,
@@ -12,6 +13,7 @@ import {
 } from "@/lib/stages/stage5/latentNeedsTypes";
 import {
   heuristicSelectCoreNeeds,
+  padCoreSelectionsToAutoTarget,
   type CoreNeedPlacement,
   type CoreNeedSelectionItem,
   type CoreNeedSelectionResult,
@@ -87,7 +89,8 @@ ${sources}`;
 
 ---
 [지시]
-잠재 니즈 목록에서 **핵심 니즈**를 골라 주세요. 보통 **2~3개**, 최대 ${CORE_NEED_LIMIT}개.
+잠재 니즈 목록에서 **핵심 니즈**를 골라 주세요. **기본 ${CORE_NEED_AUTO_TARGET}개**를 채우고, 최대 ${CORE_NEED_LIMIT}개까지입니다.
+가용 니즈가 ${CORE_NEED_AUTO_TARGET}개 이상이면 selections를 **정확히 ${CORE_NEED_AUTO_TARGET}개**로 맞추세요 (그보다 적게 고르지 마세요).
 
 선별 기준 (모두 강하게 맞을수록 우선):
 1. **최초 문제점 주제와 가장 밀접**한 잠재 니즈
@@ -101,7 +104,7 @@ ${sources}`;
 - NN/g: **심각도(severity) × 빈도(frequency)**가 높은 문제를 우선. 여러 사용자에게 반복되는 테마를 묶음. 「없으면 불만만 나는 당연 기능(must-be)」만으로는 핵심으로 두지 말고, 차별화·행동 변화로 이어질 unmet need를 선호.
 
 규칙:
-- selections: 핵심 니즈 2~${CORE_NEED_LIMIT}개. needId는 아래 목록 id만. cell은 "high_importance_high_gap".
+- selections: 핵심 니즈 ${CORE_NEED_AUTO_TARGET}개(가용분 부족 시 그만큼). 최대 ${CORE_NEED_LIMIT}개. needId는 아래 목록 id만. cell은 "high_importance_high_gap".
 - placements: **대부분의 잠재 니즈**를 사분면에 배치. 핵심도 포함. 네 cell 중 하나.
   - high_importance_high_gap / high_importance_low_gap / low_importance_high_gap / low_importance_low_gap
   - 중요도 = 고통·빈도·문제 밀접 / 해결 공백 = 쓸 만한 대안이 없는가
@@ -328,6 +331,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ ...heuristic(), source: "heuristic" });
   }
 
+  const fallback = heuristic();
   try {
     const result = await groqComplete(
       buildPrompt(problem, painPoints, needs),
@@ -342,12 +346,13 @@ export async function POST(request: Request) {
       const parsed = JSON.parse(jsonMatch[0]) as unknown;
       const normalized = normalizeResult(parsed, needs);
       if (normalized && normalized.selections.length > 0) {
-        return NextResponse.json({ ...normalized, source: "groq" });
+        const padded = padCoreSelectionsToAutoTarget(normalized, fallback);
+        return NextResponse.json({ ...padded, source: "groq" });
       }
     }
   } catch (error) {
     console.error("[select-core-needs]", error);
   }
 
-  return NextResponse.json({ ...heuristic(), source: "heuristic_fallback" });
+  return NextResponse.json({ ...fallback, source: "heuristic_fallback" });
 }

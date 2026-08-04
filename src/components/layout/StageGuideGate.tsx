@@ -11,7 +11,10 @@ import {
 } from "react";
 import { StageActivityGuidePanel } from "@/components/stage/StageActivityGuidePanel";
 import { useProjectWorkspace } from "@/components/project/ProjectWorkspaceContext";
-import { isTaskFocusedProjectState } from "@/lib/stages/stage1/guidanceStyle";
+import {
+  isTaskFocusedProjectState,
+  readStoredGuidanceStyle,
+} from "@/lib/stages/stage1/guidanceStyle";
 import {
   isStageActivityGuideEnabled,
   isStageGuideDismissed,
@@ -48,10 +51,10 @@ export function StageGuideProvider({
   stageNumber,
   children,
 }: StageGuideProviderProps) {
-  const { coachingLevel, guidanceStyle, coachingLevelReady } =
+  const { projectId, coachingLevel, guidanceStyle, coachingLevelReady } =
     useProjectWorkspace();
   const taskFocused = isTaskFocusedProjectState({
-    guidanceStyle,
+    guidanceStyle: guidanceStyle ?? readStoredGuidanceStyle(projectId),
     userLevel: coachingLevel,
   });
   const [guideReady, setGuideReady] = useState(false);

@@ -32,7 +32,10 @@ import { useT } from "@/hooks/useT";
 import { useUiLocale } from "@/hooks/useUiLocale";
 import { withCoachingLevelHint } from "@/lib/coach/coachingLevelContext";
 import { localizeCoachStatus } from "@/lib/i18n/localizeCoachStatus";
-import { isTaskFocusedProjectState } from "@/lib/stages/stage1/guidanceStyle";
+import {
+  isTaskFocusedProjectState,
+  readStoredGuidanceStyle,
+} from "@/lib/stages/stage1/guidanceStyle";
 import { useReducedMotion } from "@/hooks/useReducedMotion";
 import { followCoachConversationScroll } from "@/lib/motion/coachScrollFollow";
 import { MOTION, sleep } from "@/lib/motion/timings";
@@ -129,7 +132,9 @@ export function AnimatedCoachPanel({
   const reducedMotion = useReducedMotion();
   const taskFocused = workspace
     ? isTaskFocusedProjectState({
-        guidanceStyle: workspace.guidanceStyle,
+        guidanceStyle:
+          workspace.guidanceStyle ??
+          readStoredGuidanceStyle(workspace.projectId),
         userLevel: workspace.coachingLevel,
       })
     : false;

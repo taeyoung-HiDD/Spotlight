@@ -11,7 +11,11 @@ import { getStageWorkInputGuide } from "@/lib/coach/inputGuidance";
 import { getStageConfig } from "@/config/stageConfig";
 import type { UiLocale } from "@/lib/i18n/uiLocale";
 import { getStagePurposeCopy } from "@/lib/stages/discovery/stagePurposeCopy";
-import type { Stage5LatentNeedsData } from "@/lib/stages/stage5/latentNeedsTypes";
+import {
+  CORE_NEED_AUTO_TARGET,
+  CORE_NEED_LIMIT,
+  type Stage5LatentNeedsData,
+} from "@/lib/stages/stage5/latentNeedsTypes";
 import { subjectDisplayLabel } from "@/lib/stages/stage5/subjectInitials";
 
 const STAGE6_NEEDS_DIRECTIVE = `6단계 진짜 필요 찾기:
@@ -34,7 +38,7 @@ function buildCoreSelectionMessages(
       type: "highlight",
       label: "핵심 니즈 선별",
       content: formatCoachDialogBreaks(
-        "모든 니즈를 다 해결할 수는 없어요. 처음 적은 문제·Pain·반복되는 패턴·HMW로 바꾸기 쉬운지를 기준으로 핵심 니즈를 미리 골라 두었어요. 보통 2~3개가 적당하고, 최대 5개까지예요.",
+        `모든 니즈를 다 해결할 수는 없어요. 처음 적은 문제·Pain·반복되는 패턴·HMW로 바꾸기 쉬운지를 기준으로 핵심 니즈를 미리 골라 두었어요. 기본 ${CORE_NEED_AUTO_TARGET}개를 채우고, 필요하면 최대 ${CORE_NEED_LIMIT}개까지 늘릴 수 있어요.`,
       ),
     },
     {

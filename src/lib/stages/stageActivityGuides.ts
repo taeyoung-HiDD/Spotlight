@@ -268,7 +268,7 @@ const GUIDE_OVERRIDES: Partial<Record<number, Omit<StageActivityGuideContent, "s
         {
           title: "핵심 니즈 선별",
           description:
-            "니즈를 그룹으로 분류한 뒤, 중요도×해결 공백 사분면에 배치해 좋은 아이디어로 이어질 핵심 니즈를 최대 5개까지 골라요. 나머지는 보류함에 두고 언제든 다시 꺼낼 수 있어요.",
+            "니즈를 그룹으로 분류한 뒤, 중요도×해결 공백 사분면에 배치해 좋은 아이디어로 이어질 핵심 니즈를 기본 5개·최대 10개까지 골라요. 나머지는 보류함에 두고 언제든 다시 꺼낼 수 있어요.",
         },
       ],
       example: {

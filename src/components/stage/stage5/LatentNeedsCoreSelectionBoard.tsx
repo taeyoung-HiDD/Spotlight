@@ -25,6 +25,7 @@ import {
 } from "@/lib/stages/stage5/selectCoreNeeds";
 import { requestCoreNeedsSelection } from "@/lib/stages/stage5/selectCoreNeedsClient";
 import {
+  CORE_NEED_AUTO_TARGET,
   CORE_NEED_LIMIT,
   CORE_NEED_SOFT_WARN_AT,
   NEED_SIGNAL_IDS,
@@ -577,8 +578,9 @@ export function LatentNeedsCoreSelectionBoard({
         <div className="rounded-xl border border-spotlight/40 bg-[#FFFDF4] px-3 py-2.5">
           <p className="text-[13px] font-semibold text-foreground break-keep">
             지금 {data.coreNeedIds.length || CORE_NEED_SOFT_WARN_AT}개를
-            골랐어요. 2~3개로 좁히면 다음 단계에서 더 깊이 파고들 수 있어요.
-            그래도 계속 {data.coreNeedIds.length || CORE_NEED_SOFT_WARN_AT}개로
+            골랐어요. 기본은 {CORE_NEED_AUTO_TARGET}개예요. 너무 많으면 다음
+            단계에서 깊이가 얕아질 수 있어요. 그래도 계속{" "}
+            {data.coreNeedIds.length || CORE_NEED_SOFT_WARN_AT}개로
             가시겠어요?
           </p>
           <p className={`mt-1 ${stageCaption}`}>

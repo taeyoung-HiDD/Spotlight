@@ -12,7 +12,11 @@ import { getStageConfig } from "@/config/stageConfig";
 import { introMessagesToCoachDialog } from "@/lib/coach/renderIntroMessages";
 import type { Stage1CollectedData } from "@/lib/stages/stage1/collectFlow";
 import type { UserCoachingLevel } from "@/lib/stages/stage1/levelDiagnostic";
-import { resolveCoachingLevel } from "@/lib/stages/stage1/guidanceStyle";
+import {
+  readStoredGuidanceStyle,
+  resolveCoachingLevel,
+  type GuidanceStyle,
+} from "@/lib/stages/stage1/guidanceStyle";
 import type { Stage1OnboardingResult } from "@/lib/stages/stage1/onboardingFlow";
 import {
   fetchStage1CollectState,
@@ -56,6 +60,9 @@ export function Stage1Handoff({
   const [introDialogDone, setIntroDialogDone] = useState(false);
   const [displayName, setDisplayName] = useState("");
   const [userLevel, setUserLevel] = useState<UserCoachingLevel>("beginner");
+  const [guidanceStyle, setGuidanceStyleLocal] = useState<
+    GuidanceStyle | undefined
+  >(() => readStoredGuidanceStyle(projectId));
   const [startingPoint, setStartingPoint] = useState("");
   const [projectTitle, setProjectTitle] = useState(
     serverProjectTitle === "새 프로젝트" ? "" : serverProjectTitle,
@@ -89,7 +96,11 @@ export function Stage1Handoff({
         }
         const resolvedLevel = resolveCoachingLevel(state);
         if (state.guidanceStyle) {
+          setGuidanceStyleLocal(state.guidanceStyle);
           setGuidanceStyle(state.guidanceStyle);
+        } else {
+          const stored = readStoredGuidanceStyle(projectId);
+          if (stored) setGuidanceStyleLocal(stored);
         }
         if (resolvedLevel) {
           setUserLevel(resolvedLevel);
@@ -128,6 +139,8 @@ export function Stage1Handoff({
 
   const persistCollectComplete = useCallback(
     (data: Stage1CollectedData) => {
+      const style =
+        guidanceStyle ?? readStoredGuidanceStyle(projectId);
       const state: Stage1PersistedState = {
         startingPoint: data.startingPoint,
         projectTitle: data.projectTitle,
@@ -135,6 +148,7 @@ export function Stage1Handoff({
         collectStep: "team_collaboration",
         displayName: data.displayName ?? displayName,
         userLevel: data.userLevel ?? userLevel,
+        guidanceStyle: style,
         hope: "",
         fear: "",
         principleAck: true,
@@ -152,7 +166,7 @@ export function Stage1Handoff({
         }
       })();
     },
-    [artifactId, displayName, projectId, userLevel],
+    [artifactId, displayName, guidanceStyle, projectId, userLevel],
   );
 
   const transitionToPhase = useCallback(
@@ -178,6 +192,7 @@ export function Stage1Handoff({
       transitionToPhase("collect", () => {
         setDisplayName(result.displayName);
         setUserLevel(result.userLevel);
+        setGuidanceStyleLocal(result.guidanceStyle);
         setCoachingLevel(result.userLevel);
         setGuidanceStyle(result.guidanceStyle);
       });
@@ -282,6 +297,7 @@ export function Stage1Handoff({
         initialProjectTitle={projectTitle}
         displayName={displayName}
         userLevel={userLevel}
+        guidanceStyle={guidanceStyle}
         isInviteMember={isInviteMember}
         onProjectTitleChange={handleProjectTitleChange}
         onComplete={handleCollectComplete}

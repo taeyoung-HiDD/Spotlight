@@ -16,7 +16,10 @@ import {
 } from "@/config/stageConfig";
 import { useOptionalProjectWorkspace } from "@/components/project/ProjectWorkspaceContext";
 import { StageIntroGateProvider } from "@/components/layout/StageIntroGate";
-import { isTaskFocusedProjectState } from "@/lib/stages/stage1/guidanceStyle";
+import {
+  isTaskFocusedProjectState,
+  readStoredGuidanceStyle,
+} from "@/lib/stages/stage1/guidanceStyle";
 import { useWorkspaceScrollOnEnter } from "@/lib/motion/pageEnterScroll";
 import {
   stageCoachBtnPrimary,
@@ -40,9 +43,8 @@ interface StageContainerProps {
 
 /**
  * 단계 마스터 프레임 — isConversationalInput에 따라 intro / work 모드 분기.
- * - 대화형: 중앙 인트로 → CTA 후 좌우 분할
- * - 직접 작업형: 진입 즉시 좌우 분할 (인트로 생략)
- * - 혼자 조절(task_focused): 가이드·인트로 없이 즉시 work
+ * - 따라가기(full_guidance) + 대화형: 중앙 인트로 → CTA 후 좌우 분할
+ * - 혼자 조절(task_focused) · 선호 미확정 · 직접 작업형: 진입 즉시 work
  */
 export function StageContainer({
   stageNumber,
@@ -56,38 +58,36 @@ export function StageContainer({
   const archiveView = useArchiveView();
   const workspace = useOptionalProjectWorkspace();
   const levelReady = workspace?.coachingLevelReady ?? true;
+  const resolvedStyle =
+    workspace?.guidanceStyle ??
+    (workspace ? readStoredGuidanceStyle(workspace.projectId) : undefined);
   const taskFocused = workspace
     ? isTaskFocusedProjectState({
-        guidanceStyle: workspace.guidanceStyle,
+        guidanceStyle: resolvedStyle,
         userLevel: workspace.coachingLevel,
       })
     : false;
-  /** 선호 로드 전에는 intro를 띄우지 않음 — 기본 work */
+  /** 중앙 긴 인트로는 「따라가기」가 확정된 대화형 단계에서만 */
+  const wantsStageIntro =
+    Boolean(workspace) &&
+    levelReady &&
+    config.isConversationalInput &&
+    !taskFocused &&
+    resolvedStyle === "full_guidance";
+
   const [interactionMode, setInteractionMode] =
     useState<InteractionMode>("work");
   const [introDialogDone, setIntroDialogDone] = useState(false);
 
   useEffect(() => {
-    if (workspace && !levelReady) {
-      setInteractionMode("work");
-      setIntroDialogDone(false);
-      return;
-    }
-    if (taskFocused || !config.isConversationalInput) {
+    if (!wantsStageIntro) {
       setInteractionMode("work");
       setIntroDialogDone(true);
       return;
     }
     setInteractionMode(getInitialInteractionMode(stageNumber));
     setIntroDialogDone(false);
-  }, [
-    stageNumber,
-    sceneKey,
-    taskFocused,
-    levelReady,
-    workspace,
-    config.isConversationalInput,
-  ]);
+  }, [stageNumber, sceneKey, wantsStageIntro]);
 
   const enterWork = useCallback(() => {
     setInteractionMode("work");
@@ -106,11 +106,7 @@ export function StageContainer({
     );
   }
 
-  const showWork =
-    !config.isConversationalInput ||
-    !levelReady ||
-    taskFocused ||
-    interactionMode === "work";
+  const showWork = !wantsStageIntro || interactionMode === "work";
 
   if (showWork) {
     return (

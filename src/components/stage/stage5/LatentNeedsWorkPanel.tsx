@@ -7,7 +7,11 @@ import { LatentNeedsJourneyBoard } from "@/components/stage/stage5/LatentNeedsJo
 import { TermChip } from "@/components/stage/TermChip";
 import { getStagePurposeCopy } from "@/lib/stages/discovery/stagePurposeCopy";
 import { setNeedsWorkflowPhase } from "@/lib/stages/stage5/latentNeedsGroups";
-import type { Stage5LatentNeedsData } from "@/lib/stages/stage5/latentNeedsTypes";
+import {
+  CORE_NEED_AUTO_TARGET,
+  CORE_NEED_LIMIT,
+  type Stage5LatentNeedsData,
+} from "@/lib/stages/stage5/latentNeedsTypes";
 import type { UserJourneyMapData } from "@/lib/stages/stage6/userJourneyTypes";
 import {
   stageBtnSecondary,
@@ -42,7 +46,7 @@ const PHASES = [
   {
     id: "core_selection" as const,
     label: "핵심 니즈 선별",
-    hint: "사분면으로 최대 5개",
+    hint: `사분면으로 기본 ${CORE_NEED_AUTO_TARGET}·최대 ${CORE_NEED_LIMIT}개`,
   },
 ];
 

@@ -5,6 +5,7 @@
  */
 
 import {
+  CORE_NEED_AUTO_TARGET,
   CORE_NEED_LIMIT,
   type NeedQuadrantCell,
   type NeedSignalId,
@@ -33,7 +34,7 @@ export type CoreNeedPlacement = {
 };
 
 export type CoreNeedSelectionResult = {
-  /** 핵심으로 ★ 지정 (보통 2~3개) */
+  /** 핵심으로 ★ 지정 (자동 기본 CORE_NEED_AUTO_TARGET개, 최대 CORE_NEED_LIMIT) */
   selections: CoreNeedSelectionItem[];
   /** 사분면에 올릴 전체 (핵심 포함). 대부분의 잠재 니즈 */
   placements: CoreNeedPlacement[];
@@ -137,7 +138,7 @@ function cellFromAxes(importance: number, gap: number): NeedQuadrantCell {
 
 /**
  * 휴리스틱 핵심 니즈 선별 (AI 없을 때·폴백).
- * 대부분 사분면 배치 + 핵심 2~3개. 보류는 소수.
+ * 대부분 사분면 배치 + 핵심 기본 CORE_NEED_AUTO_TARGET개. 보류는 소수.
  */
 export function heuristicSelectCoreNeeds(
   data: Stage5LatentNeedsData,
@@ -275,7 +276,7 @@ export function heuristicSelectCoreNeeds(
 
   const placed = scored.filter((s) => !parkedSet.has(s.postit.id));
 
-  // 핵심: 사분면 배치분 중 상위, 가급적 high_importance_high_gap
+  // 핵심: 사분면 배치분 중 상위부터 기본 목표 개수까지 채움
   const corePool = [...placed].sort((a, b) => {
     const aCore =
       (a.importance >= 0.42 && a.gap >= 0.45 ? 2 : 0) + a.score;
@@ -283,14 +284,7 @@ export function heuristicSelectCoreNeeds(
       (b.importance >= 0.42 && b.gap >= 0.45 ? 2 : 0) + b.score;
     return bCore - aCore;
   });
-  const strong = corePool.filter(
-    (s) => s.score >= 2.8 || (s.importance >= 0.42 && s.gap >= 0.45),
-  );
-  const pickCount = Math.min(
-    CORE_NEED_LIMIT,
-    Math.max(2, Math.min(3, strong.length || corePool.length)),
-    corePool.length,
-  );
+  const pickCount = Math.min(CORE_NEED_AUTO_TARGET, corePool.length);
   const picked = corePool.slice(0, pickCount);
   const pickedIds = new Set(picked.map((s) => s.postit.id));
 
@@ -325,6 +319,84 @@ export function heuristicSelectCoreNeeds(
     selections,
     placements,
     parkedNeedIds: [...parkedSet],
+  };
+}
+
+/**
+ * AI가 목표보다 적게 고른 경우, 휴리스틱 순위로 핵심을 채워
+ * 기본 CORE_NEED_AUTO_TARGET개까지 맞춘다 (가용 니즈가 부족하면 그만큼만).
+ */
+export function padCoreSelectionsToAutoTarget(
+  primary: CoreNeedSelectionResult,
+  fallback: CoreNeedSelectionResult,
+): CoreNeedSelectionResult {
+  const availableCount = new Set([
+    ...primary.placements.map((p) => p.needId),
+    ...fallback.placements.map((p) => p.needId),
+    ...primary.selections.map((s) => s.needId),
+    ...fallback.selections.map((s) => s.needId),
+  ]).size;
+  const target = Math.min(CORE_NEED_AUTO_TARGET, availableCount);
+
+  if (primary.selections.length >= target) {
+    return {
+      ...primary,
+      selections: primary.selections.slice(0, CORE_NEED_LIMIT),
+    };
+  }
+
+  const used = new Set(primary.selections.map((s) => s.needId));
+  const selections = [...primary.selections];
+  for (const s of fallback.selections) {
+    if (selections.length >= target) break;
+    if (used.has(s.needId)) continue;
+    used.add(s.needId);
+    selections.push(s);
+  }
+  // 휴리스틱 selections에 없어도 placements 상위 후보로 보충
+  const parkedFallback = new Set(fallback.parkedNeedIds);
+  for (const p of fallback.placements) {
+    if (selections.length >= target) break;
+    if (used.has(p.needId) || parkedFallback.has(p.needId)) continue;
+    used.add(p.needId);
+    selections.push({
+      needId: p.needId,
+      cell: "high_importance_high_gap",
+      signals: p.signals.length
+        ? p.signals
+        : (["pain", "gap"] as NeedSignalId[]),
+      rationale: "문제·Pain·반복 패턴을 종합해 핵심 후보로 골랐어요",
+    });
+  }
+
+  const coreSet = new Set(selections.map((s) => s.needId));
+  const placementById = new Map<string, CoreNeedPlacement>();
+  for (const p of primary.placements) placementById.set(p.needId, p);
+  for (const p of fallback.placements) {
+    if (!placementById.has(p.needId)) placementById.set(p.needId, p);
+  }
+  for (const s of selections) {
+    placementById.set(s.needId, {
+      needId: s.needId,
+      cell: "high_importance_high_gap",
+      signals: s.signals,
+    });
+  }
+
+  const parkedNeedIds = (
+    primary.parkedNeedIds.length > 0
+      ? primary.parkedNeedIds
+      : fallback.parkedNeedIds
+  ).filter((id) => !coreSet.has(id));
+
+  return {
+    selections: selections.slice(0, CORE_NEED_LIMIT),
+    placements: [...placementById.values()].map((p) =>
+      coreSet.has(p.needId)
+        ? { ...p, cell: "high_importance_high_gap" as const }
+        : p,
+    ),
+    parkedNeedIds,
   };
 }
 

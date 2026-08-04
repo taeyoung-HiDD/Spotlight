@@ -63,11 +63,14 @@ export interface NeedSelectionRating {
   signals: NeedSignalId[];
 }
 
-/** 핵심 니즈 최대 개수 */
-export const CORE_NEED_LIMIT = 5;
+/** 핵심 니즈 최대 개수 (수동 추가 상한) */
+export const CORE_NEED_LIMIT = 10;
 
-/** 이 개수부터 Kevin이 「2~3개 권장」 안내 (막지 않음) */
-export const CORE_NEED_SOFT_WARN_AT = 4;
+/** 자동 선별 시 기본으로 채울 목표 개수 */
+export const CORE_NEED_AUTO_TARGET = 5;
+
+/** 이 개수부터 「기본 5개 권장」 soft warn (막지 않음) */
+export const CORE_NEED_SOFT_WARN_AT = 6;
 
 export const NEED_QUADRANT_CELLS: NeedQuadrantCell[] = [
   "high_importance_low_gap",
