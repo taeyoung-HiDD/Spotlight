@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { StageContainer } from "@/components/layout/StageContainer";
 import { WorkspaceBackButton } from "@/components/navigation/WorkspaceBackButton";
 import { WorkspaceForwardButton } from "@/components/navigation/WorkspaceForwardButton";
@@ -23,7 +23,11 @@ import {
   defaultIdeaGrid,
   type IdeaGridData,
 } from "@/lib/stages/stage8/ideaGridTypes";
-import { bootstrapIdeaGridFromHmw } from "@/lib/stages/stage8/bootstrapIdeaGridFromHmw";
+import {
+  bootstrapIdeaGridFromHmw,
+  hmwForCell,
+} from "@/lib/stages/stage8/bootstrapIdeaGridFromHmw";
+import type { ActiveHmwForCases } from "@/lib/stages/stage8/hmwLaunchCases";
 import {
   appendGeneratedHmwToGrid,
   findNextQuadrantToPull,
@@ -314,6 +318,35 @@ export function Stage8Ideation({ projectId }: Stage8IdeationProps) {
 
   const hmwQuestions = hmwData.questions.filter((q) => q.hmwText.trim());
 
+  const editorOpen =
+    data.activeView === "editor" && data.selectedCellIndex !== null;
+
+  const activeHmw = useMemo((): ActiveHmwForCases | null => {
+    if (!editorOpen || data.selectedCellIndex === null) return null;
+    const q = hmwForCell(data, hmwData.questions, data.selectedCellIndex);
+    const text = q?.hmwText.trim() ?? "";
+    if (!q || !text) return null;
+    return {
+      id: q.id,
+      hmwText: text,
+      latentNeedText: q.latentNeedText.trim(),
+    };
+  }, [data, editorOpen, hmwData.questions]);
+
+  const [descriptionHint, setDescriptionHint] = useState<{
+    id: string;
+    text: string;
+  } | null>(null);
+
+  const handleAppendDescriptionHint = useCallback((hint: string) => {
+    const trimmed = hint.trim();
+    if (!trimmed) return;
+    setDescriptionHint({
+      id: `hint-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      text: trimmed,
+    });
+  }, []);
+
   if (loading) {
     return (
       <p
@@ -342,6 +375,9 @@ export function Stage8Ideation({ projectId }: Stage8IdeationProps) {
           data={data}
           hmwQuestions={hmwQuestions}
           variant="work"
+          editorOpen={editorOpen}
+          activeHmw={activeHmw}
+          onAppendDescriptionHint={handleAppendDescriptionHint}
         />
       }
       work={
@@ -358,6 +394,8 @@ export function Stage8Ideation({ projectId }: Stage8IdeationProps) {
             saving={saving}
             saveError={saveError}
             lastSavedAt={lastSavedAt}
+            descriptionHint={descriptionHint}
+            onDescriptionHintConsumed={() => setDescriptionHint(null)}
           />
           <div
             className={`${stagePanel} stage-workspace-nav mt-4 flex flex-wrap items-center justify-between gap-3`}

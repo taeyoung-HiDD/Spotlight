@@ -49,6 +49,9 @@ interface IdeaGridWorkPanelProps {
   saving: boolean;
   saveError: string | null;
   lastSavedAt: string | null;
+  /** Kevin 출시 사례 「이 방향 힌트」→ 설명란 append */
+  descriptionHint?: { id: string; text: string } | null;
+  onDescriptionHintConsumed?: () => void;
 }
 
 export function IdeaGridWorkPanel({
@@ -63,6 +66,8 @@ export function IdeaGridWorkPanel({
   saving,
   saveError,
   lastSavedAt,
+  descriptionHint = null,
+  onDescriptionHintConsumed,
 }: IdeaGridWorkPanelProps) {
   const locale = useUiLocale();
   const purposeCopy = getStagePurposeCopy(8, locale);
@@ -253,6 +258,8 @@ export function IdeaGridWorkPanel({
           hmwQuestions={allQuestions}
           onChange={onChange}
           onClose={closeSubview}
+          descriptionHint={descriptionHint}
+          onDescriptionHintConsumed={onDescriptionHintConsumed}
         />
       ) : data.activeView === "hmw_setup" && data.selectedCellIndex !== null ? (
         <IdeaGridHmwSetupPanel

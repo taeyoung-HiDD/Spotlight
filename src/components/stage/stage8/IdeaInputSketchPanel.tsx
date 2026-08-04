@@ -1,7 +1,7 @@
 "use client";
 
 import { IconPhotoPlus, IconSparkles, IconX } from "@tabler/icons-react";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   LocalizedEditableInput,
   LocalizedEditableTextarea,
@@ -38,6 +38,8 @@ interface IdeaInputSketchPanelProps {
   hmwQuestions: HmwQuestion[];
   onChange: (data: IdeaGridData) => void;
   onClose: () => void;
+  descriptionHint?: { id: string; text: string } | null;
+  onDescriptionHintConsumed?: () => void;
 }
 
 export function IdeaInputSketchPanel({
@@ -47,6 +49,8 @@ export function IdeaInputSketchPanel({
   hmwQuestions,
   onChange,
   onClose,
+  descriptionHint = null,
+  onDescriptionHintConsumed,
 }: IdeaInputSketchPanelProps) {
   const existing = data.slots[cellIndex];
   const cellHmw = hmwForCell(data, hmwQuestions, cellIndex);
@@ -67,6 +71,16 @@ export function IdeaInputSketchPanel({
 
   const selectedHmw =
     hmwQuestions.find((q) => q.id === sourceHmwId) ?? cellHmw;
+
+  useEffect(() => {
+    if (!descriptionHint?.text.trim()) return;
+    const hint = descriptionHint.text.trim();
+    setDescription((prev) => {
+      if (prev.includes(hint)) return prev;
+      return prev.trim() ? `${prev.trim()}\n${hint}` : hint;
+    });
+    onDescriptionHintConsumed?.();
+  }, [descriptionHint, onDescriptionHintConsumed]);
 
   const canRequestReference =
     Boolean(title.trim()) && Boolean(description.trim());
