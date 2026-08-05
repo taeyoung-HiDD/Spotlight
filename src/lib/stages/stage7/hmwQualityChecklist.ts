@@ -9,7 +9,12 @@ const NEGATIVE_VERB_RE =
   /줄이|없애|제거|방지|피하|중단|억제|막다|차단|없애다|없앴|없애서/u;
 
 const SOLUTION_HINT_RE =
-  /앱|애플리케이션|기능|플랫폼|알고리즘|버튼|대시보드|챗봇|AI\s*모델|푸시\s*알림|센서|IoT|웨어러블/iu;
+  /앱|애플리케이션|기능|플랫폼|알고리즘|버튼|대시보드|챗봇|AI\s*모델|푸시\s*알림|센서|IoT|웨어러블|알림|서비스|자동화|시스템|솔루션|소프트웨어|웹사이트|사이트|툴|도구|프로토타입/iu;
+
+/** 해석·HMW 공통 — 솔루션 명사 포함 여부 */
+export function containsSolutionNoun(text: string): boolean {
+  return SOLUTION_HINT_RE.test(text.trim());
+}
 
 const SYMPTOM_RE = /불편|짜증|스트레스|힘들|고통|불만/u;
 

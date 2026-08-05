@@ -6,6 +6,7 @@ import {
   LocalizedEditableInput,
   LocalizedEditableTextarea,
 } from "@/components/i18n/LocalizedEditableField";
+import { HmwInterpretationAccordion } from "@/components/stage/stage8/HmwInterpretationAccordion";
 import { IdeaSketchCard } from "@/components/stage/stage8/IdeaSketchCard";
 import { IdeaSketchGenerateProgress } from "@/components/stage/stage8/IdeaSketchGenerateProgress";
 import { requestIdeaSketchImage } from "@/lib/ai/client/stageAiClient";
@@ -17,7 +18,11 @@ import {
   upsertIdeaAtCell,
 } from "@/lib/stages/stage8/ideaGridTypes";
 import { hmwForCell } from "@/lib/stages/stage8/bootstrapIdeaGridFromHmw";
-import type { HmwQuestion } from "@/lib/stages/stage7/hmwTypes";
+import type {
+  HmwInterpretation,
+  HmwQuestion,
+} from "@/lib/stages/stage7/hmwTypes";
+import type { Stage5LatentNeedsData } from "@/lib/stages/stage5/latentNeedsTypes";
 import {
   stageBtnPrimary,
   stageBtnSecondary,
@@ -36,8 +41,13 @@ interface IdeaInputSketchPanelProps {
   data: IdeaGridData;
   cellIndex: number;
   hmwQuestions: HmwQuestion[];
+  stage5Data: Stage5LatentNeedsData;
   onChange: (data: IdeaGridData) => void;
   onClose: () => void;
+  onCacheInterpretations: (
+    questionId: string,
+    interpretations: HmwInterpretation[],
+  ) => void;
   descriptionHint?: { id: string; text: string } | null;
   onDescriptionHintConsumed?: () => void;
 }
@@ -53,8 +63,10 @@ export function IdeaInputSketchPanel({
   data,
   cellIndex,
   hmwQuestions,
+  stage5Data,
   onChange,
   onClose,
+  onCacheInterpretations,
   descriptionHint = null,
   onDescriptionHintConsumed,
 }: IdeaInputSketchPanelProps) {
@@ -69,6 +81,11 @@ export function IdeaInputSketchPanel({
   const sourceHmwId = existing?.sourceHmwId || cellHmw?.id || "";
   const [sketchError, setSketchError] = useState<string | null>(null);
   const [generatingSketch, setGeneratingSketch] = useState(false);
+  const [interpretationGuide, setInterpretationGuide] = useState<string | null>(
+    null,
+  );
+  const [stimulusId, setStimulusId] = useState(existing?.stimulusId ?? "");
+  const [stimulusType, setStimulusType] = useState(existing?.stimulusType);
   const { progress, remainingSec, markComplete, reset } =
     useSimulatedAsyncProgress(generatingSketch);
 
@@ -170,8 +187,14 @@ export function IdeaInputSketchPanel({
       sourceHmwText: selectedHmw?.hmwText.trim() ?? existing?.sourceHmwText ?? "",
       scamperLetter: existing?.scamperLetter,
       parentIdeaId: existing?.parentIdeaId,
-      stimulusId: existing?.stimulusId,
-      stimulusType: existing?.stimulusType,
+      stimulusId:
+        stimulusType === "hmw_interpretation"
+          ? stimulusId || existing?.stimulusId
+          : existing?.stimulusId || stimulusId || undefined,
+      stimulusType:
+        stimulusType === "hmw_interpretation"
+          ? "hmw_interpretation"
+          : existing?.stimulusType || stimulusType,
     };
     onChange(upsertIdeaAtCell(data, cellIndex, idea));
   };
@@ -223,6 +246,33 @@ export function IdeaInputSketchPanel({
           <p className={`mb-1.5 ${stageCaption} text-gold`}>이 칸의 HMW 질문</p>
           <p className="text-sm leading-relaxed text-foreground break-keep">
             {selectedHmw.hmwText.trim()}
+          </p>
+        </div>
+      ) : null}
+
+      {selectedHmw?.hmwText.trim() ? (
+        <HmwInterpretationAccordion
+          projectId={projectId}
+          question={selectedHmw}
+          stage5Data={stage5Data}
+          titleDraft={title}
+          descriptionDraft={description}
+          onInterpretationsCached={(interpretations) =>
+            onCacheInterpretations(selectedHmw.id, interpretations)
+          }
+          onApplyInterpretation={({ stimulusId: sid, subQuestion }) => {
+            setStimulusId(sid);
+            setStimulusType("hmw_interpretation");
+            setInterpretationGuide(subQuestion);
+          }}
+        />
+      ) : null}
+
+      {interpretationGuide ? (
+        <div className="mb-4 rounded-lg border border-border-warm bg-cream px-3 py-2">
+          <p className={`mb-1 ${stageCaption}`}>이 해석으로 쓰기 (참고)</p>
+          <p className="text-[13px] leading-relaxed text-foreground break-keep">
+            {interpretationGuide}
           </p>
         </div>
       ) : null}

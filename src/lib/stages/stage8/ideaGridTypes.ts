@@ -11,7 +11,11 @@ export type IdeaGridView =
   | "principle"
   | "team_persona";
 
-export type IdeaStimulusType = "scamper" | "principle_card" | "team_persona";
+export type IdeaStimulusType =
+  | "scamper"
+  | "principle_card"
+  | "team_persona"
+  | "hmw_interpretation";
 
 export interface IdeaSketch {
   id: string;
@@ -43,6 +47,8 @@ export interface IdeaGridData {
   bankedIdeas: IdeaSketch[];
   /** 경쟁사 링을 먼저 연 세션 (베타 계측) */
   competitorRingUnlockedEarly: boolean;
+  /** Kevin 출시 사례 카드를 아이디어 전에 연 세션 (베타 계측) */
+  earlyRevealCaseCards: boolean;
 }
 
 export function createIdeaId(): string {
@@ -64,6 +70,7 @@ export function defaultIdeaGrid(): IdeaGridData {
     hmwSyncedAt: "",
     bankedIdeas: [],
     competitorRingUnlockedEarly: false,
+    earlyRevealCaseCards: false,
   };
 }
 
@@ -107,7 +114,8 @@ function normalizeIdea(raw: unknown): IdeaSketch | null {
     stimulusType:
       o.stimulusType === "scamper" ||
       o.stimulusType === "principle_card" ||
-      o.stimulusType === "team_persona"
+      o.stimulusType === "team_persona" ||
+      o.stimulusType === "hmw_interpretation"
         ? o.stimulusType
         : undefined,
   };
@@ -171,6 +179,7 @@ export function normalizeIdeaGrid(
     bankedIdeas,
     competitorRingUnlockedEarly:
       partial.competitorRingUnlockedEarly === true,
+    earlyRevealCaseCards: partial.earlyRevealCaseCards === true,
   };
 }
 

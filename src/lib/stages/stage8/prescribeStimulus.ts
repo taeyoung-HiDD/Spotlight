@@ -22,7 +22,14 @@ const DIRECTION_KEYWORDS = [
   "재고",
 ];
 
-/** 임베딩 없이 자극 우선순위 근사 */
+/**
+ * 「다른 관점이 필요해요」 자극 우선순위 (문서 1–3순위)
+ * 0순위(질문 풀어보기·90초 idle)는 에디터 UI에서 별도 처리
+ *
+ * 1순위 — 아이디어 개수가 적음 → SCAMPER
+ * 2순위 — 한 방향 몰림 → 원리 카드
+ * 3순위 — 특정 HMW에 아이디어 0개 → 팀 관점
+ */
 export function prescribeStimulus(
   grid: IdeaGridData,
   hmwQuestions: HmwQuestion[],
@@ -30,23 +37,12 @@ export function prescribeStimulus(
   const filled = filledIdeaCount(grid);
   const ideas = grid.slots.filter((s) => s?.title.trim());
 
-  // 3순위: 특정 HMW에 아이디어 0개
-  for (const q of hmwQuestions) {
-    if (!q.hmwText.trim()) continue;
-    const count = ideas.filter((s) => s?.sourceHmwId === q.id).length;
-    if (count === 0) {
-      return {
-        type: "team_persona",
-        reason: "아직 아이디어가 없는 HMW가 있어요. 팀 관점 질문으로 비어 있는 쪽을 건드려 볼까요?",
-      };
-    }
-  }
-
   // 1순위: 아이디어가 없거나 적음
   if (filled === 0) {
     return {
-      type: "principle_card",
-      reason: "아직 칸이 비어 있어요. 원리 카드로 첫 방향을 열어 볼까요?",
+      type: "scamper",
+      reason:
+        "아직 칸이 비어 있어요. 떠오른 한 줄을 SCAMPER로 비틀어 첫 양을 늘려 볼까요?",
     };
   }
   if (filled < 3) {
@@ -56,7 +52,7 @@ export function prescribeStimulus(
     };
   }
 
-  // 2순위: 한 방향 몰림 (같은 SCAMPER 3회+ 또는 키워드 반복)
+  // 2순위: 한 방향 몰림
   const letterCounts = new Map<string, number>();
   for (const idea of ideas) {
     const letter = idea?.scamperLetter;
@@ -67,7 +63,8 @@ export function prescribeStimulus(
     if (count >= 3) {
       return {
         type: "principle_card",
-        reason: "같은 SCAMPER 변주가 많이 쌓였어요. 원리 카드로 다른 각도를 열어 볼까요?",
+        reason:
+          "같은 SCAMPER 변주가 많이 쌓였어요. 원리 카드로 다른 각도를 열어 볼까요?",
       };
     }
   }
@@ -80,6 +77,19 @@ export function prescribeStimulus(
       return {
         type: "principle_card",
         reason: `「${keyword}」 쪽 아이디어가 몰려 있어요. 원리 카드로 다른 풀이를 열어 볼까요?`,
+      };
+    }
+  }
+
+  // 3순위: 특정 HMW에 아이디어 0개
+  for (const q of hmwQuestions) {
+    if (!q.hmwText.trim()) continue;
+    const count = ideas.filter((s) => s?.sourceHmwId === q.id).length;
+    if (count === 0) {
+      return {
+        type: "team_persona",
+        reason:
+          "아직 아이디어가 없는 HMW가 있어요. 팀 관점 질문으로 비어 있는 쪽을 건드려 볼까요?",
       };
     }
   }

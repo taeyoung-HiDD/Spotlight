@@ -27,6 +27,29 @@ export interface HmwVariationCandidate {
   tips: HmwQualityTip[];
 }
 
+/** HMW 4슬롯 해석 — 문제 좁히기 (해결책 아님) */
+export type HmwInterpretationSlot =
+  | "who"
+  | "object"
+  | "outcome"
+  | "direction";
+
+export interface HmwInterpretationOption {
+  id: string;
+  text: string;
+  /** 근거 조사 데이터 참조 (postit id·인용 조각 등) */
+  sourceEvidence?: string;
+  /** 「직접 쓰기」로 사용자가 추가 */
+  isUserAdded?: boolean;
+}
+
+export interface HmwInterpretation {
+  slot: HmwInterpretationSlot;
+  /** 예: "뿌듯함이란?" */
+  slotLabel: string;
+  options: HmwInterpretationOption[];
+}
+
 export interface HmwQuestion {
   id: string;
   latentNeedId: string;
@@ -42,6 +65,8 @@ export interface HmwQuestion {
   qualityTips?: HmwQualityTip[];
   /** 내부 3변주 후보 (UI 기본 숨김) */
   candidates?: HmwVariationCandidate[];
+  /** 해석 레이어 캐시 (HMW 텍스트 변경 시 무효화) */
+  interpretations?: HmwInterpretation[];
 }
 
 export interface Stage7HmwData {
@@ -169,6 +194,48 @@ function normalizeCandidate(raw: unknown): HmwVariationCandidate | null {
   return { kind, text, tips };
 }
 
+function normalizeInterpretationOption(
+  raw: unknown,
+  slot: HmwInterpretationSlot,
+  index: number,
+): HmwInterpretationOption | null {
+  if (!raw || typeof raw !== "object") return null;
+  const o = raw as Record<string, unknown>;
+  const text = String(o.text ?? "").trim();
+  if (!text) return null;
+  const id = String(o.id ?? "").trim() || `${slot}-${index + 1}`;
+  const sourceEvidence = String(o.sourceEvidence ?? "").trim();
+  return {
+    id,
+    text,
+    ...(sourceEvidence ? { sourceEvidence } : {}),
+    ...(o.isUserAdded === true ? { isUserAdded: true } : {}),
+  };
+}
+
+function normalizeInterpretation(raw: unknown): HmwInterpretation | null {
+  if (!raw || typeof raw !== "object") return null;
+  const o = raw as Record<string, unknown>;
+  const slot = o.slot;
+  if (
+    slot !== "who" &&
+    slot !== "object" &&
+    slot !== "outcome" &&
+    slot !== "direction"
+  ) {
+    return null;
+  }
+  const options = Array.isArray(o.options)
+    ? o.options
+        .map((opt, i) => normalizeInterpretationOption(opt, slot, i))
+        .filter((opt): opt is HmwInterpretationOption => opt !== null)
+        .slice(0, 6)
+    : [];
+  if (options.length === 0) return null;
+  const slotLabel = String(o.slotLabel ?? "").trim() || `${slot}이란?`;
+  return { slot, slotLabel, options };
+}
+
 function normalizeQuestion(raw: unknown): HmwQuestion | null {
   if (!raw || typeof raw !== "object") return null;
   const o = raw as Record<string, unknown>;
@@ -187,6 +254,11 @@ function normalizeQuestion(raw: unknown): HmwQuestion | null {
         .map(normalizeCandidate)
         .filter((c): c is HmwVariationCandidate => c !== null)
     : undefined;
+  const interpretations = Array.isArray(o.interpretations)
+    ? o.interpretations
+        .map(normalizeInterpretation)
+        .filter((i): i is HmwInterpretation => i !== null)
+    : undefined;
 
   return {
     id: String(o.id ?? createHmwQuestionId()).trim() || createHmwQuestionId(),
@@ -198,6 +270,9 @@ function normalizeQuestion(raw: unknown): HmwQuestion | null {
     variationKind: normalizeVariationKind(o.variationKind),
     ...(qualityTips && qualityTips.length > 0 ? { qualityTips } : {}),
     ...(candidates && candidates.length > 0 ? { candidates } : {}),
+    ...(interpretations && interpretations.length > 0
+      ? { interpretations }
+      : {}),
   };
 }
 
@@ -308,15 +383,29 @@ export function updateHmwQuestion(
 ): Stage7HmwData {
   return {
     ...data,
+    questions: data.questions.map((q) => {
+      if (q.id !== id) return q;
+      const textChanged = q.hmwText.trim() !== hmwText.trim();
+      return {
+        ...q,
+        hmwText,
+        kevinGenerated: false,
+        ...(qualityTips ? { qualityTips } : {}),
+        ...(textChanged ? { interpretations: undefined } : {}),
+      };
+    }),
+  };
+}
+
+export function setHmwInterpretations(
+  data: Stage7HmwData,
+  questionId: string,
+  interpretations: HmwInterpretation[],
+): Stage7HmwData {
+  return {
+    ...data,
     questions: data.questions.map((q) =>
-      q.id === id
-        ? {
-            ...q,
-            hmwText,
-            kevinGenerated: false,
-            ...(qualityTips ? { qualityTips } : {}),
-          }
-        : q,
+      q.id === questionId ? { ...q, interpretations } : q,
     ),
   };
 }

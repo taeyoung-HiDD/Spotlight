@@ -24,7 +24,10 @@ import {
   type IdeaGridData,
   type IdeaStimulusType,
 } from "@/lib/stages/stage8/ideaGridTypes";
-import type { Stage7HmwData } from "@/lib/stages/stage7/hmwTypes";
+import type {
+  HmwInterpretation,
+  Stage7HmwData,
+} from "@/lib/stages/stage7/hmwTypes";
 import type { Stage5LatentNeedsData } from "@/lib/stages/stage5/latentNeedsTypes";
 import {
   stageBtnSecondary,
@@ -52,6 +55,10 @@ interface IdeaGridWorkPanelProps {
   /** Kevin 출시 사례 「이 방향 힌트」→ 설명란 append */
   descriptionHint?: { id: string; text: string } | null;
   onDescriptionHintConsumed?: () => void;
+  onCacheInterpretations: (
+    questionId: string,
+    interpretations: HmwInterpretation[],
+  ) => void;
 }
 
 export function IdeaGridWorkPanel({
@@ -68,6 +75,7 @@ export function IdeaGridWorkPanel({
   lastSavedAt,
   descriptionHint = null,
   onDescriptionHintConsumed,
+  onCacheInterpretations,
 }: IdeaGridWorkPanelProps) {
   const locale = useUiLocale();
   const purposeCopy = getStagePurposeCopy(8, locale);
@@ -258,8 +266,10 @@ export function IdeaGridWorkPanel({
           data={data}
           cellIndex={data.selectedCellIndex}
           hmwQuestions={allQuestions}
+          stage5Data={stage5Data}
           onChange={onChange}
           onClose={closeSubview}
+          onCacheInterpretations={onCacheInterpretations}
           descriptionHint={descriptionHint}
           onDescriptionHintConsumed={onDescriptionHintConsumed}
         />

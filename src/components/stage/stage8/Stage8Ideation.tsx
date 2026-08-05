@@ -36,6 +36,8 @@ import {
 } from "@/lib/stages/stage8/pullNextQuadrantHmw";
 import {
   defaultStage7Hmw,
+  setHmwInterpretations,
+  type HmwInterpretation,
   type Stage7HmwData,
 } from "@/lib/stages/stage7/hmwTypes";
 import {
@@ -316,6 +318,28 @@ export function Stage8Ideation({ projectId }: Stage8IdeationProps) {
     setData(next);
   }, []);
 
+  const handleCacheInterpretations = useCallback(
+    (questionId: string, interpretations: HmwInterpretation[]) => {
+      setHmwData((prev) => {
+        const next = setHmwInterpretations(prev, questionId, interpretations);
+        void saveStage7Hmw({
+          projectId,
+          artifactId: hmwArtifactId,
+          data: next,
+          existingSlots: hmwAllSlots,
+        })
+          .then((result) => {
+            setHmwArtifactId(result.artifactId);
+          })
+          .catch((e) => {
+            console.error("[stage8] save interpretations", e);
+          });
+        return next;
+      });
+    },
+    [projectId, hmwArtifactId, hmwAllSlots],
+  );
+
   const hmwQuestions = hmwData.questions.filter((q) => q.hmwText.trim());
 
   const editorOpen =
@@ -378,6 +402,7 @@ export function Stage8Ideation({ projectId }: Stage8IdeationProps) {
           editorOpen={editorOpen}
           activeHmw={activeHmw}
           onAppendDescriptionHint={handleAppendDescriptionHint}
+          onChange={handleChange}
         />
       }
       work={
@@ -396,6 +421,7 @@ export function Stage8Ideation({ projectId }: Stage8IdeationProps) {
             lastSavedAt={lastSavedAt}
             descriptionHint={descriptionHint}
             onDescriptionHintConsumed={() => setDescriptionHint(null)}
+            onCacheInterpretations={handleCacheInterpretations}
           />
           <div
             className={`${stagePanel} stage-workspace-nav mt-4 flex flex-wrap items-center justify-between gap-3`}

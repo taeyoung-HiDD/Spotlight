@@ -1,6 +1,6 @@
 "use client";
 
-import { IconExternalLink } from "@tabler/icons-react";
+import { IconExternalLink, IconLock } from "@tabler/icons-react";
 import { useUiLocale } from "@/hooks/useUiLocale";
 import { useEffect, useMemo, useState } from "react";
 import { AnimatedCoachPanel } from "@/components/stage/motion/AnimatedCoachPanel";
@@ -33,6 +33,7 @@ interface IdeaGridCoachPanelProps {
   editorOpen?: boolean;
   activeHmw?: ActiveHmwForCases | null;
   onAppendDescriptionHint?: (hint: string) => void;
+  onChange?: (data: IdeaGridData) => void;
 }
 
 function LaunchCaseCards({
@@ -92,6 +93,29 @@ function LaunchCaseCards({
   );
 }
 
+function LockedCaseCardsShell({ onEarlyReveal }: { onEarlyReveal: () => void }) {
+  return (
+    <div className="mt-1 rounded-xl border border-dashed border-border-warm bg-cream/50 px-3.5 py-3">
+      <div className="mb-1.5 flex items-center gap-1.5">
+        <IconLock className="size-3.5 text-muted" stroke={1.75} />
+        <p className="text-[13px] font-semibold text-foreground">
+          참고 사례 · 잠김
+        </p>
+      </div>
+      <p className={`${stageCaption} text-muted`}>
+        내 아이디어를 먼저 1개 적으면 비슷한 문제를 푼 사례를 보여드려요.
+      </p>
+      <button
+        type="button"
+        onClick={onEarlyReveal}
+        className={`${stageBtnSecondary} mt-2.5 text-[11px]`}
+      >
+        그래도 먼저 보기
+      </button>
+    </div>
+  );
+}
+
 export function IdeaGridCoachPanel({
   projectId,
   data,
@@ -100,6 +124,7 @@ export function IdeaGridCoachPanel({
   editorOpen = false,
   activeHmw = null,
   onAppendDescriptionHint,
+  onChange,
 }: IdeaGridCoachPanelProps) {
   const stageConfig = getStageConfig(8);
   const locale = useUiLocale();
@@ -108,16 +133,21 @@ export function IdeaGridCoachPanel({
   const hmwSnippet = hmwQuestions.find((q) => q.hmwText.trim())?.hmwText.trim();
   const casesMode = Boolean(editorOpen && activeHmw?.hmwText.trim());
 
-  const [cases, setCases] = useState<HmwLaunchCase[]>(() =>
-    activeHmw
-      ? (getCachedHmwLaunchCases(projectId, activeHmw.id) ?? [])
-      : [],
+  const hasSavedIdeaForHmw = Boolean(
+    activeHmw &&
+      data.slots.some(
+        (s) => s?.sourceHmwId === activeHmw.id && s.title.trim(),
+      ),
   );
+  const casesUnlocked =
+    hasSavedIdeaForHmw || data.earlyRevealCaseCards === true;
+
+  const [cases, setCases] = useState<HmwLaunchCase[]>([]);
   const [casesLoading, setCasesLoading] = useState(false);
   const [casesError, setCasesError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!casesMode || !activeHmw) {
+    if (!casesMode || !activeHmw || !casesUnlocked) {
       setCases([]);
       setCasesLoading(false);
       setCasesError(null);
@@ -159,7 +189,15 @@ export function IdeaGridCoachPanel({
     return () => {
       cancelled = true;
     };
-  }, [casesMode, projectId, activeHmw]);
+  }, [casesMode, casesUnlocked, projectId, activeHmw]);
+
+  const handleEarlyReveal = () => {
+    const ok = window.confirm(
+      "Kevin: 사례를 먼저 보면 비슷한 아이디어가 나오기 쉬워요. 그래도 보시겠어요?",
+    );
+    if (!ok) return;
+    onChange?.({ ...data, earlyRevealCaseCards: true });
+  };
 
   const gridIntroMessages = useMemo((): CoachDialogItem[] => {
     return [
@@ -191,14 +229,30 @@ export function IdeaGridCoachPanel({
     const items: CoachDialogItem[] = [
       {
         type: "highlight",
-        label: "HMW 참고 사례",
+        label: casesUnlocked ? "HMW 참고 사례" : "아이디어 먼저",
         content: formatCoachDialogBreaks(
-          hmwLine
-            ? `「${hmwLine.slice(0, 72)}${hmwLine.length > 72 ? "…" : ""}」\n\n비슷한 문제를 풀어 이미 나온 출시 서비스를 찾아볼게요.`
-            : "이 칸의 HMW에 맞춰 출시 사례를 찾아볼게요.",
+          casesUnlocked
+            ? hmwLine
+              ? `「${hmwLine.slice(0, 72)}${hmwLine.length > 72 ? "…" : ""}」\n\n비슷한 문제를 풀어 이미 나온 출시 서비스를 찾아볼게요.`
+              : "이 칸의 HMW에 맞춰 출시 사례를 찾아볼게요."
+            : hmwLine
+              ? `「${hmwLine.slice(0, 72)}${hmwLine.length > 72 ? "…" : ""}」\n\n먼저 왼쪽에서 나만의 아이디어를 한 줄 적어 보세요. 그다음 비슷한 출시 사례를 열어 드릴게요.`
+              : "먼저 왼쪽에서 아이디어를 적어 보세요. 사례는 그다음에 보여드려요.",
         ),
       },
     ];
+
+    if (!casesUnlocked) {
+      items.push({
+        type: "bubble",
+        variant: "secondary",
+        content: formatCoachDialogBreaks(
+          "질문을 풀어보거나, 떠오르는 한 줄부터 적어도 좋아요. 사례를 먼저 보면 비슷한 아이디어에 묶이기 쉬워요.",
+        ),
+      });
+      return items;
+    }
+
     if (casesLoading) {
       items.push({
         type: "bubble",
@@ -225,7 +279,7 @@ export function IdeaGridCoachPanel({
         type: "bubble",
         variant: "secondary",
         content: formatCoachDialogBreaks(
-          "이제 왼쪽에서 나만의 아이디어를 적어 보세요. quantity-first — 양부터.",
+          "이제 왼쪽에서 나만의 아이디어를 더 적어 보세요. quantity-first — 양부터.",
         ),
       });
     } else {
@@ -237,7 +291,7 @@ export function IdeaGridCoachPanel({
       });
     }
     return items;
-  }, [activeHmw, cases, casesError, casesLoading]);
+  }, [activeHmw, cases, casesError, casesLoading, casesUnlocked]);
 
   const chatContext = useMemo(
     () => ({
@@ -250,25 +304,27 @@ export function IdeaGridCoachPanel({
           : ""
       }`,
       stageBehaviorNote:
-        "8단계 아이디어 펼치기: 핵심 니즈 기반 HMW로 칸을 채우고 quantity-first로 아이디어를 펼칩니다. 새 아이디어 화면에서는 HMW에 맞닿은 출시 사례를 영감용으로만 소개하며, 사용자 제목·설명을 대신 채우지 않습니다. 막히면 SCAMPER·원리 카드·팀 관점 자극을 쓰고, 칸을 비우면 아이디어 은행에 보류합니다. 더 필요하면 다음 사분면 니즈로 HMW를 추가할 수 있습니다. 아이디어 스케치는 사용자가 이미지를 올리거나, 제목·설명 작성 후 AI로 아이디어 그리기를 요청할 수 있습니다.",
+        "8단계 아이디어 펼치기: 핵심 니즈 기반 HMW로 칸을 채우고 quantity-first로 아이디어를 펼칩니다. 새 아이디어 화면에서는 HMW 해석(질문 풀어보기)으로 문제를 좁힌 뒤 쓰게 돕고, 출시 사례는 해당 HMW에 아이디어 1개 저장 후(또는 조기 해제 후)에만 보여 줍니다. 사용자 제목·설명을 대신 채우지 않습니다. 막히면 SCAMPER·원리 카드·팀 관점 자극을 쓰고, 칸을 비우면 아이디어 은행에 보류합니다. 아이디어 스케치는 사용자가 이미지를 올리거나, 제목·설명 작성 후 AI로 아이디어 그리기를 요청할 수 있습니다.",
     }),
     [projectId, data, hmwQuestions, casesMode, activeHmw],
   );
 
   const messages = casesMode ? editorMessages : gridIntroMessages;
   const sceneKey = casesMode
-    ? `stage-8-ideation-${projectId}-editor-${activeHmw?.id ?? "none"}-${casesLoading ? "load" : "ready"}`
+    ? `stage-8-ideation-${projectId}-editor-${activeHmw?.id ?? "none"}-${casesUnlocked ? (casesLoading ? "load" : "ready") : "locked"}`
     : variant === "intro"
       ? `stage-8-ideation-${projectId}-intro`
       : `stage-8-ideation-work-${projectId}`;
 
-  const footer =
-    casesMode && !casesLoading && cases.length > 0 ? (
-      <LaunchCaseCards
-        cases={cases}
-        onHint={onAppendDescriptionHint}
-      />
-    ) : null;
+  const footer = casesMode ? (
+    casesUnlocked ? (
+      !casesLoading && cases.length > 0 ? (
+        <LaunchCaseCards cases={cases} onHint={onAppendDescriptionHint} />
+      ) : null
+    ) : (
+      <LockedCaseCardsShell onEarlyReveal={handleEarlyReveal} />
+    )
+  ) : null;
 
   if (variant === "intro" && !casesMode) {
     return (
@@ -286,7 +342,13 @@ export function IdeaGridCoachPanel({
     <AnimatedCoachPanel
       sceneKey={sceneKey}
       statusLabel="함께 펼치는 중"
-      statusSub={casesMode ? "HMW 참고 사례" : "아이디어 펼치기"}
+      statusSub={
+        casesMode
+          ? casesUnlocked
+            ? "HMW 참고 사례"
+            : "아이디어 먼저"
+          : "아이디어 펼치기"
+      }
       messages={messages}
       chatContext={chatContext}
       inputGuide={getStageWorkInputGuide(8, locale)}
