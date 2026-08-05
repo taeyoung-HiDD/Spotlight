@@ -8,7 +8,8 @@ const casesCache = new Map<string, HmwLaunchCase[]>();
 const inflight = new Map<string, Promise<HmwLaunchCase[]>>();
 
 function cacheKey(projectId: string, hmwId: string): string {
-  return `${projectId}::${hmwId}`;
+  // v3: 「HMW와의 연결」·「(가설)」 표기 제거
+  return `${projectId}::${hmwId}::v3`;
 }
 
 export function getCachedHmwLaunchCases(

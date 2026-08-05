@@ -5,12 +5,28 @@ export type HmwLaunchCaseRegion = "korea" | "global";
 export type HmwLaunchCase = {
   name: string;
   summary: string;
+  /** 이 사례가 HMW에 어떻게 맞닿는지 짧은 해석 (HMW 문장 반복 금지) */
   hmwLink: string;
   url: string;
   region: HmwLaunchCaseRegion;
   /** 설명란에만 append할 변형 힌트 (제품명 복붙 금지) */
   hint: string;
 };
+
+/** hmwLink가 HMW 질문을 그대로 되풀이하면 true */
+export function isHmwLinkRepeatingQuestion(
+  hmwLink: string,
+  hmwText: string,
+): boolean {
+  const link = hmwLink.replace(/\s+/g, "").toLowerCase();
+  const hmw = hmwText.replace(/\s+/g, "").toLowerCase();
+  if (!link || !hmw) return false;
+  if (hmwLink.includes("「") && hmwLink.includes("」")) return true;
+  const probe = hmw.slice(0, Math.min(28, hmw.length));
+  if (probe.length >= 12 && link.includes(probe)) return true;
+  if (/어떻게하면/.test(link) && /있을까/.test(link)) return true;
+  return false;
+}
 
 export type HmwLaunchCasesResult = {
   cases: HmwLaunchCase[];
@@ -65,7 +81,8 @@ export function heuristicHmwLaunchCases(
     {
       name: "국내 핀테크·생활 관리 앱 (예시 방향)",
       summary: `${clip(seed, 36)} 같은 불편을 가계부·알림·자동화로 줄이려는 출시 서비스들이 있어요. 실제 제품명은 직접 검색해 확인해 주세요.`,
-      hmwLink: "비슷한 ‘관리·알림·습관’ 축으로 HMW에 맞닿을 수 있어요 (가설).",
+      hmwLink:
+        "알림·자동화로 ‘매번 신경 쓰지 않아도 되게’ 만드는 축이 이 질문과 맞닿을 수 있어요.",
       url: "",
       region: "korea",
       hint: "알림·자동화로 사용자가 ‘매번 기억하지 않아도’ 되게 만드는 방향을 짧게 적어 보세요.",
@@ -74,7 +91,8 @@ export function heuristicHmwLaunchCases(
       name: "글로벌 습관·코칭 서비스 (예시 방향)",
       summary:
         "목표를 잘게 나누고 진행을 보이게 하는 코칭·습관 앱이 이미 나와 있어요. 우리 HMW만의 차별 포인트를 남겨 두세요.",
-      hmwLink: "‘한눈에 보이게 / 쉽게’ 수식과 잘 맞을 수 있어요 (가설).",
+      hmwLink:
+        "진행을 잘게 보이게 해 부담을 줄이는 방식이 이 질문의 ‘쉽게’ 축과 닿을 수 있어요.",
       url: "",
       region: "global",
       hint: "진행이 한눈에 보이고 부담이 덜한 경험으로 바꾸려면 무엇을 줄일지 적어 보세요.",

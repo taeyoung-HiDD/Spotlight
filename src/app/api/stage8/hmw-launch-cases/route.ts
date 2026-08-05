@@ -12,6 +12,7 @@ import { fetchProjectAccess } from "@/lib/projects/projectAccess";
 import {
   buildHmwLaunchSearchQueries,
   heuristicHmwLaunchCases,
+  isHmwLinkRepeatingQuestion,
   type HmwLaunchCase,
   type HmwLaunchCaseRegion,
 } from "@/lib/stages/stage8/hmwLaunchCases";
@@ -43,7 +44,8 @@ ${KOREAN_PRIMARY_OUTPUT_RULE}
 
 규칙:
 - 사용자 아이디어 제목·설명을 대신 쓰지 마세요. 사례는 영감·참고용입니다.
-- 솔루션을 단정하지 말고, HMW와의 연결은 「(가설)」 톤으로.
+- 솔루션을 단정하지 마세요. 「(가설)」·「가설」 문구는 쓰지 마세요.
+- hmwLink: 이 사례가 위 HMW에 **어떻게 맞닿는지** 짧은 해석 한 문장. HMW 문장·「」인용·질문을 그대로 반복하지 마세요. (예: "알림으로 놓침을 줄이는 방식이 이 질문의 ‘쉽게’ 축과 닿아요.")
 - hint는 설명란에 붙일 **짧은 변형 힌트** 한 문장. 경쟁 서비스 이름·복붙 금지.
 - region은 "korea" 또는 "global".
 - url은 검색에 나온 공식·신뢰 가능한 링크만. 없으면 "".
@@ -62,22 +64,36 @@ ${searchBlob}
 {"cases":[{"name":"...","summary":"...","hmwLink":"...","url":"...","region":"korea","hint":"..."}]}`;
 }
 
-function normalizeCases(raw: unknown): HmwLaunchCase[] {
+function normalizeCases(raw: unknown, hmwText: string): HmwLaunchCase[] {
   if (!raw || typeof raw !== "object") return [];
   const list = (raw as { cases?: unknown }).cases;
   if (!Array.isArray(list)) return [];
 
+  const fallbackLink =
+    "이 사례의 접근 방식이 질문의 축과 맞닿을 수 있어요.";
+  const stripHypothesisLabel = (text: string) =>
+    text
+      .replace(/\s*[（(]\s*가설\s*[）)]\s*/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
   const out: HmwLaunchCase[] = [];
   for (const item of list) {
     if (!item || typeof item !== "object") continue;
     const o = item as Record<string, unknown>;
     const name = sanitizeCoachKoreanText(String(o.name ?? "")).trim().slice(0, 80);
-    const summary = sanitizeCoachKoreanText(String(o.summary ?? ""))
-      .trim()
-      .slice(0, 280);
-    const hmwLink = sanitizeCoachKoreanText(String(o.hmwLink ?? ""))
-      .trim()
-      .slice(0, 200);
+    const summary = stripHypothesisLabel(
+      sanitizeCoachKoreanText(String(o.summary ?? ""))
+        .trim()
+        .slice(0, 280),
+    );
+    let hmwLink = stripHypothesisLabel(
+      sanitizeCoachKoreanText(String(o.hmwLink ?? ""))
+        .trim()
+        .slice(0, 200),
+    );
+    if (!hmwLink || isHmwLinkRepeatingQuestion(hmwLink, hmwText)) {
+      hmwLink = fallbackLink;
+    }
     const hint = sanitizeCoachKoreanText(String(o.hint ?? ""))
       .trim()
       .slice(0, 160);
@@ -90,8 +106,7 @@ function normalizeCases(raw: unknown): HmwLaunchCase[] {
     out.push({
       name,
       summary,
-      hmwLink:
-        hmwLink || "이 HMW와 맞닿는 방향일 수 있어요 (가설).",
+      hmwLink,
       url,
       region,
       hint:
@@ -163,7 +178,7 @@ export async function POST(request: Request) {
     const jsonMatch = result.text.trim().match(/\{[\s\S]*\}/);
     if (jsonMatch) {
       const parsed = JSON.parse(jsonMatch[0]) as unknown;
-      const cases = normalizeCases(parsed);
+      const cases = normalizeCases(parsed, hmwText);
       if (cases.length > 0) {
         return NextResponse.json({ cases, source: "groq+web" as const });
       }

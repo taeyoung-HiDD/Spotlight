@@ -69,7 +69,9 @@ function LaunchCaseCards({ cases }: { cases: HmwLaunchCase[] }) {
               {c.summary}
             </p>
             {c.hmwLink.trim() ? (
-              <p className={`mt-1.5 ${stageCaption} text-muted`}>{c.hmwLink}</p>
+              <p className={`mt-1.5 ${stageCaption} text-muted`}>
+                {c.hmwLink.trim()}
+              </p>
             ) : null}
           </div>
         );
@@ -209,19 +211,14 @@ export function IdeaGridCoachPanel({
   }, [purpose, hmwSnippet]);
 
   const editorMessages = useMemo((): CoachDialogItem[] => {
-    const hmwLine = activeHmw?.hmwText.trim() ?? "";
     const items: CoachDialogItem[] = [
       {
         type: "highlight",
         label: casesUnlocked ? "HMW 참고 사례" : "아이디어 먼저",
         content: formatCoachDialogBreaks(
           casesUnlocked
-            ? hmwLine
-              ? `「${hmwLine.slice(0, 72)}${hmwLine.length > 72 ? "…" : ""}」\n\n비슷한 문제를 풀어 이미 나온 출시 서비스를 찾아볼게요.`
-              : "이 칸의 HMW에 맞춰 출시 사례를 찾아볼게요."
-            : hmwLine
-              ? `「${hmwLine.slice(0, 72)}${hmwLine.length > 72 ? "…" : ""}」\n\n먼저 왼쪽에서 나만의 아이디어를 한 줄 적어 보세요. 그다음 비슷한 출시 사례를 열어 드릴게요.`
-              : "먼저 왼쪽에서 아이디어를 적어 보세요. 사례는 그다음에 보여드려요.",
+            ? "비슷한 문제를 풀어 이미 나온 출시 서비스를 찾아볼게요. 각 사례가 이 질문과 어떻게 닿는지 짧게 읽어 보세요."
+            : "먼저 왼쪽에서 나만의 아이디어를 한 줄 적어 보세요. 그다음 비슷한 출시 사례를 열어 드릴게요.",
         ),
       },
     ];
@@ -275,7 +272,7 @@ export function IdeaGridCoachPanel({
       });
     }
     return items;
-  }, [activeHmw, cases, casesError, casesLoading, casesUnlocked]);
+  }, [cases, casesError, casesLoading, casesUnlocked]);
 
   const chatContext = useMemo(
     () => ({
