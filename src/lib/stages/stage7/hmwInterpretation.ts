@@ -44,7 +44,77 @@ function optionText(
   return row?.options.find((o) => o.id === optionId)?.text.trim() ?? "";
 }
 
-/** 선택 칩으로 하위 질문 미리보기 (해결책 없이 문제만 좁힘) */
+export type InterpretationSelectionTexts = Partial<
+  Record<HmwInterpretationSlot, string>
+>;
+
+export function selectionTextsFromIds(
+  interpretations: HmwInterpretation[],
+  selection: InterpretationSelection,
+): InterpretationSelectionTexts {
+  return {
+    ...(selection.who
+      ? { who: optionText(interpretations, "who", selection.who) }
+      : {}),
+    ...(selection.object
+      ? { object: optionText(interpretations, "object", selection.object) }
+      : {}),
+    ...(selection.outcome
+      ? { outcome: optionText(interpretations, "outcome", selection.outcome) }
+      : {}),
+    ...(selection.direction
+      ? {
+          direction: optionText(
+            interpretations,
+            "direction",
+            selection.direction,
+          ),
+        }
+      : {}),
+  };
+}
+
+/** "~하는 것" 등 명사절을 문장 성분에 맞게 짧게 다듬기 */
+function softenPhrase(text: string): string {
+  return text
+    .trim()
+    .replace(/이\(가\)|을\(를\)|은\(는\)/gu, "")
+    .replace(/\s+/g, " ")
+    .replace(/하는\s*것$/u, "함")
+    .replace(/되는\s*것$/u, "됨")
+    .replace(/인\s*것$/u, "")
+    .replace(/인\s*상태$/u, "인 상태")
+    .replace(/는\s*것$/u, "")
+    .replace(/을\s*것$/u, "")
+    .trim();
+}
+
+function endsWithHangul(text: string): string | null {
+  const m = text.match(/([가-힣])\s*$/u);
+  return m?.[1] ?? null;
+}
+
+/** 받침 있으면 을, 없으면 를 (근사) */
+function objectParticle(text: string): "을" | "를" {
+  const ch = endsWithHangul(text);
+  if (!ch) return "를";
+  const code = ch.charCodeAt(0) - 0xac00;
+  if (code < 0 || code > 11171) return "를";
+  return code % 28 === 0 ? "를" : "을";
+}
+
+function subjectParticle(text: string): "이" | "가" {
+  const ch = endsWithHangul(text);
+  if (!ch) return "가";
+  const code = ch.charCodeAt(0) - 0xac00;
+  if (code < 0 || code > 11171) return "가";
+  return code % 28 === 0 ? "가" : "이";
+}
+
+/**
+ * 선택 칩만으로 하위 질문 초안 (미선택 슬롯은 채우지 않음).
+ * 최종 문장은 LLM 재작성으로 다듬는 것을 권장.
+ */
 export function composeInterpretationSubQuestion(
   hmwText: string,
   interpretations: HmwInterpretation[],
@@ -59,22 +129,65 @@ export function composeInterpretationSubQuestion(
     selection.direction,
   );
 
-  const parts = [who, object, outcome, direction].filter(Boolean);
-  if (parts.length === 0) return "";
+  if (![who, object, outcome, direction].some(Boolean)) return "";
 
-  const subject = who || "그 사람이";
-  const target = object ? `${object}에 대해 ` : "";
-  const feeling = outcome || "원하는 결과";
-  const change = direction || "더 잘 이루게";
+  const whoPart = who
+    ? `${softenPhrase(who)}${subjectParticle(softenPhrase(who))} `
+    : "";
+  const objectSoft = object ? softenPhrase(object) : "";
+  const outcomeSoft = outcome ? softenPhrase(outcome) : "";
+  const directionSoft = direction ? softenPhrase(direction) : "";
 
-  const draft = `어떻게 하면 ${subject} ${target}${feeling}을(를) ${change} 할 수 있을까?`
-    .replace(/\s+/g, " ")
-    .trim();
+  let body = "";
+
+  if (objectSoft && outcomeSoft && directionSoft) {
+    body = `${whoPart}${objectSoft}${objectParticle(objectSoft)} ${directionSoft} ${outcomeSoft}하게`;
+  } else if (objectSoft && outcomeSoft) {
+    body = `${whoPart}${objectSoft}에서 ${outcomeSoft}${objectParticle(outcomeSoft)} 더 분명히 느끼게`;
+  } else if (objectSoft && directionSoft) {
+    body = `${whoPart}${objectSoft}${objectParticle(objectSoft)} ${directionSoft} 다루게`;
+  } else if (outcomeSoft && directionSoft) {
+    body = `${whoPart}${outcomeSoft}${objectParticle(outcomeSoft)} ${directionSoft} 느끼게`;
+  } else if (objectSoft) {
+    body = `${whoPart}${objectSoft}${objectParticle(objectSoft)} 더 잘 다루게`;
+  } else if (outcomeSoft) {
+    body = `${whoPart}${outcomeSoft}${objectParticle(outcomeSoft)} 더 잘 느끼게`;
+  } else if (directionSoft) {
+    body = `${whoPart}원하는 변화를 ${directionSoft} 만들게`;
+  } else if (who) {
+    body = `${whoPart}이 질문의 핵심을 더 구체적으로 다루게`;
+  }
+
+  const draft = `어떻게 하면 ${body} 할 수 있을까?`.replace(/\s+/g, " ").trim();
 
   if (containsSolutionNoun(draft)) {
     return hmwText.trim() || draft;
   }
   return draft;
+}
+
+export function collectSelectionLines(
+  interpretations: HmwInterpretation[],
+  selection: InterpretationSelection,
+): Array<{ slot: HmwInterpretationSlot; slotLabel: string; text: string }> {
+  const lines: Array<{
+    slot: HmwInterpretationSlot;
+    slotLabel: string;
+    text: string;
+  }> = [];
+  for (const slot of ["who", "object", "outcome", "direction"] as const) {
+    const id = selection[slot];
+    if (!id) continue;
+    const row = interpretations.find((i) => i.slot === slot);
+    const text = row?.options.find((o) => o.id === id)?.text.trim() ?? "";
+    if (!text) continue;
+    lines.push({
+      slot,
+      slotLabel: row?.slotLabel ?? `${slot}이란?`,
+      text,
+    });
+  }
+  return lines;
 }
 
 export function stripSolutionNounOptions(

@@ -3,11 +3,14 @@
 import { IconChevronDown, IconQuote } from "@tabler/icons-react";
 import { useEffect, useMemo, useState } from "react";
 import {
-  buildInterpretationStimulusId,
+  collectSelectionLines,
   composeInterpretationSubQuestion,
   type InterpretationSelection,
 } from "@/lib/stages/stage7/hmwInterpretation";
-import { requestHmwInterpretations } from "@/lib/stages/stage7/interpretHmwClient";
+import {
+  requestComposeHmwSubQuestion,
+  requestHmwInterpretations,
+} from "@/lib/stages/stage7/interpretHmwClient";
 import type {
   HmwInterpretation,
   HmwInterpretationSlot,
@@ -16,7 +19,6 @@ import type {
 import { containsSolutionNoun } from "@/lib/stages/stage7/hmwQualityChecklist";
 import type { Stage5LatentNeedsData } from "@/lib/stages/stage5/latentNeedsTypes";
 import {
-  stageBtnPrimary,
   stageBtnSecondary,
   stageCaption,
   stageField,
@@ -32,11 +34,6 @@ interface HmwInterpretationAccordionProps {
   descriptionDraft: string;
   forceExpandToken?: number;
   onInterpretationsCached: (interpretations: HmwInterpretation[]) => void;
-  onApplyInterpretation: (payload: {
-    stimulusId: string;
-    subQuestion: string;
-    interpretations: HmwInterpretation[];
-  }) => void;
 }
 
 function ChipButton({
@@ -77,7 +74,6 @@ export function HmwInterpretationAccordion({
   descriptionDraft,
   forceExpandToken = 0,
   onInterpretationsCached,
-  onApplyInterpretation,
 }: HmwInterpretationAccordionProps) {
   const [expanded, setExpanded] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -90,6 +86,8 @@ export function HmwInterpretationAccordion({
     useState<HmwInterpretationSlot | null>(null);
   const [customText, setCustomText] = useState("");
   const [idleHint, setIdleHint] = useState(false);
+  const [subQuestion, setSubQuestion] = useState("");
+  const [composing, setComposing] = useState(false);
 
   useEffect(() => {
     setLocalInterpretations(question.interpretations ?? []);
@@ -164,7 +162,7 @@ export function HmwInterpretationAccordion({
       onInterpretationsCached(result.interpretations);
     } catch (e) {
       setError(
-        e instanceof Error ? e.message : "질문을 풀어보지 못했습니다.",
+        e instanceof Error ? e.message : "HMW 질문을 구체화하지 못했습니다.",
       );
     } finally {
       setLoading(false);
@@ -182,7 +180,7 @@ export function HmwInterpretationAccordion({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- load once when expanded
   }, [expanded]);
 
-  const subQuestion = useMemo(
+  const localDraft = useMemo(
     () =>
       composeInterpretationSubQuestion(
         question.hmwText,
@@ -191,6 +189,49 @@ export function HmwInterpretationAccordion({
       ),
     [question.hmwText, localInterpretations, selection],
   );
+
+  useEffect(() => {
+    const lines = collectSelectionLines(localInterpretations, selection);
+    if (lines.length === 0) {
+      setSubQuestion("");
+      setComposing(false);
+      return;
+    }
+
+    setSubQuestion(localDraft);
+    let cancelled = false;
+    setComposing(true);
+    const timer = window.setTimeout(() => {
+      void (async () => {
+        try {
+          const result = await requestComposeHmwSubQuestion({
+            projectId,
+            hmwText: question.hmwText,
+            selections: lines,
+            fallbackDraft: localDraft,
+          });
+          if (cancelled) return;
+          setSubQuestion(result.subQuestion);
+        } catch {
+          if (cancelled) return;
+          setSubQuestion(localDraft);
+        } finally {
+          if (!cancelled) setComposing(false);
+        }
+      })();
+    }, 450);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [
+    projectId,
+    question.hmwText,
+    localInterpretations,
+    selection,
+    localDraft,
+  ]);
 
   const toggleOption = (slot: HmwInterpretationSlot, optionId: string) => {
     setSelection((prev) => {
@@ -242,44 +283,42 @@ export function HmwInterpretationAccordion({
     setError(null);
   };
 
-  const handleApply = () => {
-    if (!subQuestion.trim()) return;
-    onApplyInterpretation({
-      stimulusId: buildInterpretationStimulusId(selection),
-      subQuestion,
-      interpretations: localInterpretations,
-    });
-  };
-
   return (
-    <div className="mb-4 overflow-hidden rounded-xl border border-border-warm bg-cream/30">
-      <button
-        type="button"
-        onClick={handleExpand}
-        className="flex w-full items-center justify-between gap-2 px-3.5 py-2.5 text-left hover:bg-cream/60"
-      >
-        <span className="text-[13px] font-semibold text-foreground">
-          질문 풀어보기
-        </span>
-        <IconChevronDown
-          className={[
-            "size-4 text-muted transition-transform",
-            expanded ? "rotate-180" : "",
-          ].join(" ")}
-          stroke={1.75}
-        />
-      </button>
+    <div className="mb-4 overflow-hidden rounded-xl border border-gold/35 bg-highlight">
+      <div className="flex flex-wrap items-start justify-between gap-3 px-3.5 py-3">
+        <div className="min-w-0 flex-1">
+          <p className={`mb-1.5 ${stageCaption} text-gold`}>이 칸의 HMW 질문</p>
+          <p className="text-base font-semibold leading-relaxed text-foreground break-keep">
+            {question.hmwText.trim()}
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={handleExpand}
+          aria-expanded={expanded}
+          className={`${stageBtnSecondary} shrink-0 inline-flex items-center gap-1 text-[11px]`}
+        >
+          HMW 질문 구체화하기
+          <IconChevronDown
+            className={[
+              "size-3.5 text-muted transition-transform",
+              expanded ? "rotate-180" : "",
+            ].join(" ")}
+            stroke={1.75}
+          />
+        </button>
+      </div>
 
       {expanded ? (
-        <div className="space-y-3 border-t border-border-warm px-3.5 py-3">
+        <div className="space-y-3 border-t border-gold/25 bg-cream/40 px-3.5 py-3">
           {idleHint ? (
             <p className={`${stageCaption} text-gold`}>
-              Kevin: 질문을 조금 풀어보면 아이디어가 더 쓰기 쉬워져요.
+              Kevin: HMW 질문을 조금 구체화하면 아이디어가 더 쓰기 쉬워져요.
             </p>
           ) : null}
 
           {loading ? (
-            <p className={stageCaption}>질문을 풀어보는 중…</p>
+            <p className={stageCaption}>HMW 질문을 구체화하는 중…</p>
           ) : null}
           {error ? (
             <p className={`${stageCaption} text-red-600`}>{error}</p>
@@ -329,22 +368,16 @@ export function HmwInterpretationAccordion({
           ))}
 
           {subQuestion ? (
-            <div className="rounded-lg border border-gold/30 bg-highlight/60 px-3 py-2.5">
+            <div className="rounded-lg border border-gold/30 bg-panel/80 px-3 py-2.5">
               <p className={`mb-1 ${stageCaption} text-gold`}>
                 선택한 조합 → 하위 질문 (참고 · HMW는 그대로)
+                {composing ? " · 문장 다듬는 중…" : ""}
               </p>
               <p className="text-sm leading-relaxed text-foreground break-keep">
                 {subQuestion}
               </p>
-              <button
-                type="button"
-                onClick={handleApply}
-                className={`${stageBtnPrimary} mt-2.5 text-xs`}
-              >
-                이 해석으로 아이디어 쓰기
-              </button>
             </div>
-          ) : localInterpretations.length > 0 ? (
+          ) : localInterpretations.length > 0 && !loading ? (
             <p className={stageCaption}>
               칩을 골라 조합하면 쓰기 쉬운 하위 질문이 생겨요.
             </p>

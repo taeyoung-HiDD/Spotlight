@@ -1,7 +1,7 @@
 "use client";
 
 import { IconPhotoPlus, IconSparkles, IconX } from "@tabler/icons-react";
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import {
   LocalizedEditableInput,
   LocalizedEditableTextarea,
@@ -48,8 +48,6 @@ interface IdeaInputSketchPanelProps {
     questionId: string,
     interpretations: HmwInterpretation[],
   ) => void;
-  descriptionHint?: { id: string; text: string } | null;
-  onDescriptionHintConsumed?: () => void;
 }
 
 function initialSketchDataUrl(existing: IdeaSketch | null | undefined): string {
@@ -67,8 +65,6 @@ export function IdeaInputSketchPanel({
   onChange,
   onClose,
   onCacheInterpretations,
-  descriptionHint = null,
-  onDescriptionHintConsumed,
 }: IdeaInputSketchPanelProps) {
   const existing = data.slots[cellIndex];
   const cellHmw = hmwForCell(data, hmwQuestions, cellIndex);
@@ -81,26 +77,11 @@ export function IdeaInputSketchPanel({
   const sourceHmwId = existing?.sourceHmwId || cellHmw?.id || "";
   const [sketchError, setSketchError] = useState<string | null>(null);
   const [generatingSketch, setGeneratingSketch] = useState(false);
-  const [interpretationGuide, setInterpretationGuide] = useState<string | null>(
-    null,
-  );
-  const [stimulusId, setStimulusId] = useState(existing?.stimulusId ?? "");
-  const [stimulusType, setStimulusType] = useState(existing?.stimulusType);
   const { progress, remainingSec, markComplete, reset } =
     useSimulatedAsyncProgress(generatingSketch);
 
   const selectedHmw =
     hmwQuestions.find((q) => q.id === sourceHmwId) ?? cellHmw;
-
-  useEffect(() => {
-    if (!descriptionHint?.text.trim()) return;
-    const hint = descriptionHint.text.trim();
-    setDescription((prev) => {
-      if (prev.includes(hint)) return prev;
-      return prev.trim() ? `${prev.trim()}\n${hint}` : hint;
-    });
-    onDescriptionHintConsumed?.();
-  }, [descriptionHint, onDescriptionHintConsumed]);
 
   const canRequestAi =
     Boolean(title.trim()) && Boolean(description.trim());
@@ -187,14 +168,8 @@ export function IdeaInputSketchPanel({
       sourceHmwText: selectedHmw?.hmwText.trim() ?? existing?.sourceHmwText ?? "",
       scamperLetter: existing?.scamperLetter,
       parentIdeaId: existing?.parentIdeaId,
-      stimulusId:
-        stimulusType === "hmw_interpretation"
-          ? stimulusId || existing?.stimulusId
-          : existing?.stimulusId || stimulusId || undefined,
-      stimulusType:
-        stimulusType === "hmw_interpretation"
-          ? "hmw_interpretation"
-          : existing?.stimulusType || stimulusType,
+      stimulusId: existing?.stimulusId,
+      stimulusType: existing?.stimulusType,
     };
     onChange(upsertIdeaAtCell(data, cellIndex, idea));
   };
@@ -220,16 +195,11 @@ export function IdeaInputSketchPanel({
   return (
     <div className="rounded-2xl border-[1.5px] border-spotlight bg-panel p-5 shadow-sm">
       <div className="mb-4 flex items-start justify-between gap-3">
-        <div>
-          <div className="mb-1 flex flex-wrap items-center gap-2">
-            <span className="rounded-md bg-highlight px-2 py-0.5 text-[11px] font-medium text-gold">
-              {cellIndex + 1}번 칸
-            </span>
-            <span className={`${stageCaption} text-muted`}>아이디어 그리드</span>
-          </div>
-          <h3 className="text-lg font-semibold text-foreground">
-            {existing ? "아이디어 수정" : "새 아이디어 추가"}
-          </h3>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="rounded-md bg-highlight px-2 py-0.5 text-[11px] font-medium text-gold">
+            {cellIndex + 1}번 칸
+          </span>
+          <span className={`${stageCaption} text-muted`}>아이디어 그리드</span>
         </div>
         <button
           type="button"
@@ -242,15 +212,6 @@ export function IdeaInputSketchPanel({
       </div>
 
       {selectedHmw?.hmwText.trim() ? (
-        <div className="mb-4 rounded-xl border border-gold/35 bg-highlight px-3.5 py-3">
-          <p className={`mb-1.5 ${stageCaption} text-gold`}>이 칸의 HMW 질문</p>
-          <p className="text-sm leading-relaxed text-foreground break-keep">
-            {selectedHmw.hmwText.trim()}
-          </p>
-        </div>
-      ) : null}
-
-      {selectedHmw?.hmwText.trim() ? (
         <HmwInterpretationAccordion
           projectId={projectId}
           question={selectedHmw}
@@ -260,21 +221,7 @@ export function IdeaInputSketchPanel({
           onInterpretationsCached={(interpretations) =>
             onCacheInterpretations(selectedHmw.id, interpretations)
           }
-          onApplyInterpretation={({ stimulusId: sid, subQuestion }) => {
-            setStimulusId(sid);
-            setStimulusType("hmw_interpretation");
-            setInterpretationGuide(subQuestion);
-          }}
         />
-      ) : null}
-
-      {interpretationGuide ? (
-        <div className="mb-4 rounded-lg border border-border-warm bg-cream px-3 py-2">
-          <p className={`mb-1 ${stageCaption}`}>이 해석으로 쓰기 (참고)</p>
-          <p className="text-[13px] leading-relaxed text-foreground break-keep">
-            {interpretationGuide}
-          </p>
-        </div>
       ) : null}
 
       <div className="grid gap-4 md:grid-cols-2 md:items-stretch">

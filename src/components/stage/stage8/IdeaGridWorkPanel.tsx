@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useUiLocale } from "@/hooks/useUiLocale";
 import { ParkingLotTray } from "@/components/stage/shared/ParkingLotTray";
 import { IdeaGridBoard } from "@/components/stage/stage8/IdeaGridBoard";
@@ -14,11 +14,6 @@ import { getStagePurposeCopy } from "@/lib/stages/discovery/stagePurposeCopy";
 import { hmwForCell } from "@/lib/stages/stage8/bootstrapIdeaGridFromHmw";
 import { shouldOpenIdeaEditor } from "@/lib/stages/stage8/gridCellHmw";
 import {
-  hmwIdeaCoverage,
-  prescribeStimulus,
-} from "@/lib/stages/stage8/prescribeStimulus";
-import { nextQuadrantPullHint } from "@/lib/stages/stage8/pullNextQuadrantHmw";
-import {
   createIdeaId,
   firstEmptyCellIndex,
   type IdeaGridData,
@@ -30,7 +25,6 @@ import type {
 } from "@/lib/stages/stage7/hmwTypes";
 import type { Stage5LatentNeedsData } from "@/lib/stages/stage5/latentNeedsTypes";
 import {
-  stageBtnSecondary,
   stageCaption,
   stageLabel,
   stagePanel,
@@ -47,14 +41,9 @@ interface IdeaGridWorkPanelProps {
     hmw: Stage7HmwData;
     stage5: Stage5LatentNeedsData;
   }) => Promise<void>;
-  onPullNextQuadrant: () => Promise<void>;
-  pullingQuadrant: boolean;
   saving: boolean;
   saveError: string | null;
   lastSavedAt: string | null;
-  /** Kevin 출시 사례 「이 방향 힌트」→ 설명란 append */
-  descriptionHint?: { id: string; text: string } | null;
-  onDescriptionHintConsumed?: () => void;
   onCacheInterpretations: (
     questionId: string,
     interpretations: HmwInterpretation[],
@@ -68,29 +57,15 @@ export function IdeaGridWorkPanel({
   stage5Data,
   onChange,
   onSaveNeedHmw,
-  onPullNextQuadrant,
-  pullingQuadrant,
   saving,
   saveError,
   lastSavedAt,
-  descriptionHint = null,
-  onDescriptionHintConsumed,
   onCacheInterpretations,
 }: IdeaGridWorkPanelProps) {
   const locale = useUiLocale();
   const purposeCopy = getStagePurposeCopy(8, locale);
   const allQuestions = hmwData.questions;
   const [stimulusNote, setStimulusNote] = useState<string | null>(null);
-
-  const nextPull = useMemo(
-    () => nextQuadrantPullHint(stage5Data, hmwData),
-    [stage5Data, hmwData],
-  );
-  const coverage = useMemo(
-    () => hmwIdeaCoverage(data, allQuestions),
-    [data, allQuestions],
-  );
-  const emptyHmw = coverage.filter((c) => c.count === 0);
 
   const openCell = (index: number) => {
     const question = hmwForCell(data, allQuestions, index);
@@ -115,28 +90,6 @@ export function IdeaGridWorkPanel({
       selectedCellIndex: null,
       activeView: "grid",
     });
-  };
-
-  const openScamper = () => {
-    onChange({
-      ...data,
-      activeView: "scamper",
-      scamperSourceIdeaId: data.slots.find((s) => s?.title.trim())?.id ?? "",
-    });
-  };
-
-  const openAlternateView = () => {
-    const prescription = prescribeStimulus(data, allQuestions);
-    setStimulusNote(prescription.reason);
-    if (prescription.type === "scamper") {
-      openScamper();
-      return;
-    }
-    if (prescription.type === "principle_card") {
-      onChange({ ...data, activeView: "principle", selectedCellIndex: null });
-      return;
-    }
-    onChange({ ...data, activeView: "team_persona", selectedCellIndex: null });
   };
 
   const openEmptyOrEditorForStimulus = (
@@ -220,31 +173,6 @@ export function IdeaGridWorkPanel({
 
       <p className={`mb-4 ${stageCaption}`}>{purposeCopy.purpose}</p>
 
-      {coverage.length > 0 ? (
-        <div className="mb-3 flex flex-wrap gap-1.5">
-          {coverage.map((item) => (
-            <span
-              key={item.question.id}
-              className={[
-                "rounded-md border px-2.5 py-1 text-[12px] font-semibold",
-                item.count === 0
-                  ? "border-spotlight/50 bg-[#FFFDF4] text-foreground"
-                  : "border-border-warm bg-cream text-foreground",
-              ].join(" ")}
-            >
-              HMW {item.index} · {item.count}개
-            </span>
-          ))}
-        </div>
-      ) : null}
-
-      {emptyHmw.length > 0 ? (
-        <p className={`mb-3 rounded-md bg-[#FFFDF4] px-3 py-2 text-[13px] font-medium text-foreground break-keep`}>
-          Kevin: {emptyHmw.map((e) => `${e.index}번`).join(", ")} 질문은 아직
-          비어 있네요.
-        </p>
-      ) : null}
-
       {allQuestions.length === 0 ? (
         <div className="mb-4 rounded-xl border border-dashed border-border-warm bg-cream/50 px-4 py-3">
           <p className={stageCaption}>
@@ -255,7 +183,7 @@ export function IdeaGridWorkPanel({
       ) : (
         <p className={`mb-4 ${stageCaption}`}>
           {hmwData.coreSelectionApplied
-            ? "핵심 니즈 기반 HMW로 칸이 채워져 있어요. 더 필요하면 다음 사분면에서 HMW를 꺼내 올 수 있어요."
+            ? "핵심 니즈 기반 HMW로 칸이 채워져 있어요. 칸을 눌러 아이디어를 펼쳐 보세요."
             : "앞 단계 HMW 질문이 칸에 배치돼 있어요. HMW가 있는 칸은 아이디어를, 비어 있는 칸은 니즈·HMW를 이어서 만들 수 있어요."}
         </p>
       )}
@@ -270,8 +198,6 @@ export function IdeaGridWorkPanel({
           onChange={onChange}
           onClose={closeSubview}
           onCacheInterpretations={onCacheInterpretations}
-          descriptionHint={descriptionHint}
-          onDescriptionHintConsumed={onDescriptionHintConsumed}
         />
       ) : data.activeView === "hmw_setup" && data.selectedCellIndex !== null ? (
         <IdeaGridHmwSetupPanel
@@ -308,38 +234,6 @@ export function IdeaGridWorkPanel({
       ) : (
         <div className="space-y-4">
           <div className="min-w-0 space-y-3">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="min-w-0">
-                {nextPull ? (
-                  <p className={stageCaption}>
-                    다음: {nextPull.label} · {nextPull.needs.length}개
-                  </p>
-                ) : (
-                  <p className={stageCaption}>
-                    더 꺼낼 사분면 니즈가 없어요.
-                  </p>
-                )}
-              </div>
-              <div className="flex flex-wrap gap-1.5">
-                <button
-                  type="button"
-                  onClick={openAlternateView}
-                  className={stageBtnSecondary}
-                >
-                  다른 관점이 필요해요
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void onPullNextQuadrant()}
-                  disabled={!nextPull || pullingQuadrant || saving}
-                  className={stageBtnSecondary}
-                >
-                  {pullingQuadrant
-                    ? "Kevin이 HMW 만드는 중…"
-                    : "다음 사분면에서 HMW 더 가져오기"}
-                </button>
-              </div>
-            </div>
             {stimulusNote ? (
               <p className="rounded-md bg-cream px-3 py-2 text-[13px] font-medium text-foreground break-keep">
                 Kevin: {stimulusNote}
@@ -372,13 +266,11 @@ export function IdeaGridWorkPanel({
         <p className={stageCaption}>
           {saveError
             ? saveError
-            : pullingQuadrant
-              ? "다음 사분면 HMW를 만드는 중…"
-              : saving
-                ? "저장 중…"
-                : lastSavedAt
-                  ? `마지막 저장 ${lastSavedAt}`
-                  : "자동 저장됩니다."}
+            : saving
+              ? "저장 중…"
+              : lastSavedAt
+                ? `마지막 저장 ${lastSavedAt}`
+                : "자동 저장됩니다."}
         </p>
       </div>
     </section>

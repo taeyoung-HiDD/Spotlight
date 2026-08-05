@@ -368,7 +368,9 @@ export function AnimatedCoachPanel({
           context: {
             ...chatContext,
             artifactSummary,
-            inputGuideContext: formatInputGuideForContext(guide),
+            inputGuideContext: guide.examples.length
+              ? formatInputGuideForContext(guide)
+              : undefined,
             uiLocale,
           },
         });

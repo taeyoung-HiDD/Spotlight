@@ -1,13 +1,13 @@
 "use client";
 
-import { IconExternalLink, IconLock } from "@tabler/icons-react";
+import { IconLock } from "@tabler/icons-react";
 import { useUiLocale } from "@/hooks/useUiLocale";
 import { useEffect, useMemo, useState } from "react";
 import { AnimatedCoachPanel } from "@/components/stage/motion/AnimatedCoachPanel";
 import type { CoachDialogItem } from "@/components/stage/motion/CoachSequentialDialog";
 import { getStageConfig } from "@/config/stageConfig";
 import { formatCoachDialogBreaks } from "@/lib/coach/formatCoachDialog";
-import { getStageWorkInputGuide } from "@/lib/coach/inputGuidance";
+import { COACH_ASK_PLACEHOLDER } from "@/lib/coach/constants";
 import { getStagePurposeCopy } from "@/lib/stages/discovery/stagePurposeCopy";
 import {
   filledIdeaCount,
@@ -32,63 +32,48 @@ interface IdeaGridCoachPanelProps {
   /** 새 아이디어 입력 화면이 열려 있을 때 */
   editorOpen?: boolean;
   activeHmw?: ActiveHmwForCases | null;
-  onAppendDescriptionHint?: (hint: string) => void;
   onChange?: (data: IdeaGridData) => void;
 }
 
-function LaunchCaseCards({
-  cases,
-  onHint,
-}: {
-  cases: HmwLaunchCase[];
-  onHint?: (hint: string) => void;
-}) {
+function LaunchCaseCards({ cases }: { cases: HmwLaunchCase[] }) {
   if (cases.length === 0) return null;
   return (
     <div className="mt-1 space-y-2.5">
-      {cases.map((c) => (
-        <div
-          key={`${c.name}-${c.url || c.summary.slice(0, 24)}`}
-          className="rounded-xl border border-border-warm bg-panel px-3 py-2.5 shadow-sm"
-        >
-          <div className="mb-1 flex flex-wrap items-center gap-1.5">
-            <p className="text-[13px] font-semibold text-foreground break-keep">
-              {c.name}
+      {cases.map((c) => {
+        const url = c.url.trim();
+        const titleClass =
+          "text-[13px] font-semibold text-foreground break-keep";
+        return (
+          <div
+            key={`${c.name}-${url || c.summary.slice(0, 24)}`}
+            className="rounded-xl border border-border-warm bg-panel px-3 py-2.5 shadow-sm"
+          >
+            <div className="mb-1 flex flex-wrap items-center gap-1.5">
+              {url ? (
+                <a
+                  href={url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={`${titleClass} underline decoration-border-warm underline-offset-2 hover:text-gold hover:decoration-gold`}
+                >
+                  {c.name}
+                </a>
+              ) : (
+                <p className={titleClass}>{c.name}</p>
+              )}
+              <span className="rounded bg-cream px-1.5 py-0.5 text-[10px] font-semibold text-muted">
+                {c.region === "korea" ? "국내" : "글로벌"}
+              </span>
+            </div>
+            <p className="text-[12px] leading-relaxed text-foreground break-keep">
+              {c.summary}
             </p>
-            <span className="rounded bg-cream px-1.5 py-0.5 text-[10px] font-semibold text-muted">
-              {c.region === "korea" ? "국내" : "글로벌"}
-            </span>
-          </div>
-          <p className="text-[12px] leading-relaxed text-foreground break-keep">
-            {c.summary}
-          </p>
-          {c.hmwLink.trim() ? (
-            <p className={`mt-1.5 ${stageCaption} text-muted`}>{c.hmwLink}</p>
-          ) : null}
-          <div className="mt-2 flex flex-wrap gap-1.5">
-            {c.url.trim() ? (
-              <a
-                href={c.url.trim()}
-                target="_blank"
-                rel="noopener noreferrer"
-                className={`${stageBtnSecondary} inline-flex items-center gap-1 text-[11px]`}
-              >
-                <IconExternalLink className="size-3.5" stroke={1.75} />
-                출처 보기
-              </a>
-            ) : null}
-            {c.hint.trim() && onHint ? (
-              <button
-                type="button"
-                onClick={() => onHint(c.hint.trim())}
-                className={`${stageBtnSecondary} text-[11px]`}
-              >
-                이 방향 힌트
-              </button>
+            {c.hmwLink.trim() ? (
+              <p className={`mt-1.5 ${stageCaption} text-muted`}>{c.hmwLink}</p>
             ) : null}
           </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
@@ -123,7 +108,6 @@ export function IdeaGridCoachPanel({
   variant,
   editorOpen = false,
   activeHmw = null,
-  onAppendDescriptionHint,
   onChange,
 }: IdeaGridCoachPanelProps) {
   const stageConfig = getStageConfig(8);
@@ -218,7 +202,7 @@ export function IdeaGridCoachPanel({
         type: "bubble",
         variant: "secondary",
         content: formatCoachDialogBreaks(
-          "앞 단계 HMW마다 칸이 생겨요. 핵심 니즈 기준으로 먼저 펼치고, 더 필요하면 「다음 사분면에서 HMW 더 가져오기」로 칸을 늘릴 수 있어요. 막히면 「다른 관점이 필요해요」로 SCAMPER·원리 카드·팀 관점을 받아 보세요. 칸을 비우면 아이디어 은행에 보류됩니다.",
+          "앞 단계 HMW마다 칸이 생겨요. 핵심 니즈 기준으로 먼저 펼쳐 보세요. 칸을 비우면 아이디어 은행에 보류됩니다.",
         ),
       },
     ];
@@ -247,7 +231,7 @@ export function IdeaGridCoachPanel({
         type: "bubble",
         variant: "secondary",
         content: formatCoachDialogBreaks(
-          "질문을 풀어보거나, 떠오르는 한 줄부터 적어도 좋아요. 사례를 먼저 보면 비슷한 아이디어에 묶이기 쉬워요.",
+          "HMW 질문을 구체화하거나, 떠오르는 한 줄부터 적어도 좋아요. 사례를 먼저 보면 비슷한 아이디어에 묶이기 쉬워요.",
         ),
       });
       return items;
@@ -304,7 +288,7 @@ export function IdeaGridCoachPanel({
           : ""
       }`,
       stageBehaviorNote:
-        "8단계 아이디어 펼치기: 핵심 니즈 기반 HMW로 칸을 채우고 quantity-first로 아이디어를 펼칩니다. 새 아이디어 화면에서는 HMW 해석(질문 풀어보기)으로 문제를 좁힌 뒤 쓰게 돕고, 출시 사례는 해당 HMW에 아이디어 1개 저장 후(또는 조기 해제 후)에만 보여 줍니다. 사용자 제목·설명을 대신 채우지 않습니다. 막히면 SCAMPER·원리 카드·팀 관점 자극을 쓰고, 칸을 비우면 아이디어 은행에 보류합니다. 아이디어 스케치는 사용자가 이미지를 올리거나, 제목·설명 작성 후 AI로 아이디어 그리기를 요청할 수 있습니다.",
+        "8단계 아이디어 펼치기: 핵심 니즈 기반 HMW로 칸을 채우고 quantity-first로 아이디어를 펼칩니다. 새 아이디어 화면에서는 HMW 해석(HMW 질문 구체화하기)으로 문제를 좁힌 뒤 쓰게 돕고, 출시 사례는 해당 HMW에 아이디어 1개 저장 후(또는 조기 해제 후)에만 보여 줍니다. 사용자 제목·설명을 대신 채우지 않습니다. 칸을 비우면 아이디어 은행에 보류됩니다. 아이디어 스케치는 사용자가 이미지를 올리거나, 제목·설명 작성 후 AI로 아이디어 그리기를 요청할 수 있습니다.",
     }),
     [projectId, data, hmwQuestions, casesMode, activeHmw],
   );
@@ -319,7 +303,7 @@ export function IdeaGridCoachPanel({
   const footer = casesMode ? (
     casesUnlocked ? (
       !casesLoading && cases.length > 0 ? (
-        <LaunchCaseCards cases={cases} onHint={onAppendDescriptionHint} />
+        <LaunchCaseCards cases={cases} />
       ) : null
     ) : (
       <LockedCaseCardsShell onEarlyReveal={handleEarlyReveal} />
@@ -351,7 +335,11 @@ export function IdeaGridCoachPanel({
       }
       messages={messages}
       chatContext={chatContext}
-      inputGuide={getStageWorkInputGuide(8, locale)}
+      inputGuide={{
+        title: "",
+        examples: [],
+        placeholder: COACH_ASK_PLACEHOLDER,
+      }}
       showComposer
       footer={footer}
     />

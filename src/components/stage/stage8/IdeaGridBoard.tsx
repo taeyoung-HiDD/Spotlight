@@ -33,12 +33,24 @@ function IdeaCellSketchThumbnail({ sketchDataUrl }: { sketchDataUrl: string }) {
   );
 }
 
+function ideaCountForHmw(
+  data: IdeaGridData,
+  hmwId: string | undefined,
+): number {
+  if (!hmwId) return 0;
+  return data.slots.filter(
+    (s) => s?.sourceHmwId === hmwId && s.title.trim(),
+  ).length;
+}
+
 function FilledIdeaCell({
   slot,
   cellIndex,
+  hmwIdeaCount,
 }: {
   slot: IdeaSketch;
   cellIndex: number;
+  hmwIdeaCount: number;
 }) {
   const hasSketch = Boolean(slot.sketchDataUrl.trim());
 
@@ -61,6 +73,7 @@ function FilledIdeaCell({
       <p className="shrink-0 text-[10px] text-muted">
         {cellIndex + 1}번
         {slot.scamperLetter ? ` · ${slot.scamperLetter}` : ""}
+        {` · 이 HMW ${hmwIdeaCount}개`}
       </p>
     </>
   );
@@ -90,6 +103,7 @@ export function IdeaGridBoard({
           const cellState = getGridCellHmwState(cellHmw);
           const hmwText = cellHmw?.hmwText.trim() ?? "";
           const needText = cellHmw?.latentNeedText.trim() ?? "";
+          const hmwIdeaCount = ideaCountForHmw(data, cellHmw?.id);
 
           return (
             <button
@@ -106,13 +120,22 @@ export function IdeaGridBoard({
               ].join(" ")}
             >
               {hasIdea ? (
-                <FilledIdeaCell slot={slot!} cellIndex={index} />
+                <FilledIdeaCell
+                  slot={slot!}
+                  cellIndex={index}
+                  hmwIdeaCount={hmwIdeaCount}
+                />
               ) : cellState === "hmw_ready" ? (
                 <>
                   <div className="min-h-0 flex-1">
-                    <p className="mb-1 text-[9px] font-medium tracking-wide text-gold uppercase">
-                      HMW
-                    </p>
+                    <div className="mb-1 flex flex-wrap items-center gap-1.5">
+                      <p className="text-[9px] font-medium tracking-wide text-gold uppercase">
+                        HMW
+                      </p>
+                      <span className="rounded bg-highlight px-1.5 py-0.5 text-[9px] font-semibold text-gold">
+                        아이디어 {hmwIdeaCount}개
+                      </span>
+                    </div>
                     <p className="line-clamp-4 text-[11px] leading-snug text-foreground break-keep">
                       {hmwText}
                     </p>
@@ -153,8 +176,8 @@ export function IdeaGridBoard({
       </div>
 
       <p className={`mt-3 ${stageCaption}`}>
-        핵심 니즈 HMW로 먼저 펼치고, 더 필요하면 「다음 사분면에서 HMW 더
-        가져오기」로 칸을 늘릴 수 있어요.
+        핵심 니즈 HMW로 먼저 아이디어를 펼쳐 보세요. 칸을 눌러 제목과 스케치를
+        남길 수 있어요.
       </p>
     </div>
   );
