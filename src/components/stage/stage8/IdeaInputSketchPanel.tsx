@@ -6,11 +6,13 @@ import {
   LocalizedEditableInput,
   LocalizedEditableTextarea,
 } from "@/components/i18n/LocalizedEditableField";
-import { HmwInterpretationAccordion } from "@/components/stage/stage8/HmwInterpretationAccordion";
+import { SubjectInitialBadge } from "@/components/stage/stage5/SubjectInitialBadge";
 import { IdeaSketchCard } from "@/components/stage/stage8/IdeaSketchCard";
 import { IdeaSketchGenerateProgress } from "@/components/stage/stage8/IdeaSketchGenerateProgress";
+import { HmwInterpretationAccordion } from "@/components/stage/stage8/HmwInterpretationAccordion";
 import { requestIdeaSketchImage } from "@/lib/ai/client/stageAiClient";
 import { useSimulatedAsyncProgress } from "@/hooks/useSimulatedAsyncProgress";
+import { getResearchMethodEntry } from "@/lib/stages/fieldResearch/researchMethodCatalog";
 import {
   createIdeaId,
   type IdeaGridData,
@@ -82,6 +84,17 @@ export function IdeaInputSketchPanel({
 
   const selectedHmw =
     hmwQuestions.find((q) => q.id === sourceHmwId) ?? cellHmw;
+
+  const needSubject =
+    stage5Data.subjects.find((s) => s.id === selectedHmw?.subjectId) ?? null;
+  const needSubjectName = needSubject?.name.trim() || "";
+  const needSubjectIndex = Math.max(
+    0,
+    stage5Data.subjects.findIndex((s) => s.id === needSubject?.id),
+  );
+  const needSubjectMethod = needSubject?.researchMethodId
+    ? getResearchMethodEntry(needSubject.researchMethodId)
+    : null;
 
   const canRequestAi =
     Boolean(title.trim()) && Boolean(description.trim());
@@ -226,6 +239,65 @@ export function IdeaInputSketchPanel({
 
       <div className="grid gap-4 md:grid-cols-2 md:items-stretch">
         <div className="space-y-4 pt-1">
+          {selectedHmw?.latentNeedText.trim() ? (
+            <div className="rounded-xl border border-border-warm bg-cream/60 px-3.5 py-3">
+              <p className={`mb-1.5 ${stageCaption}`}>
+                {needSubjectName && needSubject ? (
+                  <>
+                    <span
+                      className="group relative inline-flex max-w-full cursor-help"
+                      tabIndex={0}
+                    >
+                      <span className="font-semibold text-gold underline decoration-gold/40 underline-offset-2">
+                        {needSubjectName}
+                      </span>
+                      <span
+                        role="tooltip"
+                        className="pointer-events-none absolute bottom-full left-0 z-30 mb-1.5 w-[min(16rem,70vw)] rounded-lg border border-border-warm bg-tooltip-bg px-2.5 py-2 opacity-0 shadow-md transition-opacity group-hover:opacity-100 group-focus-within:opacity-100"
+                      >
+                        <span className="mb-1.5 flex items-center gap-2">
+                          <SubjectInitialBadge
+                            subject={needSubject}
+                            subjectIndex={needSubjectIndex}
+                            size="sm"
+                            showTooltip={false}
+                          />
+                          <span className="text-[12px] font-semibold text-tooltip-fg break-keep">
+                            {needSubjectName}
+                          </span>
+                        </span>
+                        {needSubject.context.trim() ? (
+                          <span className="mb-1 block text-[11px] leading-relaxed text-tooltip-fg/90 break-keep">
+                            {needSubject.context.trim()}
+                          </span>
+                        ) : (
+                          <span className="mb-1 block text-[11px] text-tooltip-fg/70">
+                            간단한 프로필 메모가 아직 없어요.
+                          </span>
+                        )}
+                        {needSubjectMethod ? (
+                          <span className="block text-[10px] text-tooltip-fg/75">
+                            조사 · {needSubjectMethod.label}
+                          </span>
+                        ) : null}
+                        {needSubject.conductedAt?.trim() ? (
+                          <span className="mt-0.5 block text-[10px] text-tooltip-fg/75">
+                            {needSubject.conductedAt.trim()}
+                          </span>
+                        ) : null}
+                      </span>
+                    </span>
+                    의 잠재 니즈
+                  </>
+                ) : (
+                  "이 아이디어가 다루는 잠재 니즈"
+                )}
+              </p>
+              <p className="text-sm font-medium leading-relaxed text-foreground break-keep">
+                {selectedHmw.latentNeedText.trim()}
+              </p>
+            </div>
+          ) : null}
           <div>
             <p className={`mb-2 ${stageCaption}`}>한 줄 제목</p>
             <LocalizedEditableInput
